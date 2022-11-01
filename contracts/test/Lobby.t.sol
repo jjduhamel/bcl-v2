@@ -3,10 +3,12 @@ pragma solidity ^0.8.13;
 
 import 'forge-std/Test.sol';
 import 'forge-std/console2.sol';
+import 'src/GameEvents.sol';
 import 'src/Lobby.sol';
 
-abstract contract LobbyTest is Test, LobbyEvents {
+abstract contract LobbyTest is Test, GameEvents {
   Lobby lobby;
+  ChessEngine engine;
   address arbiter;
   address p1;
   address p2;
@@ -22,10 +24,11 @@ abstract contract LobbyTest is Test, LobbyEvents {
     vm.deal(p2, 100 ether);
     p3 = makeAddr('player3');
     vm.deal(p3, 100 ether);
-
     vm.startPrank(arbiter);
     lobby = new Lobby();
-    lobby.initialize(arbiter);
+    lobby.initialize();
+    engine = new ChessEngine(address(lobby));
+    lobby.setChessEngine(address(engine));
   }
 }
 

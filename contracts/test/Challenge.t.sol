@@ -8,20 +8,18 @@ import 'src/ChessEngine.sol';
 import 'test/Lobby.t.sol';
 
 abstract contract ChallengeTest is LobbyTest {
-  ChessEngine engine;
   uint gameId;
 
   constructor() {
+    changePrank(arbiter);
     lobby.allowChallenges(true);
     lobby.allowWagers(true);
-    engine = ChessEngine(lobby.engine());
-    vm.stopPrank();
+    changePrank(p1);
   }
 }
 
 contract AcceptChallengeTest is ChallengeTest {
   function setUp() public {
-    vm.startPrank(p1);
     lobby.challenge{ value: wager }(p2, true, timePerMove, wager);
     uint[] memory challenges = lobby.challenges();
     gameId = challenges[0];
@@ -60,7 +58,6 @@ contract AcceptChallengeTest is ChallengeTest {
 
 contract DeclineChallengeTest is ChallengeTest {
   function setUp() public {
-    vm.startPrank(p1);
     lobby.challenge{ value: wager }(p2, true, timePerMove, wager);
     uint[] memory challenges = lobby.challenges();
     gameId = challenges[0];
@@ -97,7 +94,6 @@ contract DeclineChallengeTest is ChallengeTest {
 
 contract ModifyChallengeTest is ChallengeTest {
   function setUp() public {
-    vm.startPrank(p1);
     lobby.challenge{ value: wager }(p2, true, timePerMove, wager);
     uint[] memory challenges = lobby.challenges();
     gameId = challenges[0];

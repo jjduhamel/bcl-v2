@@ -1,37 +1,9 @@
 // SPDX-License-Identifier: GPL-V3
 pragma solidity >=0.4.22 <0.9.0;
+import './GameEvents.sol';
 import './ChessEngine.sol';
 
-interface LobbyEvents {
-  event CreatedChallenge(uint indexed gameId
-                       , address indexed player1
-                       , address indexed player2);
-  event ModifiedChallenge(uint indexed gameId
-                        , address indexed sender
-                        , address indexed receiver);
-  event AcceptedChallenge(uint indexed gameId
-                        , address indexed sender
-                        , address indexed receiver);
-  event CanceledChallenge(uint indexed gameId
-                        , address indexed sender
-                        , address indexed receiver);
-  event GameStarted(uint indexed gameId
-                  , address indexed whitePlayer
-                  , address indexed blackPlayer);
-  event GameFinished(uint indexed gameId
-                   , address indexed winner
-                   , address indexed loser);
-  event GameDisputed(uint indexed gameId
-                   , address indexed sender
-                   , address indexed receiver);
-  event PlayerMoved(uint indexed gameId
-                  , address indexed sender
-                  , address indexed receiver);
-  event MoveSAN(uint indexed gameId, address indexed player, string san);
-  event ArbiterAction(address indexed arbiter, string comment);
-}
-
-contract Lobby is LobbyEvents {
+contract Lobby is GameEvents {
   // Metadata
   bool private __initialized;
   string public __version;
@@ -41,9 +13,6 @@ contract Lobby is LobbyEvents {
   address private __arbiter;
   bool private __allowChallenges;
   bool private __allowWagers;
-
-  function arbiter() public returns (address) { return __arbiter; }
-  function engine() public returns (address) { return address(__engine); }
 
   // Trusted Signer
   bool public __authEnabled;
@@ -55,12 +24,61 @@ contract Lobby is LobbyEvents {
   mapping(address => uint[]) private __games;
   mapping(address => uint[]) private __history;
   // Mapping gameId -> chessEngine
-  mapping(uint => address) public __chessEngine;
+  mapping(uint => address) private __chessEngine;
+
+  function initialize() public {
+    require(!__initialized, 'Contract was already initialized');
+    __arbiter = msg.sender;
+    __initialized = true;
+  }
+
+  /*
+   * Chess Engine
+   */
+
+  function currentEngine() public view returns (address) { return address(__engine); }
+
+  function chessEngine(uint gameId) public view returns (address) {
+    return __chessEngine[gameId];
+  }
 
   modifier isChessEngine(uint gameId) {
     require(msg.sender == __chessEngine[gameId], 'ChessEngineOnly');
     _;
   }
+
+  function challenges() public view returns (uint[] memory) {
+    uint len = __challenges[msg.sender].length;
+    uint[] memory out = new uint[](len);
+    for (uint j=0; j<len; j++) {
+      out[j] = __challenges[msg.sender][j];
+    }
+    return out;
+  }
+
+  function games() public view returns (uint[] memory) {
+    uint len = __games[msg.sender].length;
+    uint[] memory out = new uint[](len);
+    for (uint j=0; j<len; j++) {
+      out[j] = __games[msg.sender][j];
+    }
+    return out;
+  }
+
+  function history() public view returns (uint[] memory) {
+    uint len = __history[msg.sender].length;
+    uint[] memory out = new uint[](len);
+    for (uint j=0; j<len; j++) {
+      out[j] = __games[msg.sender][j];
+    }
+    return out;
+  }
+
+  /*
+   * Arbiter Related Stuff
+   */
+
+  function arbiter() public view returns (address) { return __arbiter; }
 
   modifier arbiterOnly() {
     require(msg.sender == __arbiter, 'ArbiterOnly');
@@ -78,13 +96,6 @@ contract Lobby is LobbyEvents {
       require(msg.value >= _amount, 'InvalidDepositAmount');
     }
     _;
-  }
-
-  function initialize(address arbiter) public {
-    require(!__initialized, 'Contract was already initialized');
-    __arbiter = arbiter;
-    __engine = new ChessEngine();
-    __initialized = true;
   }
 
   function pop(mapping(address => uint[]) storage array, address player, uint gameId) private returns (bool) {
@@ -119,32 +130,9 @@ contract Lobby is LobbyEvents {
     return false;
   }
 
-  function challenges() public returns (uint[] memory) {
-    uint len = __challenges[msg.sender].length;
-    uint[] memory out = new uint[](len);
-    for (uint j=0; j<len; j++) {
-      out[j] = __challenges[msg.sender][j];
-    }
-    return out;
-  }
-
-  function games() public returns (uint[] memory) {
-    uint len = __games[msg.sender].length;
-    uint[] memory out = new uint[](len);
-    for (uint j=0; j<len; j++) {
-      out[j] = __games[msg.sender][j];
-    }
-    return out;
-  }
-
-  function history() public returns (uint[] memory) {
-    uint len = __history[msg.sender].length;
-    uint[] memory out = new uint[](len);
-    for (uint j=0; j<len; j++) {
-      out[j] = __games[msg.sender][j];
-    }
-    return out;
-  }
+  /*
+   * Challenge Related Stuff
+   */
 
   function challenge(
     address player2,
@@ -174,9 +162,12 @@ contract Lobby is LobbyEvents {
     emit CanceledChallenge(gameId, sender, receiver);
   }
 
+  /*
+   * Game Related Stuff
+   */
+
   function startGame(uint gameId, address whitePlayer, address blackPlayer)
   external isChessEngine(gameId) {
-    address engine = msg.sender;
     pop(__challenges, whitePlayer, gameId);
     __games[whitePlayer].push(gameId);
     //pop(__challenges, blackPlayer, gameId);
@@ -204,6 +195,10 @@ contract Lobby is LobbyEvents {
   }
 
   /*
+   * Arbiter Functions
+   */
+
+  /*
   function disputeGame(address _sender, address _receiver)
   external isChessEngine(gameId) {
     address _game = msg.sender;
@@ -214,41 +209,29 @@ contract Lobby is LobbyEvents {
   /*
    * Arbiter functions
    */
-  function setVersion(string memory _version)
-  external arbiterOnly returns (string memory) {
-    __version = _version;
-    return __version;
+  function setVersion(string memory newVersion) external arbiterOnly {
+    __version = newVersion;
   }
 
-  function setArbiter(address arbiter)
-  external arbiterOnly returns (address) {
-    __arbiter = arbiter;
-    return __arbiter;
+  function setArbiter(address newArbiter) external arbiterOnly {
+    __arbiter = newArbiter;
   }
 
-  function setChessEngine(address engine)
-  external arbiterOnly returns (address) {
-    __engine = ChessEngine(engine);
-    return __engine;
+  function setChessEngine(address newEngine) external arbiterOnly {
+    __engine = ChessEngine(newEngine);
   }
 
-  function setAuthData(address _signer, uint _ttl, bool _enabled)
-  external arbiterOnly returns (bool) {
-    __authEnabled = _enabled;
-    __authSigner = _signer;
-    __authTokenTTL = _ttl;
-    return __authEnabled;
+  function setAuthData(address signer, uint ttl, bool enabled) external arbiterOnly {
+    __authEnabled = enabled;
+    __authSigner = signer;
+    __authTokenTTL = ttl;
   }
 
-  function allowChallenges(bool _allow)
-  external arbiterOnly returns (bool) {
-    __allowChallenges = _allow;
-    return __allowChallenges;
+  function allowChallenges(bool allow) external arbiterOnly {
+    __allowChallenges = allow;
   }
 
-  function allowWagers(bool _allow)
-  external arbiterOnly returns (bool) {
-    __allowWagers = _allow;
-    return __allowWagers;
+  function allowWagers(bool allow) external arbiterOnly {
+    __allowWagers = allow;
   }
 }

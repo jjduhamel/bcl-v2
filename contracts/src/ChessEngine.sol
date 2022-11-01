@@ -1,26 +1,26 @@
 // SPDX-License-Identifier: GPL-V3
 pragma solidity >=0.4.22 <0.9.0;
+import './GameEvents.sol';
 import './Lobby.sol';
 import 'lib/stringUtils.sol';
 
-contract ChessEngine is LobbyEvents {
-  Lobby public immutable lobby;
-  address public immutable arbiter;
+contract ChessEngine is GameEvents {
+  Lobby public immutable __lobby;
+  address public immutable __arbiter;
 
   // Increments every time a new game (challenge) is created
-  uint gameIndex;
+  uint __gameIndex;
 
   enum GameOutcome { Undecided, WhiteWon, BlackWon, Draw }
   enum GameState { Pending, Accepted, Declined, Started, Finished, Review }
   struct GameData {
+    bool exists;
     GameState state;
     GameOutcome outcome;
     // Game data
     address whitePlayer;
     address blackPlayer;
     address currentMove;
-    //bool isWhiteMove;
-    //string[] moves;
     // Time Per Move
     uint timePerMove;
     uint timeOfLastMove;
@@ -32,7 +32,7 @@ contract ChessEngine is LobbyEvents {
   mapping(uint => string[]) __moves;
   //mapping(uint => bytes1[2][]) __moves;
   // map gameId -> fen
-  mapping(uint => string) __fen;
+  //mapping(uint => string) __fen;
   // map gameId -> player -> deposit amount
   mapping(uint => mapping(address => uint)) __deposits;
 
@@ -45,7 +45,7 @@ contract ChessEngine is LobbyEvents {
   }
 
   modifier isLobby() {
-    require(msg.sender == address(lobby), 'LobbyContractOnly');
+    require(msg.sender == address(__lobby), 'LobbyContractOnly');
     _;
   }
 
@@ -97,7 +97,7 @@ contract ChessEngine is LobbyEvents {
 
   // FIXME
   modifier isGame(uint gameId) {
-    require(__games[gameId].state, 'MissingRecord');
+    require(__games[gameId].exists, 'MissingRecord');
     _;
   }
 
@@ -150,9 +150,9 @@ contract ChessEngine is LobbyEvents {
     _;
   }
 
-  constructor() {
-    lobby = Lobby(msg.sender);
-    arbiter = lobby.arbiter();
+  constructor(address lobby) {
+    __lobby = Lobby(lobby);
+    __arbiter = __lobby.arbiter();
   }
 
   /*
@@ -166,11 +166,12 @@ contract ChessEngine is LobbyEvents {
     uint timePerMove,
     uint wagerAmount
   ) public payable isLobby returns (uint) {
-    uint gameId = gameIndex++;
+    uint gameId = __gameIndex++;
     address whitePlayer = p1IsWhite ? player1 : player2;
     address blackPlayer = p1IsWhite ? player2 : player1;
     // Initialize Game Data
     GameData memory gameData = GameData(
+      true,
       GameState.Pending,
       GameOutcome.Undecided,
       whitePlayer,
@@ -190,14 +191,14 @@ contract ChessEngine is LobbyEvents {
     GameData storage gameData = __games[gameId];
     gameData.state = GameState.Accepted;
     gameData.currentMove = gameData.whitePlayer;
-    lobby.startGame(gameId, gameData.whitePlayer, gameData.blackPlayer);
+    __lobby.startGame(gameId, gameData.whitePlayer, gameData.blackPlayer);
   }
 
   function declineChallenge(uint gameId)
   public isChallenge(gameId) isPlayer(gameId) {
     GameData storage gameData = __games[gameId];
     gameData.state = GameState.Declined;
-    lobby.cancelChallenge(gameId, msg.sender, otherPlayer(gameId));
+    __lobby.cancelChallenge(gameId, msg.sender, otherPlayer(gameId));
   }
 
   // TODO Enforce contraints on TPM, wager, etc...
@@ -233,7 +234,7 @@ contract ChessEngine is LobbyEvents {
     GameData storage gameData = __games[gameId];
     gameData.state = GameState.Finished;
     gameData.outcome = outcome;
-    lobby.finishGame(gameId, winner(gameId), loser(gameId));
+    __lobby.finishGame(gameId, winner(gameId), loser(gameId));
   }
 
   function move(uint gameId, string memory san)
@@ -246,19 +247,17 @@ contract ChessEngine is LobbyEvents {
     gameData.currentMove = otherPlayer(gameId);
     gameData.timeOfLastMove = block.timestamp;
     emit MoveSAN(gameId, msg.sender, san);
-    lobby.broadcastMove(gameId, msg.sender, otherPlayer(gameId));
+    __lobby.broadcastMove(gameId, msg.sender, otherPlayer(gameId));
   }
 
   function resign(uint gameId) external inProgress(gameId) isPlayer(gameId) {
-    GameData storage gameData = __games[gameId];
     if (isWhitePlayer(gameId)) finishGame(gameId, GameOutcome.BlackWon);
     else finishGame(gameId, GameOutcome.WhiteWon);
   }
 
   // TODO Needs tests
   function claimVictory(uint gameId)
-  external inProgress(gameId) timerExpired(gameId) isOpponentsMove(gameId) {
-    GameData storage gameData = __games[gameId];
+  external inProgress(gameId) isPlayer(gameId) isOpponentsMove(gameId) timerExpired(gameId) {
     if (isWhitePlayer(gameId)) finishGame(gameId, GameOutcome.WhiteWon);
     else finishGame(gameId, GameOutcome.BlackWon);
   }
