@@ -1,3 +1,26 @@
+<script setup>
+const {
+  wallet,
+  connectMetamask,
+  connectWalletConnect,
+  walletConnectURI
+} = useWallet();
+
+watch(walletConnectURI, (newURI, oldURI) => {
+  if (!oldURI && newURI) {
+    showWCModal.value = true;
+  }
+});
+
+watch(wallet.connected, (isCon, wasCon) => {
+  if (!wasCon && isCon) {
+    showWCModal.value = false;
+  }
+});
+
+const showWCModal = ref(false);
+</script>
+
 <template lang='pug'>
 NuxtLayout(name='game')
   template(v-slot:board)
@@ -5,5 +28,37 @@ NuxtLayout(name='game')
 
   template(v-slot:info)
     div(id='caption')
-      div Welcome!  Please connect your Ethereum Wallet using one of the following options.
+      div(class='text-lg font-bold') Welcome!
+      div Please connect your Ethereum Wallet using one of the following:
+      div(id='wallets')
+        button(@click='connectMetamask')
+          img(src='@/assets/icons/metamask-32px.png')
+          div Metamask
+        button(@click='connectWalletConnect')
+          img(src='@/assets/icons/walletconnect.png')
+          div WalletConnect
+    client-only
+      WalletConnectModal(
+        v-if='showWCModal'
+        :walletConnectURI='walletConnectURI'
+        @close='() => showWCModal = false'
+      )
 </template>
+
+<style lang='sass'>
+#caption
+  #wallets
+    @apply mt-2
+    @apply flex flex-col
+
+    button
+      @apply px-2 py-1 my-1 mx-3
+      @apply flex-1 flex items-center justify-center
+      @apply border border-2 border-black rounded-xl
+
+      img
+        @apply h-5
+
+      div
+        @apply flex-1
+</style>
