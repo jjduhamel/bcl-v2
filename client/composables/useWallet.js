@@ -3,39 +3,50 @@ import WalletConnectProvider from '@walletconnect/web3-provider';
 import { useWalletStore } from '../store/wallet';
 const { Web3Provider } = providers;
 
-export default function() {
+export default async function() {
   const wallet = useWalletStore();
-  let metamask, walletConnect, signer;
   const walletConnectURI = ref(null);
+  let provider, signer;
 
-  if (process.client && window.ethereum) {
+  if (window.ethereum) {
     wallet.installed = true;
-    metamask = new Web3Provider(window.ethereum);
+    provider = new Web3Provider(window.ethereum);
+    signer = provider.getSigner();
+    if (!wallet.connected) {
+      try {
+        await _connected();
+      } catch (err) {
+        console.warn(err);
+      }
+    }
   }
 
-  async function _connected(provider) {
+  async function _connected() {
     const accounts = await provider.listAccounts();
     if (accounts.length == 0) throw new Error('No connected accounts');
     console.log('Wallet connected');
-    signer = provider.getSigner();
     [ wallet.address, wallet.network, wallet.balance ] = await Promise.all([
       signer.getAddress(),
       provider.getNetwork().then(n => n.name),
       signer.getBalance().then(BigInt)
     ]);
+    //wallet.provider = provider;
+    //wallet.signer = signer;
+    //const addr = await wallet.provider.resolveName('xorax.eth');
+    //console.log({ addr });
     wallet.connected = true;
   }
 
   async function connectMetamask() {
     if (!wallet.installed) throw new Error('Metamask isn\'t installed');
     console.log('Connect metamask');
-    await metamask.send('eth_requestAccounts', []);
-    await _connected(metamask);
+    await provider.send('eth_requestAccounts', []);
+    await _connected();
   }
 
   async function connectWalletConnect() {
     console.log('Connect WalletConnect');
-    walletConnect = new WalletConnectProvider({
+    const walletConnect = new WalletConnectProvider({
       infuraId: '2185ad08ea904e85b06c383c4cd6b902',
       qrcode: false
     });
@@ -46,8 +57,8 @@ export default function() {
 
     walletConnect.on('connect', (err, data) => {
       console.log('WalletConnect finished');
-      const provider = new Web3Provider(walletConnect);
-      _connected(provider);
+      provider = new Web3Provider(walletConnect);
+      _connected();
     });
 
     walletConnect.on('disconnect', (err, data) => {
@@ -65,17 +76,17 @@ export default function() {
 
     // Handle existing connection
     if (walletConnect.connected) {
-      const provider = new Web3Provider(walletConnect);
-      _connected(provider);
+      provider = new Web3Provider(walletConnect);
+      _connected();
     }
   }
 
   return {
     wallet,
-    metamask,
+    provider,
+    signer,
     connectMetamask,
-    walletConnect,
-    walletConnectURI,
-    connectWalletConnect
+    connectWalletConnect,
+    walletConnectURI
   };
 }

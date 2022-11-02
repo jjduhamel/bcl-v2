@@ -2,7 +2,13 @@
 
 ## Client
 
-The *client/* directory hold the code for the frontend.
+The reference client uses the Nuxt3 framework.
+
+*Start development server*
+
+```
+$ yarn dev
+```
 
 ## Contracts
 

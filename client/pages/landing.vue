@@ -4,7 +4,11 @@ const {
   connectMetamask,
   connectWalletConnect,
   walletConnectURI
-} = useWallet();
+} = await useWallet();
+
+if (wallet.connected) {
+  await navigateTo('/lounge');
+}
 
 watch(walletConnectURI, (newURI, oldURI) => {
   if (!oldURI && newURI) {
@@ -12,9 +16,10 @@ watch(walletConnectURI, (newURI, oldURI) => {
   }
 });
 
-watch(wallet.connected, (isCon, wasCon) => {
+watch(() => wallet.connected, (isCon, wasCon) => {
   if (!wasCon && isCon) {
     showWCModal.value = false;
+    navigateTo('/lounge');
   }
 });
 
