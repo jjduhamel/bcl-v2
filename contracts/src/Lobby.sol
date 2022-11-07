@@ -137,8 +137,8 @@ contract Lobby is GameEvents {
   function challenge(
     address player2,
     bool startAsWhite,
-    uint wagerAmount,
-    uint timePerMove
+    uint timePerMove,
+    uint wagerAmount
   ) external payable allowChallenge allowWager(wagerAmount) {
     require(timePerMove >= 60, 'InvalidTimePerMove');
     address player1 = msg.sender;
@@ -146,20 +146,19 @@ contract Lobby is GameEvents {
                                             payable(player1)
                                           , payable(player2)
                                           , startAsWhite
-                                          , wagerAmount
-                                          , timePerMove);
+                                          , timePerMove
+                                          , wagerAmount);
     __challenges[player1].push(gameId);
     __challenges[player2].push(gameId);
     __chessEngine[gameId] = address(__engine);
-    emit CreatedChallenge(gameId, player1, player2);
+    emit CreatedChallenge(gameId, msg.sender, player2);
   }
 
   function cancelChallenge(uint gameId, address sender, address receiver)
   external isChessEngine(gameId) {
     pop(__challenges, sender, gameId);
-    //pop(__challenges, receiver, gameId);
-    popLazy(__challenges, receiver, gameId);
-    emit CanceledChallenge(gameId, sender, receiver);
+    pop(__challenges, receiver, gameId);
+    emit DeclinedChallenge(gameId, sender, receiver);
   }
 
   /*
@@ -181,17 +180,18 @@ contract Lobby is GameEvents {
 
   function finishGame(uint gameId, address winner, address loser)
   external isChessEngine(gameId) {
+    // Remove active games
     pop(__games, winner, gameId);
+    pop(__games, loser, gameId);
+    // Update player histories
     __history[winner].push(gameId);
-    //pop(__challenges, blackPlayer, gameId);
-    popLazy(__games, loser, gameId);
     __history[loser].push(gameId);
     emit GameFinished(gameId, winner, loser);
   }
 
-  function broadcastMove(uint gameId, address sender, address receiver)
+  function touch(uint gameId, address sender, address receiver)
   external isChessEngine(gameId) {
-    emit PlayerMoved(gameId, sender, receiver);
+    emit TouchRecord(gameId, sender, receiver);
   }
 
   /*

@@ -10,20 +10,24 @@ contract DeployLobby is Script {
   function setUp() public {}
 
   function run() public {
-    //uint deployer = vm.envUint('PRIVATE_KEY');
-    //vm.startBroadcast(deployer)
-    vm.broadcast();
+    vm.startBroadcast();
+
+    // Deploy and configure the lobby
     Lobby lobby = new Lobby();
     lobby.initialize();
     console.log('Lobby', address(lobby));
-    address arbiter = lobby.arbiter();
-    console.log('Arbiter', arbiter);
     lobby.allowChallenges(true);
     lobby.allowWagers(true);
 
+    // Deploy and configure chess engine
     ChessEngine engine = new ChessEngine(address(lobby));
-    console.log('ChessEngine', address(engine));
     lobby.setChessEngine(address(engine));
+    console.log('ChessEngine', lobby.currentEngine());
+
+    // Configure the arbiter
+    lobby.setArbiter(msg.sender);
+    console.log('Arbiter', lobby.arbiter());
+
     vm.stopBroadcast();
   }
 }

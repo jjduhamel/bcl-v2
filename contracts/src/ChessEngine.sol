@@ -215,7 +215,7 @@ contract ChessEngine is GameEvents {
     gameData.currentMove = opponent;
     gameData.timePerMove = timePerMove;
     gameData.wagerAmount = wagerAmount;
-    emit ModifiedChallenge(gameId, msg.sender, opponent);
+    __lobby.touch(gameId, msg.sender, opponent);
   }
 
   /*
@@ -234,7 +234,9 @@ contract ChessEngine is GameEvents {
     GameData storage gameData = __games[gameId];
     gameData.state = GameState.Finished;
     gameData.outcome = outcome;
-    __lobby.finishGame(gameId, winner(gameId), loser(gameId));
+    address winner = winner(gameId);
+    address loser = loser(gameId);
+    __lobby.finishGame(gameId, winner, loser);
   }
 
   function move(uint gameId, string memory san)
@@ -247,7 +249,7 @@ contract ChessEngine is GameEvents {
     gameData.currentMove = otherPlayer(gameId);
     gameData.timeOfLastMove = block.timestamp;
     emit MoveSAN(gameId, msg.sender, san);
-    __lobby.broadcastMove(gameId, msg.sender, otherPlayer(gameId));
+    __lobby.touch(gameId, msg.sender, otherPlayer(gameId));
   }
 
   function resign(uint gameId) external inProgress(gameId) isPlayer(gameId) {

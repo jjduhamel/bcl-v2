@@ -5,15 +5,15 @@ interface GameEvents {
   event CreatedChallenge(uint indexed gameId
                        , address indexed player1
                        , address indexed player2);
-  event ModifiedChallenge(uint indexed gameId
-                        , address indexed sender
-                        , address indexed receiver);
   event AcceptedChallenge(uint indexed gameId
                         , address indexed sender
                         , address indexed receiver);
-  event CanceledChallenge(uint indexed gameId
+  event DeclinedChallenge(uint indexed gameId
                         , address indexed sender
                         , address indexed receiver);
+  event TouchRecord(uint indexed gameId
+                  , address indexed sender
+                  , address indexed receiver);
   event GameStarted(uint indexed gameId
                   , address indexed whitePlayer
                   , address indexed blackPlayer);
