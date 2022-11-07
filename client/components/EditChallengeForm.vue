@@ -3,7 +3,7 @@ import _ from 'lodash';
 import { formatEther, parseEther } from 'ethers/lib/utils';
 const { truncAddress } = await useEthUtils();
 
-const emit = defineEmits([ 'submit' ]);
+const emit = defineEmits([ 'submit', 'cancel' ]);
 
 const props = defineProps({
   opponent: {
@@ -12,17 +12,19 @@ const props = defineProps({
   },
   startAsWhite: {
     type: Boolean,
-    required: true
+    default: true
   },
   timePerMove: {
-    type: Number,
-    required: true
+    type: [ Number, String ],
+    default: 900
   },
-  displayWager: {
-    type: Number,
-    required: true
+  wagerAmount: {
+    type: [ Number, String ],
+    default: 0
   }
 });
+
+const { opponent } = toRefs(props);
 
 const startAsWhite = ref(props.startAsWhite);
 
@@ -44,19 +46,15 @@ const displayTPM = computed({
   set(tpm) {
     switch (timeUnits.value) {
       case 'minutes':
-        console.log('mins');
         timePerMove.value = tpm*60;
         break;
       case 'hours':
-        console.log('hours');
         timePerMove.value = tpm*3600;
         break;
       case 'days':
-        console.log('days');
         timePerMove.value = tpm*3600*24;
         break;
       case 'weeks':
-        console.log('weeks');
         timePerMove.value = tpm*3600*24*7;
         break;
     }
@@ -64,7 +62,7 @@ const displayTPM = computed({
 });
 
 const wagerToken = ref('eth');
-const wagerAmount = ref(props.displayWager);
+const wagerAmount = ref(props.wagerAmount);
 const displayWager = computed({
   get() {
     return formatEther(wagerAmount.value, 3);
@@ -74,12 +72,12 @@ const displayWager = computed({
   }
 });
 
-const submit = () => emit('submit', _.mapValues(
-                                      { startAsWhite
-                                      , timePerMove
-                                      , wagerAmount
-                                      , wagerToken }
-                                    , unref));
+const submit = () => emit('submit', _.mapValues({ opponent
+                                                , startAsWhite
+                                                , timePerMove
+                                                , wagerAmount
+                                                , wagerToken }
+                                              , unref));
 </script>
 
 <template lang='pug'>
@@ -89,7 +87,7 @@ form(
 )
   div(id='opponent' class='mt-2 flex items-center')
     div(class='flex-1') Opponent:
-    div(class='flex-1 flex') {{ truncAddress(opponent, 4, 4) }}
+    div(class='mx-4 flex-1 flex justify-end') {{ truncAddress(opponent, 4, 4) }}
   div(id='choose-color' class='mt-2 flex items-center')
     div(class='flex-1') Play As:
     div(class='mx-4 flex-1 flex justify-between')
@@ -130,5 +128,7 @@ form(
         option(value='usdt') USDT
         option(value='usdc') USDC
   div(id='controls' class='mt-4 mx-12 flex justify-center')
-    slot
+    button(type='submit' class='flex-1') Send
+    div(class='w-2')
+    button(type='button' class='flex-1' @click='emit("cancel")') Cancel
 </template>

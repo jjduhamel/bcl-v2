@@ -1,6 +1,6 @@
 import { ethers, providers } from 'ethers';
 import WalletConnectProvider from '@walletconnect/web3-provider';
-import { useWalletStore } from '../store/wallet';
+import useWalletStore from '../store/wallet';
 const { Web3Provider } = providers;
 
 export default async function() {
@@ -30,10 +30,6 @@ export default async function() {
       provider.getNetwork().then(n => n.name),
       signer.getBalance().then(BigInt)
     ]);
-    //wallet.provider = provider;
-    //wallet.signer = signer;
-    //const addr = await wallet.provider.resolveName('xorax.eth');
-    //console.log({ addr });
     wallet.connected = true;
   }
 

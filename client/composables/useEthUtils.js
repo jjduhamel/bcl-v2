@@ -3,6 +3,7 @@ const { JsonRpcProvider } = providers;
 
 export default async function() {
   const ensProvider = new JsonRpcProvider('https://mainnet.infura.io/v3/2185ad08ea904e85b06c383c4cd6b902');
+  const { wallet } = useWallet();
 
   function isAddress(addr) {
     return addr.match(/0x[a-fA-F0-9]{40}/) !== null;

@@ -1,7 +1,7 @@
 <script setup>
 import _ from 'lodash';
 
-const { engine, fen, legalMoves } = useChess();
+const { engine, fen, legalMoves } = await useChess();
 
 const chooseMove = async (from, to) => {
   const move = engine.move({ from, to });

@@ -1,9 +1,14 @@
 <script setup>
+import { formatEther } from 'ethers/lib/utils';
 const { wallet } = await useWallet();
 const { truncAddress } = await useEthUtils();
 
 const displayAddr = computed(() => {
   return wallet.connected ? truncAddress(wallet.address) : '---';
+});
+
+const displayBalance = computed(() => {
+  return wallet.connected ? (+formatEther(wallet.balance)).toFixed(3) : '---';
 });
 
 const displayNetwork = computed(() => {
@@ -23,6 +28,9 @@ div(id='app')
           div(id='item')
             div Address
             div {{ displayAddr }}
+          div(id='item')
+            div Balance
+            div {{ displayBalance }}
           div(id='item')
             div Network
             div {{ displayNetwork }}

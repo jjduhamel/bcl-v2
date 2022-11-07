@@ -12,9 +12,7 @@ $ yarn dev
 
 ## Contracts
 
-The *contracts/* directory contains the code for the smart contracts.  We use [Foundry](https://github.com/foundry-rs/foundry) as a build tool.
-
-### Local Development
+The *contracts/* directory contains the code for the smart contracts using [Foundry](https://github.com/foundry-rs/foundry).
 
 *Start local blockchain*
 

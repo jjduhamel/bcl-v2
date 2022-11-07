@@ -2,3 +2,4 @@
 *.env
 .mnemonic
 addresses.txt
+vue3-qr-code-styling/
