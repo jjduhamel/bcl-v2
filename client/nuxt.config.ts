@@ -10,7 +10,8 @@ export default defineNuxtConfig({
     [ '@pinia/nuxt',
       { autoImports: [ 'defineStore' ] }
     ],
-    '@nuxtjs/svg', /*'nuxt-icons', 'nuxt-svg-loader'*/ ],
+    '@nuxtjs/svg', /*'nuxt-icons', 'nuxt-svg-loader'*/
+  ],
   build: {
     postcss: {
       postcssOptions: require('./postcss.config.js')

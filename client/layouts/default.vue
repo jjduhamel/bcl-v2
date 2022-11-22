@@ -69,6 +69,13 @@ html, body, #__nuxt, #app
     @apply bg-transparent
     @extend .bordered
 
+  button:disabled
+    @apply text-gray-400 border-gray-400
+    filter: invert(40%)
+
+  button:disabled.unbordered
+    @extend .unbordered
+
   #body
     @apply mt-2 p-2 flex flex-grow
 

@@ -3,7 +3,7 @@ import _ from 'lodash';
 
 const { engine, fen, legalMoves } = await useChess();
 
-const chooseMove = async (from, to) => {
+const chooseMove = async (from, to, capture) => {
   const move = engine.move({ from, to });
   fen.value = engine.fen();
   if (!move) throw Error('Illegal move', from, '->', to);
@@ -21,6 +21,6 @@ const moveAI = () => {
 <template>
   <ChessBoard
     v-bind='{ fen, legalMoves }'
-    :didMove='chooseMove'
+    @moved='chooseMove'
   />
 </template>

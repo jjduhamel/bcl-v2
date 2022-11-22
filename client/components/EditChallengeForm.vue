@@ -6,11 +6,15 @@ const { truncAddress } = await useEthUtils();
 const emit = defineEmits([ 'submit', 'cancel' ]);
 
 const props = defineProps({
+  loading: {
+    type: Boolean,
+    default: false
+  },
   opponent: {
     type: String,
     required: true
   },
-  startAsWhite: {
+  isWhitePlayer: {
     type: Boolean,
     default: true
   },
@@ -26,7 +30,7 @@ const props = defineProps({
 
 const { opponent } = toRefs(props);
 
-const startAsWhite = ref(props.startAsWhite);
+const startAsWhite = ref(props.isWhitePlayer);
 
 const timeUnits = ref('minutes');
 const timePerMove = ref(props.timePerMove);
@@ -82,22 +86,21 @@ const submit = () => emit('submit', _.mapValues({ opponent
 
 <template lang='pug'>
 form(
-  class='w-72'
   @submit.prevent='submit'
 )
-  div(id='opponent' class='mt-2 flex items-center')
+  div(id='opponent' class='flex items-center')
     div(class='flex-1') Opponent:
-    div(class='mx-4 flex-1 flex justify-end') {{ truncAddress(opponent, 4, 4) }}
+    div(class='flex-1 flex justify-end') {{ truncAddress(opponent, 4, 4) }}
   div(id='choose-color' class='mt-2 flex items-center')
     div(class='flex-1') Play As:
-    div(class='mx-4 flex-1 flex justify-between')
+    div(class='flex-1 flex justify-around')
       button(
         type='button'
         class='contents border-none'
         @click='() => startAsWhite = true'
       )
         img(
-          class='h-12 border-2 border-transparent'
+          class='h-10 border-2 border-transparent'
           :class='startAsWhite ? "bordered" : "unbordered"'
           src='~assets/pieces/merida/wP.svg')
       button(
@@ -106,7 +109,7 @@ form(
         @click='() => startAsWhite = false'
       )
         img(
-          class='h-12 border-2 border-transparent'
+          class='h-10 border-2 border-transparent'
           :class='startAsWhite ? "unbordered" : "bordered"'
           src='~assets/pieces/merida/bP.svg')
   div(class='mt-2 flex items-center')
@@ -127,8 +130,14 @@ form(
         option(value='dai') DAI
         option(value='usdt') USDT
         option(value='usdc') USDC
-  div(id='controls' class='mt-4 mx-12 flex justify-center')
-    button(type='submit' class='flex-1') Send
-    div(class='w-2')
-    button(type='button' class='flex-1' @click='emit("cancel")') Cancel
+  div(id='form-controls')
+    button(
+      type='submit'
+      :disabled='loading'
+    ) Send
+    button(
+      type='button'
+      @click='emit("cancel")'
+      :disabled='loading'
+    ) Cancel
 </template>

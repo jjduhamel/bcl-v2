@@ -3,6 +3,8 @@ import { Chessground } from 'chessground';
 import '../assets/styles/chessground.css';
 import '../assets/styles/theme.css';
 
+const emit = defineEmits([ 'moved' ]);
+
 const props = defineProps({
   fen: {
     type: String,
@@ -12,47 +14,56 @@ const props = defineProps({
     type: Object,
     required: true
   },
-  // Events
-  didMove: {
-    type: Function,
-    default(from, to) { console.log('Moved', from, to) }
+  isWhitePlayer: {
+    type: Boolean,
+    default: true
+  },
+  isCurrentMove: {
+    type: Boolean,
+    default: true
   }
 })
 
-const { fen, legalMoves } = toRefs(props);
+const { fen, legalMoves, isCurrentMove } = toRefs(props);
+const playerColor = props.isWhitePlayer ? 'white' : 'black';
+const opponentColor = props.isWhitePlayer ? 'black' : 'white';
 
 // Reference to draw the board in the DOM
 const board = ref(null);
 const chessground = ref(null);
+
+function reloadBoard() {
+  chessground.value.set({
+    fen: unref(fen),
+    turnColor: isCurrentMove.value ? playerColor : opponentColor,
+    movable: {
+      dests: unref(legalMoves)
+    }
+  });
+}
 
 // Draw chessboard when page mounts
 onMounted(() => {
   console.log('Chessboard mounted');
   chessground.value = new Chessground(unref(board), {
     animation: { enabled: false },
-    fen: unref(fen),
+    orientation: playerColor,
     movable: {
       free: false,
-      dests: unref(legalMoves),
+      color: playerColor,
       showDests: true,
-      events: {
-        after: props.didMove
-      }
+    },
+    events: {
+      move: (from, to, capture) => emit('moved', from, to, capture)
     }
   });
+
+  reloadBoard();
+
 });
 
-// Redraw board when the FEN changes
-watch(fen, (newFen) => {
-  chessground.value.set({
-    fen: newFen,
-    movable: {
-      free: false,
-      dests: unref(legalMoves),
-      showDests: true,
-    }
-  });
-});
+watch(isCurrentMove, reloadBoard);
+watch(fen, reloadBoard);
 </script>
 
 <template lang='pug'>

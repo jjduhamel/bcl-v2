@@ -51,12 +51,13 @@ export default defineStore('lobby', {
         this.fetchHistory()
       ]);
     },
-    async _fetchEngine(gameId: number) {
+    async fetchEngine(gameId: number) {
       const lobby = this.contract;
       const contract = await lobby.chessEngine(gameId);
       this.contracts[gameId] = contract;
     },
-    async _fetchMetadata(gameId: number) {
+    async fetchMetadata(gameId: number) {
+      console.log('Update metadata for game', gameId);
       const { opponentAddress } = useEthUtils();
       const engine = this.chessEngine(gameId);
       const [ ,
@@ -75,55 +76,63 @@ export default defineStore('lobby', {
         whitePlayer,
         blackPlayer,
         currentMove,
-        ..._.mapValues({ timePerMove
-                       , timeOfLastMove
-                       , wagerAmount },
+        ..._.mapValues({ timePerMove, timeOfLastMove },
+                       bn => bn.toNumber()),
+        ..._.mapValues({ wagerAmount },
                        bn => bn.toString())
       };
     },
-    async newChallenge(gameId) {
+    async newChallenge(id) {
+      const gameId = BigNumber.isBigNumber(id) ? id.toNumber() : id;
+      console.log('Register new challenge', gameId);
       const lobby = this.contract;
-      await this._fetchEngine(gameId);
-      await this._fetchMetadata(gameId);
-      this.pending = [ ...this.pending, gameId ];
+      await this.fetchEngine(gameId);
+      await this.fetchMetadata(gameId);
+      this.pending = _.union(this.pending, [ gameId ]);
+      return gameId;
     },
-    // FIXME gameId is BigNumber causing this to fail
-    async popChallenge(gameId) {
+    async popChallenge(id) {
+      const gameId = BigNumber.isBigNumber(id) ? id.toNumber() : id;
+      const len = this.pending.length;
       this.pending = _.without(this.pending, gameId);
+      if (this.pending.length < len) console.log('Unregistered challenge', gameId);
+      return gameId;
     },
-    async newGame(gameId) {
+    async newGame(id) {
+      const gameId = BigNumber.isBigNumber(id) ? id.toNumber() : id;
+      console.log('Register new game', gameId);
       const lobby = this.contract;
-      await this._fetchEngine(gameId);
-      await this._fetchMetadata(gameId);
+      await this.fetchEngine(gameId);
+      await this.fetchMetadata(gameId);
       this.popChallenge(gameId);
-      this.current.push(gameId);
+      this.current = _.union(this.current, [ gameId ]);
+      return gameId;
     },
-    async finishGame(gameId) {
+    async finishGame(id) {
+      const gameId = BigNumber.isBigNumber(id) ? id.toNumber() : id;
+      console.log('Unregister game', gameId);
       const lobby = this.contract;
-      await this._fetchEngine(gameId);
-      await this._fetchMetadata(gameId);
+      await this.fetchEngine(gameId);
+      await this.fetchMetadata(gameId);
       this.current = _.without(this.current, gameId);
-      this.history.push(gameId);
+      this.finished = _.union(this.finished, [ gameId ]);
     },
     async fetchChallenges() {
       const lobby = this.contract;
       const challenges = await lobby.challenges();
       await Promise.all(_.map(challenges, this.newChallenge));
-      this.pending = challenges;
       console.log('Fetched', challenges.length, 'challenges');
     },
     async fetchGames() {
       const lobby = this.contract;
       const games = await lobby.games();
       await Promise.all(_.map(games, this.newGame));
-      this.current = games;
       console.log('Fetched', games.length, 'games');
     },
     async fetchHistory() {
       const lobby = this.contract;
       const games = await lobby.history();
       await Promise.all(_.map(games, this.finishGame));
-      this.finished = games;
       console.log('Fetched', games.length, 'finished games');
     },
     chessEngine(gameId: number) {

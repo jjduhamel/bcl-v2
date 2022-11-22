@@ -7,11 +7,19 @@ const { truncAddress } = await useEthUtils();
 const emit = defineEmits([ 'accept', 'decline', 'modify' ]);
 
 const props = defineProps({
+  loading: {
+    type: Boolean,
+    default: false
+  },
   opponent: {
     type: String,
     required: true
   },
-  startAsWhite: {
+  isCurrentMove: {
+    type: Boolean,
+    required: true
+  },
+  isWhitePlayer: {
     type: Boolean,
     default: true
   },
@@ -25,7 +33,7 @@ const props = defineProps({
   }
 });
 
-const { opponent, startAsWhite } = toRefs(props);
+const { opponent, isWhitePlayer } = toRefs(props);
 const modifyChallenge = ref(false);
 
 const displayTPM = computed(() => {
@@ -52,20 +60,21 @@ EditChallengeForm(
   @submit='args => emit("modify", args)'
   @cancel='() => modifyChallenge = false'
 )
-div(v-else class='pr-4 w-72')
-  div(id='opponent' class='mt-2 flex items-center')
+div(v-else id='pending-challenge')
+  div(id='opponent' class='flex items-center')
     div(class='flex-1') Opponent:
     div(class='flex-1 flex justify-end') {{ truncAddress(opponent, 4, 4) }}
-  div(id='choose-color' class='mt-2 flex items-center')
+  div(id='player-color' class='mt-2 flex items-end')
     div(class='flex-1') Play As:
-    div(class='flex-1 flex justify-end')
+    div(class='flex-1 flex justify-end items-end')
+      div(class='mr-2') {{ isWhitePlayer ? 'White' : 'Black' }}
       img(
-        v-if='startAsWhite'
-        class='h-12'
+        v-if='isWhitePlayer'
+        class='h-8'
         src='~assets/pieces/merida/wP.svg')
       img(
         v-else
-        class='h-12'
+        class='h-8'
         src='~assets/pieces/merida/bP.svg')
   div(class='mt-2 flex items-center')
     div(class='flex-1') Time Per Move:
@@ -75,11 +84,20 @@ div(v-else class='pr-4 w-72')
     div(class='flex-1') Wager:
     div(class='flex-1 flex justify-end')
       div() {{ displayWager }} ETH
-  div(id='controls' class='mt-4 mx-12 flex justify-center')
-    button(type='button' class='flex-1' @click='emit("accept")') Accept
-    button(type='button' class='flex-1' @click='emit("decline")') Decline
+  div(id='form-controls')
     button(
-      class='flex-1'
+      v-if='isCurrentMove'
+      type='button'
+      @click='emit("accept")'
+      :disabled='loading'
+    ) Accept
+    button(
+      type='button'
+      @click='emit("decline")'
+      :disabled='loading'
+    ) Decline
+    button(
       @click='() => modifyChallenge = true'
+      :disabled='loading'
     ) Modify
 </template>

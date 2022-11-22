@@ -8,6 +8,14 @@ const props = defineProps({
     type: String,
     required: true
   },
+  state: {
+    type: Number,
+    default: 3
+  },
+  outcome: {
+    type: Number,
+    required: true
+  },
   isWhitePlayer: {
     type: Boolean,
     required: true
@@ -17,13 +25,28 @@ const props = defineProps({
     required: true
   },
   timePerMove: {
-    type: String,
+    type: Number,
     required: true
   },
   wagerAmount: {
-    type: String,
+    type: [ Number, String ],
     required: true
   }
+});
+
+const { state, outcome, isWhitePlayer, isCurrentMove } = toRefs(props);
+
+const gameOver = computed(() => state.value == 4);
+const isWinner = computed(() => gameOver.value &&
+                                outcome.value == (isWhitePlayer.value ? 1 : 2));
+const isLoser = computed(() => gameOver.value &&
+                                outcome.value == (isWhitePlayer.value ? 2 : 1));
+
+const indicator = computed(() => {
+  if (!gameOver.value) return isCurrentMove.value ? 'green' : 'orange';
+  else if (isWinner.value) return 'green';
+  else if (isLoser.value) return 'red';
+  else return 'orange';
 });
 
 const displayTPM = computed(() => {
@@ -34,7 +57,7 @@ const displayTPM = computed(() => {
 
 <template lang='pug'>
 section
-  Card(:indicator='isCurrentMove ? "green" : "orange"')
+  Card(:indicator='indicator')
     div(class='mb-1 flex justify-center')
       img(
         v-if='isWhitePlayer'
@@ -48,8 +71,8 @@ section
       )
 
     div {{ truncAddress(opponent) }}
-    div {{ displayTPM }}
+    div(v-if='isWinner') Victory
+    div(v-else-if='isLoser') Defeat
+    div(v-else-if='gameOver') Finished
+    div(v-else) {{ displayTPM }}
 </template>
-
-<style lang='sass'>
-</style>

@@ -17,11 +17,11 @@ const props = defineProps({
     required: true
   },
   timePerMove: {
-    type: String,
+    type: Number,
     required: true
   },
   wagerAmount: {
-    type: String,
+    type: [ Number, String ],
     required: true
   }
 });
