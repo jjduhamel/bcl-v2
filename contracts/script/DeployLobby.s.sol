@@ -1,33 +1,28 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
-import 'forge-std/Script.sol';
-import 'forge-std/console2.sol';
+import '@forge/Script.sol';
+import '@forge/console2.sol';
+import '@oz/proxy/ERC1967/ERC1967Proxy.sol';
 import 'src/Lobby.sol';
-import 'src/ChessEngine.sol';
 
 contract DeployLobby is Script {
-  function setUp() public {}
+  function deployLobby() private returns (Lobby) {
+    Lobby impl = new Lobby();
+    ERC1967Proxy proxy = new ERC1967Proxy(address(impl), '');
+    Lobby lobby = Lobby(address(proxy));
+    lobby.initialize();
+    return lobby;
+  }
 
   function run() public {
-    vm.startBroadcast();
-
-    // Deploy and configure the lobby
-    Lobby lobby = new Lobby();
-    lobby.initialize();
+    uint256 deployerKey = vm.envUint('PRIVATE_KEY');
+    vm.startBroadcast(deployerKey);
+    Lobby lobby = deployLobby();
     console.log('Lobby', address(lobby));
+    console.log('Arbiter', lobby.arbiter());
     lobby.allowChallenges(true);
     lobby.allowWagers(true);
-
-    // Deploy and configure chess engine
-    ChessEngine engine = new ChessEngine(address(lobby));
-    lobby.setChessEngine(address(engine));
-    console.log('ChessEngine', lobby.currentEngine());
-
-    // Configure the arbiter
-    lobby.setArbiter(msg.sender);
-    console.log('Arbiter', lobby.arbiter());
-
     vm.stopBroadcast();
   }
 }

@@ -1,15 +1,38 @@
 // SPDX-License-Identifier: GPL-V3
 pragma solidity >=0.4.22 <0.9.0;
-import './GameEvents.sol';
+import '@oz-upgradeable/proxy/utils/Initializable.sol';
+import '@oz-upgradeable/proxy/utils/UUPSUpgradeable.sol';
 import './ChessEngine.sol';
+import 'lib/ArrayUtils.sol';
 
-contract Lobby is GameEvents {
-  // Metadata
-  bool private __initialized;
-  string public __version;
+interface LobbyInterface {
+  event TouchRecord(uint indexed gameId
+                  , address indexed sender
+                  , address indexed receiver);
+  event NewChallenge(uint indexed gameId
+                   , address indexed player1
+                   , address indexed player2);
+  event ChallengeAccepted(uint indexed gameId
+                        , address indexed sender
+                        , address indexed receiver);
+  event ChallengeDeclined(uint indexed gameId
+                        , address indexed sender
+                        , address indexed receiver);
+  event GameFinished(uint indexed gameId
+                   , address indexed sender
+                   , address indexed receiver);
+  event GameDisputed(uint indexed gameId
+                   , address indexed sender
+                   , address indexed receiver);
+  event DisputeResolved(uint indexed gameId
+                      , address indexed sender
+                      , address indexed receiver);
+}
+
+contract Lobby is Initializable, UUPSUpgradeable, LobbyInterface {
+  using ArrayUtils for uint[];
 
   // Lobby Settings
-  ChessEngine private __engine;
   address private __arbiter;
   bool private __allowChallenges;
   bool private __allowWagers;
@@ -19,24 +42,35 @@ contract Lobby is GameEvents {
   address public __authSigner;
   uint public __authTokenTTL;
 
-  // Mapping player -> gameId
+  ChessEngine private __currentEngine;
+  uint __gameIndex;
+  // Map gameId -> chessEngine
+  mapping(uint => address) private __chessEngine;
+  // Map player -> gameId
   mapping(address => uint[]) private __challenges;
   mapping(address => uint[]) private __games;
   mapping(address => uint[]) private __history;
-  // Mapping gameId -> chessEngine
-  mapping(uint => address) private __chessEngine;
+  // List gameId[]
+  uint[] private __disputes;
 
-  function initialize() public {
-    require(!__initialized, 'Contract was already initialized');
-    __arbiter = msg.sender;
-    __initialized = true;
+  constructor() {
+    _disableInitializers();
   }
+
+  function initialize() public initializer {
+    __UUPSUpgradeable_init();
+    __arbiter = msg.sender;
+  }
+
+  function _authorizeUpgrade(address newImplementation) internal override
+    isArbiter
+  {}
 
   /*
    * Chess Engine
    */
 
-  function currentEngine() public view returns (address) { return address(__engine); }
+  function currentEngine() public view returns (address) { return address(__currentEngine); }
 
   function chessEngine(uint gameId) public view returns (address) {
     return __chessEngine[gameId];
@@ -44,44 +78,6 @@ contract Lobby is GameEvents {
 
   modifier isChessEngine(uint gameId) {
     require(msg.sender == __chessEngine[gameId], 'ChessEngineOnly');
-    _;
-  }
-
-  function challenges() public view returns (uint[] memory) {
-    uint len = __challenges[msg.sender].length;
-    uint[] memory out = new uint[](len);
-    for (uint j=0; j<len; j++) {
-      out[j] = __challenges[msg.sender][j];
-    }
-    return out;
-  }
-
-  function games() public view returns (uint[] memory) {
-    uint len = __games[msg.sender].length;
-    uint[] memory out = new uint[](len);
-    for (uint j=0; j<len; j++) {
-      out[j] = __games[msg.sender][j];
-    }
-    return out;
-  }
-
-  function history() public view returns (uint[] memory) {
-    uint len = __history[msg.sender].length;
-    uint[] memory out = new uint[](len);
-    for (uint j=0; j<len; j++) {
-      out[j] = __games[msg.sender][j];
-    }
-    return out;
-  }
-
-  /*
-   * Arbiter Related Stuff
-   */
-
-  function arbiter() public view returns (address) { return __arbiter; }
-
-  modifier arbiterOnly() {
-    require(msg.sender == __arbiter, 'ArbiterOnly');
     _;
   }
 
@@ -98,140 +94,138 @@ contract Lobby is GameEvents {
     _;
   }
 
-  function pop(mapping(address => uint[]) storage array, address player, uint gameId) private returns (bool) {
-    uint[] storage items = array[player];
-
-    // Start from the newest challenges and go backwards
-    for (uint j=items.length-1; j>=0; j--) {
-      if (gameId == items[j]) {
-        for (++j; j<items.length; j++) {
-          items[j-1] = items[j];
-        }
-        items.pop();
-        return true;
-      }
-    }
-
-    return false;
+  function challenges() public view returns (uint[] memory) {
+    return __challenges[msg.sender];
   }
 
-  function popLazy(mapping(address => uint[]) storage array, address player, uint gameId) private returns (bool) {
-    uint[] storage items = array[player];
+  function games() public view returns (uint[] memory) {
+    return __games[msg.sender];
+  }
 
-    // Start from the newest challenges and go backwards
-    for (uint j=items.length-1; j>=0; j--) {
-      if (gameId == items[j]) {
-        items[j] = items[items.length-1];
-        items.pop();
-        return true;
-      }
-    }
-
-    return false;
+  function history() public view returns (uint[] memory) {
+    return __history[msg.sender];
   }
 
   /*
-   * Challenge Related Stuff
+   * Arbiter Stuff
    */
+
+  function arbiter() public view returns (address) { return __arbiter; }
+
+  modifier isArbiter() {
+    require(msg.sender == __arbiter, 'ArbiterOnly');
+    _;
+  }
+
+  function disputes() public view isArbiter returns (uint[] memory) {
+    return __disputes;
+  }
+
+  function setArbiter(address newArbiter) external isArbiter {
+    __arbiter = newArbiter;
+  }
+
+  function allowChallenges(bool allow) external isArbiter {
+    __allowChallenges = allow;
+  }
+
+  function allowWagers(bool allow) external isArbiter {
+    __allowWagers = allow;
+  }
+
+  function setChessEngine(address engine) external isArbiter {
+    __currentEngine = ChessEngine(engine);
+  }
+
+  function setAuthData(address signer, uint ttl, bool enabled) external isArbiter {
+    __authEnabled = enabled;
+    __authSigner = signer;
+    __authTokenTTL = ttl;
+  }
+
+  /*
+   * User API
+   */
+
+  // Simply emits an event.  Signals that the opponent did something
+  // and the client should update the record.
+  function touch(uint gameId, address sender, address receiver) external
+    isChessEngine(gameId)
+  {
+    emit TouchRecord(gameId, sender, receiver);
+  }
 
   function challenge(
     address player2,
     bool startAsWhite,
     uint timePerMove,
     uint wagerAmount
-  ) external payable allowChallenge allowWager(wagerAmount) {
+  ) external payable
+    allowChallenge
+    allowWager(wagerAmount)
+  returns (uint) {
     require(timePerMove >= 60, 'InvalidTimePerMove');
     address player1 = msg.sender;
-    uint gameId = __engine.createChallenge{ value: msg.value }(
-                                            payable(player1)
-                                          , payable(player2)
-                                          , startAsWhite
-                                          , timePerMove
-                                          , wagerAmount);
+    address whitePlayer = startAsWhite ? player1 : player2;
+    address blackPlayer = startAsWhite ? player2 : player1;
+    uint gameId = __currentEngine.createChallenge{ value: msg.value }(__gameIndex++
+                                                                    , player1
+                                                                    , player2
+                                                                    , payable(whitePlayer)
+                                                                    , payable(blackPlayer)
+                                                                    , timePerMove
+                                                                    , wagerAmount);
     __challenges[player1].push(gameId);
     __challenges[player2].push(gameId);
-    __chessEngine[gameId] = address(__engine);
-    emit CreatedChallenge(gameId, msg.sender, player2);
+    __chessEngine[gameId] = address(__currentEngine);
+    emit NewChallenge(gameId, msg.sender, player2);
+    return gameId;
   }
 
-  function cancelChallenge(uint gameId, address sender, address receiver)
-  external isChessEngine(gameId) {
-    pop(__challenges, sender, gameId);
-    pop(__challenges, receiver, gameId);
-    emit DeclinedChallenge(gameId, sender, receiver);
+  function cancelChallenge(uint gameId, address sender, address receiver) external
+    isChessEngine(gameId)
+  {
+    __challenges[sender].pop(gameId);
+    __challenges[receiver].pop(gameId);
+    emit ChallengeDeclined(gameId, sender, receiver);
+  }
+
+  function acceptChallenge(uint gameId, address sender, address receiver) external
+    isChessEngine(gameId)
+  {
+    __challenges[sender].pop(gameId);
+    __challenges[receiver].pop(gameId);
+    __currentEngine.startGame(gameId);
+    __games[sender].push(gameId);
+    __games[receiver].push(gameId);
+    emit ChallengeAccepted(gameId, sender, receiver);
+  }
+
+  function finishGame(uint gameId, address sender, address receiver) external
+    isChessEngine(gameId)
+  {
+    __games[sender].pop(gameId);
+    __games[receiver].pop(gameId);
+    __history[sender].push(gameId);
+    __history[receiver].push(gameId);
+    emit GameFinished(gameId, sender, receiver);
   }
 
   /*
-   * Game Related Stuff
+   * Disputes
    */
 
-  function startGame(uint gameId, address whitePlayer, address blackPlayer)
-  external isChessEngine(gameId) {
-    pop(__challenges, whitePlayer, gameId);
-    __games[whitePlayer].push(gameId);
-    //pop(__challenges, blackPlayer, gameId);
-    popLazy(__challenges, blackPlayer, gameId);   // Use this on the black player to get
-                                                  // some insight into gas usage using
-                                                  // for loop
-    __games[blackPlayer].push(gameId);
-    __engine.startGame(gameId);
-    emit GameStarted(gameId, whitePlayer, blackPlayer);
+  function disputeGame(uint gameId, address sender, address receiver) external
+    isChessEngine(gameId)
+  {
+    __disputes.push(gameId);
+    emit GameDisputed(gameId, sender, receiver);
   }
 
-  function finishGame(uint gameId, address winner, address loser)
-  external isChessEngine(gameId) {
-    // Remove active games
-    pop(__games, winner, gameId);
-    pop(__games, loser, gameId);
-    // Update player histories
-    __history[winner].push(gameId);
-    __history[loser].push(gameId);
-    emit GameFinished(gameId, winner, loser);
-  }
-
-  function touch(uint gameId, address sender, address receiver)
-  external isChessEngine(gameId) {
-    emit TouchRecord(gameId, sender, receiver);
-  }
-
-  /*
-   * Arbiter Functions
-   */
-
-  /*
-  function disputeGame(address _sender, address _receiver)
-  external isChessEngine(gameId) {
-    address _game = msg.sender;
-    emit GameDisputed(_game, _sender, _receiver);
-  }
-  */
-
-  /*
-   * Arbiter functions
-   */
-  function setVersion(string memory newVersion) external arbiterOnly {
-    __version = newVersion;
-  }
-
-  function setArbiter(address newArbiter) external arbiterOnly {
-    __arbiter = newArbiter;
-  }
-
-  function setChessEngine(address newEngine) external arbiterOnly {
-    __engine = ChessEngine(newEngine);
-  }
-
-  function setAuthData(address signer, uint ttl, bool enabled) external arbiterOnly {
-    __authEnabled = enabled;
-    __authSigner = signer;
-    __authTokenTTL = ttl;
-  }
-
-  function allowChallenges(bool allow) external arbiterOnly {
-    __allowChallenges = allow;
-  }
-
-  function allowWagers(bool allow) external arbiterOnly {
-    __allowWagers = allow;
+  function resolveDispute(uint gameId, address whitePlayer, address blackPlayer) external
+    isChessEngine(gameId)
+  {
+    __disputes.popLazy(gameId);
+    emit DisputeResolved(gameId, whitePlayer, blackPlayer);
   }
 }

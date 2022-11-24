@@ -1,20 +1,36 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
-import 'forge-std/Test.sol';
-import 'forge-std/console2.sol';
-import 'src/GameEvents.sol';
+import '@forge/Test.sol';
+import '@forge/console2.sol';
+import '@oz/proxy/ERC1967/ERC1967Proxy.sol';
 import 'src/Lobby.sol';
+import 'src/ChessEngine.sol';
 
-abstract contract LobbyTest is Test, GameEvents {
+abstract contract LobbyTest is Test, LobbyInterface, ChessEngineInterface {
   Lobby lobby;
   ChessEngine engine;
   address arbiter;
   address p1;
   address p2;
   address p3;
-  uint timePerMove = 60;
-  uint wager = 0.1 ether;
+  uint timePerMove = 300;
+  uint wager = 1 ether;
+
+  function _initializeLobby() private {
+    Lobby lobbyImpl = new Lobby();
+    ERC1967Proxy proxy = new ERC1967Proxy(address(lobbyImpl), '');
+    lobby = Lobby(address(proxy));
+    lobby.initialize();
+  }
+
+  function _initializeEngine() private {
+    ChessEngine engineImpl = new ChessEngine();
+    ERC1967Proxy proxy = new ERC1967Proxy(address(engineImpl), '');
+    engine = ChessEngine(address(proxy));
+    engine.initialize(address(lobby));
+    lobby.setChessEngine(address(engine));
+  }
 
   constructor() {
     arbiter = makeAddr('arbiter');
@@ -25,10 +41,8 @@ abstract contract LobbyTest is Test, GameEvents {
     p3 = makeAddr('player3');
     vm.deal(p3, 100 ether);
     vm.startPrank(arbiter);
-    lobby = new Lobby();
-    lobby.initialize();
-    engine = new ChessEngine(address(lobby));
-    lobby.setChessEngine(address(engine));
+    _initializeLobby();
+    _initializeEngine();
   }
 }
 
@@ -55,8 +69,8 @@ contract WageringDisabledTest is LobbyTest {
   }
 
   function testChallengeWithoutWager() public {
-    vm.expectEmit(false, true, true, true);
-    emit CreatedChallenge(0, p1, p2);
+    vm.expectEmit(false, true, true, true, address(lobby));
+    emit NewChallenge(0, p1, p2);
     lobby.challenge(p2, true, 60, 0);
   }
 
@@ -88,8 +102,8 @@ contract WageringEnabledTest is LobbyTest {
   }
 
   function testChallengeWithWager() public {
-    vm.expectEmit(false, false, false, false);
-    emit CreatedChallenge(0, p1, p2);
+    vm.expectEmit(false, false, false, false, address(lobby));
+    emit NewChallenge(0, p1, p2);
     lobby.challenge{ value: wager }(p2, true, wager, 60);
   }
 
