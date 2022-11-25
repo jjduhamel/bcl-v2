@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-V3
 pragma solidity >=0.4.22 <0.9.0;
+import '@oz-upgradeable/access/AccessControlEnumerableUpgradeable.sol';
 import '@oz-upgradeable/proxy/utils/Initializable.sol';
 import '@oz-upgradeable/proxy/utils/UUPSUpgradeable.sol';
+import '@lib/ArrayUtils.sol';
 import './ChessEngine.sol';
-import 'lib/ArrayUtils.sol';
 
 interface LobbyInterface {
   event TouchRecord(uint indexed gameId
@@ -29,11 +30,10 @@ interface LobbyInterface {
                       , address indexed receiver);
 }
 
-contract Lobby is Initializable, UUPSUpgradeable, LobbyInterface {
+contract Lobby is Initializable, UUPSUpgradeable, AccessControlEnumerableUpgradeable, LobbyInterface {
   using ArrayUtils for uint[];
 
   // Lobby Settings
-  address private __arbiter;
   bool private __allowChallenges;
   bool private __allowWagers;
 
@@ -42,10 +42,25 @@ contract Lobby is Initializable, UUPSUpgradeable, LobbyInterface {
   address public __authSigner;
   uint public __authTokenTTL;
 
+  // User Roles
+  bytes32 public constant ADMIN_ROLE = 0x00;
+  bytes32 public constant ARBITER_ROLE = keccak256('ARBITER_ROLE');
+  bytes32 public constant AMBASSADOR_ROLE = keccak256('AMBASSADOR_ROLE');
+  bytes32 public constant VIP_ROLE = keccak256('VIP_ROLE');
+  bytes32 public constant BANNED_ROLE = keccak256('BANNED_ROLE');
+  bytes32 public constant ROLE_5 = keccak256('ROLE_5');
+  bytes32 public constant ROLE_6 = keccak256('ROLE_6');
+  bytes32 public constant ROLE_7 = keccak256('ROLE_7');
+  bytes32 public constant ROLE_8 = keccak256('ROLE_8');
+
+  // Current engine (new games started here)
   ChessEngine private __currentEngine;
+
+  // Current gameId
   uint __gameIndex;
-  // Map gameId -> chessEngine
-  mapping(uint => address) private __chessEngine;
+
+  // Map gameId -> ChessEngine
+  mapping(uint => address) private __engines;
   // Map player -> gameId
   mapping(address => uint[]) private __challenges;
   mapping(address => uint[]) private __games;
@@ -57,13 +72,14 @@ contract Lobby is Initializable, UUPSUpgradeable, LobbyInterface {
     _disableInitializers();
   }
 
-  function initialize() public initializer {
+  function initialize(address admin) public initializer {
     __UUPSUpgradeable_init();
-    __arbiter = msg.sender;
+    _setupRole(ADMIN_ROLE, admin);
+    _grantRole(ARBITER_ROLE, admin);
   }
 
   function _authorizeUpgrade(address newImplementation) internal override
-    isArbiter
+    isAdmin
   {}
 
   /*
@@ -73,11 +89,11 @@ contract Lobby is Initializable, UUPSUpgradeable, LobbyInterface {
   function currentEngine() public view returns (address) { return address(__currentEngine); }
 
   function chessEngine(uint gameId) public view returns (address) {
-    return __chessEngine[gameId];
+    return __engines[gameId];
   }
 
   modifier isChessEngine(uint gameId) {
-    require(msg.sender == __chessEngine[gameId], 'ChessEngineOnly');
+    require(msg.sender == __engines[gameId], 'ChessEngineOnly');
     _;
   }
 
@@ -106,38 +122,52 @@ contract Lobby is Initializable, UUPSUpgradeable, LobbyInterface {
     return __history[msg.sender];
   }
 
-  /*
-   * Arbiter Stuff
-   */
-
-  function arbiter() public view returns (address) { return __arbiter; }
-
-  modifier isArbiter() {
-    require(msg.sender == __arbiter, 'ArbiterOnly');
+  modifier notBanned() {
+    require(!hasRole(BANNED_ROLE, msg.sender), 'UserBanned');
     _;
   }
 
-  function disputes() public view isArbiter returns (uint[] memory) {
+  /*
+   * Admin/Arbiter Stuff
+   */
+
+  modifier isAdmin() {
+    _checkRole(ADMIN_ROLE);
+    _;
+  }
+
+  modifier isArbiter() {
+    _checkRole(ARBITER_ROLE);
+    _;
+  }
+
+  function disputes() public view
+    isArbiter
+  returns (uint[] memory) {
     return __disputes;
   }
 
-  function setArbiter(address newArbiter) external isArbiter {
-    __arbiter = newArbiter;
-  }
-
-  function allowChallenges(bool allow) external isArbiter {
+  function allowChallenges(bool allow) external
+    isAdmin
+  {
     __allowChallenges = allow;
   }
 
-  function allowWagers(bool allow) external isArbiter {
+  function allowWagers(bool allow) external
+    isAdmin
+  {
     __allowWagers = allow;
   }
 
-  function setChessEngine(address engine) external isArbiter {
+  function setChessEngine(address engine) external
+    isAdmin
+  {
     __currentEngine = ChessEngine(engine);
   }
 
-  function setAuthData(address signer, uint ttl, bool enabled) external isArbiter {
+  function setAuthData(address signer, uint ttl, bool enabled) external
+    isAdmin
+  {
     __authEnabled = enabled;
     __authSigner = signer;
     __authTokenTTL = ttl;
@@ -162,6 +192,7 @@ contract Lobby is Initializable, UUPSUpgradeable, LobbyInterface {
     uint wagerAmount
   ) external payable
     allowChallenge
+    notBanned
     allowWager(wagerAmount)
   returns (uint) {
     require(timePerMove >= 60, 'InvalidTimePerMove');
@@ -177,7 +208,7 @@ contract Lobby is Initializable, UUPSUpgradeable, LobbyInterface {
                                                                     , wagerAmount);
     __challenges[player1].push(gameId);
     __challenges[player2].push(gameId);
-    __chessEngine[gameId] = address(__currentEngine);
+    __engines[gameId] = address(__currentEngine);
     emit NewChallenge(gameId, msg.sender, player2);
     return gameId;
   }

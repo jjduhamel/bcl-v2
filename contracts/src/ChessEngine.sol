@@ -5,8 +5,8 @@ import '@oz-upgradeable/proxy/utils/UUPSUpgradeable.sol';
 import './Lobby.sol';
 
 interface ChessEngineInterface {
-  enum GameOutcome { Undecided, Declined, WhiteWon, BlackWon, Draw }
   enum GameState { Pending, Started, Draw, Finished, Review, Migrated }
+  enum GameOutcome { Undecided, Declined, WhiteWon, BlackWon, Draw }
 
   struct GameData {
     bool exists;
@@ -79,7 +79,7 @@ contract ChessEngine is Initializable, UUPSUpgradeable, ChessEngineInterface {
   }
 
   modifier isArbiter() {
-    require(msg.sender == __lobby.arbiter(), 'ArbiterOnly');
+    require(__lobby.hasRole(__lobby.ARBITER_ROLE(), msg.sender), 'ArbiterOnly');
     _;
   }
 

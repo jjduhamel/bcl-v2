@@ -4,8 +4,8 @@ pragma solidity ^0.8.13;
 import '@forge/Test.sol';
 import '@forge/console2.sol';
 import '@oz/proxy/ERC1967/ERC1967Proxy.sol';
-import 'src/Lobby.sol';
-import 'src/ChessEngine.sol';
+import '@src/Lobby.sol';
+import '@src/ChessEngine.sol';
 
 abstract contract LobbyTest is Test, LobbyInterface, ChessEngineInterface {
   Lobby lobby;
@@ -21,7 +21,7 @@ abstract contract LobbyTest is Test, LobbyInterface, ChessEngineInterface {
     Lobby lobbyImpl = new Lobby();
     ERC1967Proxy proxy = new ERC1967Proxy(address(lobbyImpl), '');
     lobby = Lobby(address(proxy));
-    lobby.initialize();
+    lobby.initialize(arbiter);
   }
 
   function _initializeEngine() private {
@@ -52,8 +52,8 @@ contract ChallengingDisabledTest is LobbyTest {
   }
 
   function testArbiterIsCorrect() public {
-    address out = lobby.arbiter();
-    assertEq(out, arbiter);
+    bool isArbiter = lobby.hasRole(lobby.ARBITER_ROLE(), arbiter);
+    assertTrue(isArbiter);
   }
 
   function testChallengeDisabled() public {
@@ -129,5 +129,27 @@ contract WageringEnabledTest is LobbyTest {
   function testExcessDepositAmount() public {
     lobby.challenge{ value: wager*2 }(p2, true, 60, wager);
     // TODO
+  }
+}
+
+contract BanUserTest is LobbyTest {
+  function setUp() public {
+    lobby.allowChallenges(true);
+    lobby.grantRole(lobby.BANNED_ROLE(), p1);
+    changePrank(p1);
+  }
+
+  function testChallengeFails() public {
+    vm.expectRevert('UserBanned');
+    lobby.challenge(p2, true, 60, 0);
+  }
+
+  function testUnbanUser() public {
+    changePrank(arbiter);
+    lobby.revokeRole(lobby.BANNED_ROLE(), p1);
+    changePrank(p1);
+    vm.expectEmit(false, true, true, true, address(lobby));
+    emit NewChallenge(0, p1, p2);
+    lobby.challenge(p2, true, 60, 0);
   }
 }

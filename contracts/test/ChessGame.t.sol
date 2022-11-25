@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
-import 'forge-std/Test.sol';
-import 'forge-std/console2.sol';
-import 'src/Lobby.sol';
-import 'src/ChessEngine.sol';
-import 'test/Challenge.t.sol';
+import '@forge/Test.sol';
+import '@forge/console2.sol';
+import '@src/Lobby.sol';
+import '@src/ChessEngine.sol';
+import './Challenge.t.sol';
 
 abstract contract ChessGameTest is ChallengeTest {
   constructor() {
