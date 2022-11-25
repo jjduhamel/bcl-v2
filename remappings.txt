@@ -1,0 +1,5 @@
+@src/=contracts/src/
+@lib/=contracts/lib/
+@forge/=contracts/lib/forge-std/src/
+@oz/=contracts/lib/openzeppelin-contracts/contracts/
+@oz-upgradeable/=contracts/lib/openzeppelin-contracts-upgradeable/contracts/

@@ -4,8 +4,8 @@ pragma solidity ^0.8.13;
 import '@forge/Script.sol';
 import '@forge/console2.sol';
 import '@oz/proxy/ERC1967/ERC1967Proxy.sol';
-import 'src/Lobby.sol';
-import 'src/ChessEngine.sol';
+import '@src/Lobby.sol';
+import '@src/ChessEngine.sol';
 
 contract DeployEngine is Script {
   function deployEngine() private returns (ChessEngine) {
