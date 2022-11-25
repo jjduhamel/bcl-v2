@@ -1,7 +1,7 @@
-import { ethers, providers } from 'ethers';
+import { ethers, BigNumber as BN } from 'ethers';
 import WalletConnectProvider from '@walletconnect/web3-provider';
 import useWalletStore from '../store/wallet';
-const { Web3Provider } = providers;
+const { Web3Provider } = ethers.providers;
 
 export default async function() {
   const wallet = useWalletStore();
@@ -28,9 +28,18 @@ export default async function() {
     [ wallet.address, wallet.network, wallet.balance ] = await Promise.all([
       signer.getAddress(),
       provider.getNetwork().then(n => n.name),
-      signer.getBalance().then(BigInt)
+      fetchBalance()
     ]);
     wallet.connected = true;
+  }
+
+  async function fetchBalance() {
+    const bal = await signer.getBalance();
+    return BN.from(bal).toString();
+  }
+
+  async function refreshBalance() {
+    wallet.balance = await fetchBalance();
   }
 
   async function connectMetamask() {
@@ -81,6 +90,8 @@ export default async function() {
     wallet,
     provider,
     signer,
+    fetchBalance,
+    refreshBalance,
     connectMetamask,
     connectWalletConnect,
     walletConnectURI

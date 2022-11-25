@@ -44,6 +44,11 @@ div(id='app')
 
   div(id='footer')
     div This site is protected from bots by algoz.xyz
+    div(id='links')
+      a(href='https://twitter.com/TheChessLounge')
+        img(class='w-3' src='~assets/icons/bytesize/twitter.svg')
+      a(href='https://github.com/jjduhamel/bcl-v2')
+        img(class='w-3' src='~assets/icons/bytesize/github.svg')
 </template>
 
 <style lang='sass'>
@@ -52,6 +57,7 @@ html, body, #__nuxt, #app
 
 #app
   @apply px-2 max-w-4xl flex flex-col
+  font-family: "Times New Roman", Times, serif
 
   /*
    * Default Look
@@ -119,6 +125,12 @@ html, body, #__nuxt, #app
       @apply ml-3 mt-2 w-full
 
   #footer
-    @apply p-0.5 flex-shrink text-xs
+    @apply p-0.5 flex-shrink flex text-xs
     @apply border-solid border-t border-black
+
+    #links
+      @apply flex-1 flex items-center justify-end
+
+      a
+        @apply pr-1
 </style>

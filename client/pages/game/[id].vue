@@ -8,7 +8,7 @@ const { wallet } = await useWallet();
 const { lobby } = await useLobby();
 const { truncAddress } = await useEthUtils();
 const {
-  engine,
+  chess,
   fen,
   legalMoves,
   gameContract,
@@ -39,7 +39,7 @@ const {
   claimVictory,
   offerStalemate,
   didOfferStalemate
-} = await useChess(gameId);
+} = await useChessEngine(gameId);
 
 registerListeners();
 startMoveTimer();
@@ -55,14 +55,14 @@ const confirmStalemateModal = ref(false);
 const confirmResignModal = ref(false);
 const opponentResignedModal = ref(false);
 //const checkmateModal = ref(false);
-const inCheckmateModal = ref(inCheckmate.value);
+const inCheckmateModal = ref(!gameOver.value && inCheckmate.value);
 watch(inCheckmate, () => inCheckmateModal.value = true);
 
 const didChooseMove = ref(false);
 const proposedMove = ref(null);
 function chooseMove(from, to) {
-  const move = engine.move({ from, to });
-  fen.value = engine.fen();
+  const move = chess.move({ from, to });
+  fen.value = chess.fen();
   if (!move) throw Error('Illegal move', from, '->', to);
   console.log('Choose Move', move.san);
   proposedMove.value = move.san;
@@ -70,9 +70,9 @@ function chooseMove(from, to) {
 }
 
 function undoMove() {
-  const move = engine.undo();
+  const move = chess.undo();
   console.log('Undo Move', move.san);
-  fen.value = engine.fen();
+  fen.value = chess.fen();
   didChooseMove.value = false;
 }
 
@@ -198,7 +198,10 @@ NuxtLayout(name='game')
     )
       div(class='text-center') Oh no, you're in checkmate!  Please resign before the timer expires to be refunded your fair-play deposit.
       div(id='form-controls' class='flex items-center')
-        button(@click='resign' :disabled='didSendResign') Resign
+        button(
+          @click='() => resign().then(() => inCheckmateModal = false)'
+          :disabled='didSendResign'
+        ) Resign
 </template>
 
 <style lang='sass'>

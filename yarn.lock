@@ -7322,6 +7322,11 @@ sourcemap-codec@^1.4.8:
   resolved "https://registry.yarnpkg.com/sourcemap-codec/-/sourcemap-codec-1.4.8.tgz#ea804bd94857402e6992d05a38ef1ae35a9ab4c4"
   integrity sha512-9NykojV5Uih4lgo5So5dtw+f0JgJX30KCNI8gwhz2J9A15wD0Ml6tjHKwf6fTSa6fAdVBdZeNOs9eJ71qCk8vA==
 
+spinthatshit@^1.0.4:
+  version "1.0.4"
+  resolved "https://registry.yarnpkg.com/spinthatshit/-/spinthatshit-1.0.4.tgz#daa33ab87af77fda04d83ad91b0418b9557c0461"
+  integrity sha512-V0MFmvimd56Z8HtdAd94jlHih4zcYIrhkutSDU62b3IcJeXHzxh4eM67ZVdcbG8q4GfyFINwuKAv45pDORBjsg==
+
 split-on-first@^1.0.0:
   version "1.1.0"
   resolved "https://registry.yarnpkg.com/split-on-first/-/split-on-first-1.1.0.tgz#f610afeee3b12bce1d0c30425e76398b78249a5f"

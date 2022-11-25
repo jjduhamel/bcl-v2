@@ -1,11 +1,11 @@
 import _ from 'lodash';
-import { ethers, Contract } from 'ethers';
+import { ethers, Contract, BigNumber as BN } from 'ethers';
 import LobbyContract from '../contracts/Lobby.sol/Lobby.json';
 import EngineContract from '../contracts/ChessEngine.sol/ChessEngine.json';
 import useLobbyStore from '../store/lobby';
 
 export default async function() {
-  const { wallet, provider, signer } = await useWallet();
+  const { wallet, provider, refreshBalance } = await useWallet();
 
   const lobby = useLobbyStore();
 
@@ -42,6 +42,7 @@ export default async function() {
         didSendChallenge.value = false;
         const gameId = await lobby.newChallenge(id);
         console.log('Created challenge', gameId);
+        await refreshBalance();
         resolve(gameId, opponent);
       });
       /*
@@ -54,7 +55,10 @@ export default async function() {
   const didAcceptChallenge = ref(false);
   const acceptChallenge = gameId => new Promise(async (resolve, reject) => {
     const gameContract = lobby.chessEngine(gameId);
-    await gameContract.acceptChallenge(gameId);
+    const { wagerAmount } = await gameContract.game(gameId);
+    const deposited = await gameContract['balance(uint256)'](gameId);
+    const deposit = BN.from(wagerAmount).sub(deposited);
+    await gameContract.acceptChallenge(gameId, { value: deposit });
     didAcceptChallenge.value = true;
     console.log('Accepted challenge for game', gameId);
     const eventFilter = ChallengeAccepted(gameId, wallet.address);
@@ -62,6 +66,7 @@ export default async function() {
       console.log('Game', gameId, 'started with', opponent);
       didAcceptChallenge.value = false;
       await lobby.newGame(gameId);
+      await refreshBalance();
       resolve(gameId, opponent);
     });
   });
@@ -77,6 +82,7 @@ export default async function() {
       console.log('Challenge', gameId, 'was declined');
       didDeclineChallenge.value = false;
       await lobby.popChallenge(gameId);
+      await refreshBalance();
       resolve(gameId, opponent);
     });
   });
@@ -84,10 +90,13 @@ export default async function() {
   const didModifyChallenge = ref(false);
   const modifyChallenge = (gameId, startAsWhite, timePerMove, wagerAmount) => new Promise(async (resolve, reject) => {
     const gameContract = lobby.chessEngine(gameId);
-    await gameContract.modifyChallenge(gameId,
-                                       startAsWhite,
-                                       timePerMove,
-                                       wagerAmount);
+    const deposited = await gameContract['balance(uint256)'](gameId);
+    const deposit = BN.from(wagerAmount).sub(deposited);
+    await gameContract.modifyChallenge(gameId
+                                     , startAsWhite
+                                     , timePerMove
+                                     , wagerAmount
+                                     , { value: deposit });
     console.log('Modified challenge', gameId);
     didModifyChallenge.value = true;
     const eventFilter = TouchRecord(gameId, wallet.address);
@@ -95,6 +104,7 @@ export default async function() {
       console.log('Challenge updated', gameId);
       didModifyChallenge.value = false;
       await lobby.fetchMetadata(gameId);
+      await refreshBalance();
       resolve(gameId, opponent);
     });
   });
@@ -112,6 +122,7 @@ export default async function() {
   const declinedChallenge = ChallengeDeclined(null, null, wallet.address);
   const acceptedChallenge = ChallengeAccepted(null, null, wallet.address);
   const gameFinished = GameFinished(null, null, wallet.address);
+
   function createListeners() {
     console.log('Listen for incoming lobby events');
 
@@ -125,18 +136,21 @@ export default async function() {
     lobby.contract.on(acceptedChallenge, (id, opponent) => {
       console.log('Opponent accepted challenge', id.toNumber());
       lobby.newGame(id);
+      refreshBalance();
     });
 
     // DeclinedChallenge Listener
     lobby.contract.on(declinedChallenge, (id, opponent) => {
       console.log('Opponent declined challenge', id.toNumber());
       lobby.popChallenge(id);
+      refreshBalance();
     });
 
     // GameFinished Listener
     lobby.contract.on(gameFinished, (id, opponent) => {
       console.log('Game finished', id.toNumber());
       lobby.finishGame(id);
+      refreshBalance();
     });
 
     // TouchedRecord Listener

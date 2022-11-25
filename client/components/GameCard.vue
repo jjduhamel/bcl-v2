@@ -2,6 +2,7 @@
 import humanizeDuration from 'humanize-duration';
 import { formatEther } from 'ethers/lib/utils';
 const { truncAddress } = await useEthUtils();
+const { GameState, GameOutcome } = await useChessEngine();
 
 const props = defineProps({
   opponent: {
@@ -36,11 +37,17 @@ const props = defineProps({
 
 const { state, outcome, isWhitePlayer, isCurrentMove } = toRefs(props);
 
-const gameOver = computed(() => state.value == 4);
-const isWinner = computed(() => gameOver.value &&
-                                outcome.value == (isWhitePlayer.value ? 1 : 2));
-const isLoser = computed(() => gameOver.value &&
-                                outcome.value == (isWhitePlayer.value ? 2 : 1));
+const gameOver = computed(() => state.value == GameState.Finished);
+const isWinner = computed(() => {
+  if (!gameOver.value) return false;
+  return isWhitePlayer.value ? (outcome.value == GameOutcome.WhiteWon)
+                             : (outcome.value == GameOutcome.BlackWon);
+});
+const isLoser = computed(() => {
+  if (!gameOver.value) return false;
+  return isWhitePlayer.value ? (outcome.value == GameOutcome.BlackWon)
+                             : (outcome.value == GameOutcome.WhiteWon);
+});
 
 const indicator = computed(() => {
   if (!gameOver.value) return isCurrentMove.value ? 'green' : 'orange';

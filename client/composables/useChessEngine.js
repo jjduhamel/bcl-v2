@@ -2,37 +2,55 @@ import _ from 'lodash';
 import { Chess, SQUARES } from 'chess.js';
 
 export default async function(gameId) {
-  const engine = new Chess();
+  const chess = new Chess();
 
-  const fen = ref(engine.fen());
+  const fen = ref(chess.fen());
 
   const legalMoves = computed(() => {
     fen.value;            // Make reactive to FEN updates
     const out = new Map();
     _.forEach(SQUARES, sq => {
-      const ms = engine.moves({ square: sq, verbose: true });
+      const ms = chess.moves({ square: sq, verbose: true });
       if (ms.length > 0) out.set(sq, _.map(ms, 'to'));
     });
     return out;
   });
 
+  const GameState = {
+    Pending: 0,
+    Started: 1,
+    Draw: 2,
+    Finished: 3,
+    Review: 4,
+    Migrated: 5
+  };
+
+  const GameOutcome = {
+    Undecided: 0,
+    Declined: 1,
+    WhiteWon: 2,
+    BlackWon: 3,
+    Draw: 4
+  };
+
   if (!gameId) {
-    return { engine, fen, legalMoves };
+    return { chess, fen, legalMoves, GameState, GameOutcome };
   }
 
   console.log('Initialize game', gameId);
-  const { wallet, provider } = await useWallet();
+  const { wallet, provider, refreshBalance } = await useWallet();
   const { lobby } = await useLobby();
   const gameContract = lobby.chessEngine(gameId);
+  const { MoveSAN, GameOver } = gameContract.filters;
 
   const moves = await gameContract.moves(gameId).then(ref);
 
   // TODO Place illegal moves
   function tryMove(san) {
     console.log('Try move', san);
-    const move = engine.move(san);
+    const move = chess.move(san);
     if (!move) throw Error('Illegal move: '+san);
-    fen.value = engine.fen();
+    fen.value = chess.fen();
     return move.san;
   }
 
@@ -45,7 +63,6 @@ export default async function(gameId) {
       await gameContract.move(gameId, san);
       console.log('Submit move', san);
       didSendMove.value = true;
-      const { MoveSAN } = gameContract.filters;
       const eventFilter = MoveSAN(gameId, wallet.address);
       gameContract.once(eventFilter, async (id, player, san)  => {
         console.log('Move confirmed', san);
@@ -64,12 +81,11 @@ export default async function(gameId) {
       await gameContract.resign(gameId);
       console.log('Resigned game', gameId);
       didSendResign.value = true;
-      const { GameOver } = gameContract.filters;
       const eventFilter = GameOver(gameId);
-      gameContract.once(eventFilter, (id, winner, loser)  => {
+      gameContract.once(eventFilter, (id, outcome, winner)  => {
         console.log('Resignation confirmed');
         didSendResign.value = false;
-        resolve(id, winner, loser);
+        resolve(id, outcome, winner);
       });
     } catch(err) {
       console.error(err);
@@ -83,12 +99,11 @@ export default async function(gameId) {
       await gameContract.claimVictory(gameId);
       console.log('Claimed victory in game', gameId);
       didClaimVictory.value = true;
-      const { GameOver } = gameContract.filters;
       const eventFilter = GameOver(gameId);
-      gameContract.once(eventFilter, (id, winner, loser)  => {
+      gameContract.once(eventFilter, (id, outcome, winner)  => {
         console.log('Claimed victory');
         didClaimVictory.value = false;
-        resolve(id, winner, loser);
+        resolve(id, outcome, winner);
       });
     } catch(err) {
       console.error(err);
@@ -135,37 +150,41 @@ export default async function(gameId) {
 
   const inCheck = computed(() => {
     fen.value;
-    return (engine.turn() == playerColor.value) && engine.isCheck();
+    return (chess.turn() == playerColor.value) && chess.isCheck();
   });
 
   const opponentInCheck = computed(() => {
     fen.value;
-    return (engine.turn() == opponentColor.value) && engine.isCheck();
+    return (chess.turn() == opponentColor.value) && chess.isCheck();
   });
 
   const inCheckmate = computed(() => {
     fen.value;
-    return (engine.turn() == playerColor.value) && engine.isCheckmate();
+    return (chess.turn() == playerColor.value) && chess.isCheckmate();
   });
 
   const opponentInCheckmate = computed(() => {
     fen.value;
-    return (engine.turn() == opponentColor.value) && engine.isCheckmate();
+    return (chess.turn() == opponentColor.value) && chess.isCheckmate();
   });
 
   const inStalemate = computed(() => {
     fen.value;
-    return engine.isStalemate();
+    return chess.isStalemate();
   });
 
   const outcome = computed(() => lobby.gameData(gameId).outcome);
-  const gameOver = computed(() => lobby.gameData(gameId).state == 4);
-  const isStalemate = computed(() => outcome.value == 3);
+
+  const gameOver = computed(() => lobby.gameData(gameId).state == gameState.Finished);
+
+  const isStalemate = computed(() => outcome.value == gameOutcome.Draw);
+
   const isWinner = computed(() => {
     return isPlayer.value && gameOver.value &&
-          ((isWhitePlayer.value && outcome.value == 1) ||
-           (isBlackPlayer.value && outcome.value == 2));
+          ((isWhitePlayer.value && outcome.value == gameOutcome.WhiteWon) ||
+           (isBlackPlayer.value && outcome.value == gameOutcome.BlackWon));
   });
+
   const isLoser = computed(() => {
     return isPlayer.value && gameOver.value && !isStalemate.value && !isWinner.value;
   });
@@ -207,14 +226,10 @@ export default async function(gameId) {
    * Event Listeners
    */
 
-  const { MoveSAN, GameOver } = gameContract.filters;
-  const moveEvent = MoveSAN(gameId);
-  const gameOverEvent = GameOver(gameId);
-
   async function registerListeners() {
     console.log('Listen for moves for game', gameId);
     let lastEvent = await provider.getBlockNumber();
-    gameContract.on(moveEvent, async (id, player, san, ev) => {
+    gameContract.on(MoveSAN(gameId), async (id, player, san, ev) => {
       // Toss duplicate events
       if (ev.blockNumber <= lastEvent) return;
       lastEvent = ev.blockNumber;
@@ -231,22 +246,23 @@ export default async function(gameId) {
       await lobby.fetchMetadata(gameId);
     });
 
-    gameContract.on(gameOverEvent, async (id, winner, loser) => {
+    gameContract.on(GameOver(gameId), async (id, outcome, winner) => {
       console.log('Game over', id);
-      await lobby.fetchMetadata(gameId);
+      await Promise.all([
+        refreshBalance(),
+        lobby.fetchMetadata(gameId)
+      ]);
     });
   }
 
   async function destroyListeners() {
     console.log('Destroy Listeners');
-    gameContract.off(moveEvent);
-    gameContract.off(gameOverEvent);
+    gameContract.off(MoveSAN(gameId));
+    gameContract.off(GameOver(gameId));
   }
 
   return {
-    engine,
-    fen,
-    legalMoves,
+    ...useChess(),
     moves,
     gameContract,
     gameData,

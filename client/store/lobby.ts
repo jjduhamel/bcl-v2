@@ -1,5 +1,5 @@
 import _ from 'lodash';
-import { ethers, Contract, BigNumber } from 'ethers';
+import { ethers, Contract, BigNumber as BN } from 'ethers';
 import LobbyContract from '../contracts/Lobby.sol/Lobby.json';
 import EngineContract from '../contracts/ChessEngine.sol/ChessEngine.json';
 import useWalletStore from './wallet';
@@ -26,14 +26,14 @@ export default defineStore('lobby', {
     history() {
       return _.map(this.finished, gameId => this.gameData(gameId));
     },
-    address() {
+    lobbyAddress() {
       // TODO Support other networks
       const config = useRuntimeConfig();
-      return config.contractAddress.local;
+      return config.lobbyAddress.local;
     },
     contract() {
       const wallet = useWalletStore();
-      return new Contract(this.address
+      return new Contract(this.lobbyAddress
                         , LobbyContract.abi
                         , wallet.signer || wallet.provider);
     }
@@ -56,21 +56,23 @@ export default defineStore('lobby', {
       const contract = await lobby.chessEngine(gameId);
       this.contracts[gameId] = contract;
     },
-    async fetchMetadata(gameId: number) {
+    async fetchMetadata(id: number) {
+      const gameId = BN.isBigNumber(id) ? id.toNumber() : id;
       console.log('Update metadata for game', gameId);
       const { opponentAddress } = useEthUtils();
       const engine = this.chessEngine(gameId);
-      const [ ,
-        state,
-        outcome,
-        whitePlayer,
-        blackPlayer,
-        currentMove,
-        timePerMove,
-        timeOfLastMove,
-        wagerAmount ] = await engine.game(gameId);
+      const [
+        , state
+        , outcome
+        , whitePlayer
+        , blackPlayer
+        , currentMove
+        , timePerMove
+        , timeOfLastMove
+        , wagerAmount
+      ] = await engine.game(gameId);
       this.metadata[gameId] = {
-        id: BigNumber.from(gameId).toNumber(),
+        id: BN.from(gameId).toNumber(),
         state,
         outcome,
         whitePlayer,
@@ -83,7 +85,7 @@ export default defineStore('lobby', {
       };
     },
     async newChallenge(id) {
-      const gameId = BigNumber.isBigNumber(id) ? id.toNumber() : id;
+      const gameId = BN.isBigNumber(id) ? id.toNumber() : id;
       console.log('Register new challenge', gameId);
       const lobby = this.contract;
       await this.fetchEngine(gameId);
@@ -92,14 +94,14 @@ export default defineStore('lobby', {
       return gameId;
     },
     async popChallenge(id) {
-      const gameId = BigNumber.isBigNumber(id) ? id.toNumber() : id;
+      const gameId = BN.isBigNumber(id) ? id.toNumber() : id;
       const len = this.pending.length;
       this.pending = _.without(this.pending, gameId);
       if (this.pending.length < len) console.log('Unregistered challenge', gameId);
       return gameId;
     },
     async newGame(id) {
-      const gameId = BigNumber.isBigNumber(id) ? id.toNumber() : id;
+      const gameId = BN.isBigNumber(id) ? id.toNumber() : id;
       console.log('Register new game', gameId);
       const lobby = this.contract;
       await this.fetchEngine(gameId);
@@ -109,7 +111,7 @@ export default defineStore('lobby', {
       return gameId;
     },
     async finishGame(id) {
-      const gameId = BigNumber.isBigNumber(id) ? id.toNumber() : id;
+      const gameId = BN.isBigNumber(id) ? id.toNumber() : id;
       console.log('Unregister game', gameId);
       const lobby = this.contract;
       await this.fetchEngine(gameId);

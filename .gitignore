@@ -1,5 +1,19 @@
-*bak
+.env
 *.env
+*.bak
+*.log*
 .mnemonic
 addresses.txt
-vue3-qr-code-styling/
+client/contracts
+client/components/vue3-qr-code-styling/
+# Nuxt Ignores
+node_modules
+.nuxt
+.nitro
+.cache
+.output
+dist/
+# Foundry Ignores
+out/
+cache/
+broadcast/

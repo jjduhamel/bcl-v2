@@ -4,6 +4,7 @@ import svgLoader from 'vite-svg-loader';
 
 // https://v3.nuxtjs.org/api/configuration/nuxt.config
 export default defineNuxtConfig({
+  srcDir: 'client/',
   ssr: false,
   css: [ '@/assets/styles/tailwind.css' ],
   modules: [
@@ -19,13 +20,12 @@ export default defineNuxtConfig({
   },
   runtimeConfig: {
     public: {
-      contractAddress: {
-        local: '0x8d4aa2f669939e6aef0e3a85e2591ba694f26774',
-        homestead: null,
-        goerli: null,
-        rinkeby: null,
-        matic: null,
-        mumbai: null
+      lobbyAddress: {
+        local: process.env.LOCAL_LOBBY_ADDR,
+        homestead: process.env.HOMESTEAD_LOBBY_ADDR,
+        goerli: process.env.GOERLI_LOBBY_ADDR,
+        matic: process.env.MATIC_LOBBY_ADDR,
+        mumbai: process.env.MUMBAI_LOBBY_ADDR
       }
     }
   },

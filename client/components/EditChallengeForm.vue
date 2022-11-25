@@ -85,9 +85,7 @@ const submit = () => emit('submit', _.mapValues({ opponent
 </script>
 
 <template lang='pug'>
-form(
-  @submit.prevent='submit'
-)
+form(@submit.prevent='submit')
   div(id='opponent' class='flex items-center')
     div(class='flex-1') Opponent:
     div(class='flex-1 flex justify-end') {{ truncAddress(opponent, 4, 4) }}
