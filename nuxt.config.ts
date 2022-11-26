@@ -5,24 +5,21 @@ import svgLoader from 'vite-svg-loader';
 // https://v3.nuxtjs.org/api/configuration/nuxt.config
 export default defineNuxtConfig({
   srcDir: 'client/',
+  target: 'static',
   ssr: false,
   css: [ '@/assets/styles/tailwind.css' ],
   modules: [
     [ '@pinia/nuxt',
       { autoImports: [ 'defineStore' ] }
     ],
-    '@nuxtjs/svg', /*'nuxt-icons', 'nuxt-svg-loader'*/
+    '@nuxtjs/tailwindcss'
+    /*'@nuxtjs/svg', 'nuxt-icons', 'nuxt-svg-loader'*/
   ],
-  build: {
-    postcss: {
-      postcssOptions: require('./postcss.config.js')
-    }
-  },
   runtimeConfig: {
     public: {
       lobbyAddress: {
         local: process.env.LOCAL_LOBBY_ADDR,
-        homestead: process.env.HOMESTEAD_LOBBY_ADDR,
+        ethereum: process.env.HOMESTEAD_LOBBY_ADDR,
         goerli: process.env.GOERLI_LOBBY_ADDR,
         matic: process.env.MATIC_LOBBY_ADDR,
         mumbai: process.env.MUMBAI_LOBBY_ADDR

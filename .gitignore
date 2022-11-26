@@ -12,7 +12,7 @@ node_modules
 .nitro
 .cache
 .output
-dist/
+dist
 # Foundry Ignores
 out/
 cache/

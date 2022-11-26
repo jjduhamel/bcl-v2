@@ -27,8 +27,15 @@ export default defineStore('lobby', {
       return _.map(this.finished, gameId => this.gameData(gameId));
     },
     lobbyAddress() {
-      // TODO Support other networks
       const config = useRuntimeConfig();
+      const wallet = useWalletStore();
+      switch (wallet.network) {
+        case 'homestead': return config.lobbyAddress.ethereum;
+        case 'goerli': return config.lobbyAddress.goerli;
+        case 'matic': return config.lobbyAddress.matic;
+        case 'maticmum': return config.lobbyAddress.mumbai;
+        default: return config.lobbyAddress.local;
+      }
       return config.lobbyAddress.local;
     },
     contract() {
