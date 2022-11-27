@@ -8,6 +8,7 @@ export default async function() {
   const { wallet, provider, refreshBalance } = await useWallet();
 
   const lobby = useLobbyStore();
+  const { playAudioClip } = useAudioUtils();
 
   if (wallet.connected && !lobby.initialized) {
     await lobby.initialize();
@@ -44,6 +45,7 @@ export default async function() {
         console.log('Created challenge', gameId);
         await refreshBalance();
         resolve(gameId, opponent);
+        playAudioClip('nes/NewChallenge');
       });
       /*
     } catch(err) {
@@ -68,6 +70,7 @@ export default async function() {
       await lobby.newGame(gameId);
       await refreshBalance();
       resolve(gameId, opponent);
+      playAudioClip('nes/NewChallenge');
     });
   });
 
@@ -84,6 +87,7 @@ export default async function() {
       await lobby.popChallenge(gameId);
       await refreshBalance();
       resolve(gameId, opponent);
+      playAudioClip('nes/Explosion');
     });
   });
 
@@ -100,12 +104,13 @@ export default async function() {
     console.log('Modified challenge', gameId);
     didModifyChallenge.value = true;
     const eventFilter = TouchRecord(gameId, wallet.address);
-    lobby.contract.once(eventFilter, async (id, addr, opponent) => {
+    lobby.contract.once(eventFilter, (id, addr, opponent) => {
       console.log('Challenge updated', gameId);
       didModifyChallenge.value = false;
-      await lobby.fetchMetadata(gameId);
-      await refreshBalance();
+      lobby.fetchMetadata(gameId);
+      refreshBalance();
       resolve(gameId, opponent);
+      playAudioClip('nes/NewChallenge');
     });
   });
 
@@ -124,12 +129,13 @@ export default async function() {
   const gameFinished = GameFinished(null, null, wallet.address);
 
   function createListeners() {
-    console.log('Listen for incoming lobby events');
+    console.log('Register listeners for incoming lobby events');
 
     // CreatedChallenge Listener
     lobby.contract.on(createdChallenge, (id, opponent) => {
       console.log('Received challenge from', opponent);
       lobby.newChallenge(id);
+      playAudioClip('nes/NewChallenge');
     });
 
     // DeclinedChallenge Listener
@@ -137,6 +143,7 @@ export default async function() {
       console.log('Opponent accepted challenge', id.toNumber());
       lobby.newGame(id);
       refreshBalance();
+      playAudioClip('nes/Berserk');
     });
 
     // DeclinedChallenge Listener
@@ -144,6 +151,7 @@ export default async function() {
       console.log('Opponent declined challenge', id.toNumber());
       lobby.popChallenge(id);
       refreshBalance();
+      playAudioClip('nes/Explosion');
     });
 
     // GameFinished Listener
@@ -151,12 +159,14 @@ export default async function() {
       console.log('Game finished', id.toNumber());
       lobby.finishGame(id);
       refreshBalance();
+      playAudioClip('nes/Explosion');
     });
 
     // TouchedRecord Listener
     lobby.contract.on(recordUpdated, (id, opponent) => {
       console.log('Opponent modified record for game', id.toNumber());
       lobby.fetchMetadata(id);
+      playAudioClip('nes/Explosion');
     });
   }
 

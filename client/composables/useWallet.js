@@ -1,5 +1,5 @@
 import { ethers, BigNumber as BN } from 'ethers';
-import WalletConnectProvider from '@walletconnect/web3-provider';
+//import WalletConnectProvider from '@walletconnect/web3-provider';
 import useWalletStore from '../store/wallet';
 const { Web3Provider } = ethers.providers;
 
@@ -50,6 +50,8 @@ export default async function() {
   }
 
   async function connectWalletConnect() {
+    throw new Error('WalletConnect disabled');
+    /*
     console.log('Connect WalletConnect');
     const walletConnect = new WalletConnectProvider({
       infuraId: '2185ad08ea904e85b06c383c4cd6b902',
@@ -84,6 +86,7 @@ export default async function() {
       provider = new Web3Provider(walletConnect);
       _connected();
     }
+    */
   }
 
   return {

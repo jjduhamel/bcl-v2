@@ -40,6 +40,8 @@ export default async function(gameId) {
   console.log('Initialize game', gameId);
   const { wallet, provider, refreshBalance } = await useWallet();
   const { lobby } = await useLobby();
+  const { playAudioClip } = useAudioUtils();
+
   const gameContract = lobby.chessEngine(gameId);
   const { MoveSAN, GameOver } = gameContract.filters;
 
@@ -54,6 +56,7 @@ export default async function(gameId) {
     return move.san;
   }
 
+
   console.log('Initialize', moves.value.length, 'moves');
   _.forEach(moves.value, tryMove);
 
@@ -63,6 +66,7 @@ export default async function(gameId) {
       await gameContract.move(gameId, san);
       console.log('Submit move', san);
       didSendMove.value = true;
+      playAudioClip('instrument/swells/swell1');
       const eventFilter = MoveSAN(gameId, wallet.address);
       gameContract.once(eventFilter, async (id, player, san)  => {
         console.log('Move confirmed', san);
@@ -81,8 +85,8 @@ export default async function(gameId) {
       await gameContract.resign(gameId);
       console.log('Resigned game', gameId);
       didSendResign.value = true;
-      const eventFilter = GameOver(gameId);
-      gameContract.once(eventFilter, (id, outcome, winner)  => {
+      playAudioClip('instrument/swells/swell3');
+      gameContract.once(GameOver(gameId), (id, outcome, winner)  => {
         console.log('Resignation confirmed');
         didSendResign.value = false;
         resolve(id, outcome, winner);
@@ -99,8 +103,8 @@ export default async function(gameId) {
       await gameContract.claimVictory(gameId);
       console.log('Claimed victory in game', gameId);
       didClaimVictory.value = true;
-      const eventFilter = GameOver(gameId);
-      gameContract.once(eventFilter, (id, outcome, winner)  => {
+      playAudioClip('instrument/swells/swell2');
+      gameContract.once(GameOver(gameId), (id, outcome, winner)  => {
         console.log('Claimed victory');
         didClaimVictory.value = false;
         resolve(id, outcome, winner);
@@ -148,6 +152,10 @@ export default async function(gameId) {
 
   const timeOfLastMove = computed(() => lobby.gameData(gameId).timeOfLastMove);
 
+  const outcome = computed(() => lobby.gameData(gameId).outcome);
+  const gameOver = computed(() => lobby.gameData(gameId).state == GameState.Finished);
+  const isStalemate = computed(() => outcome.value == GameOutcome.Draw);
+
   const inCheck = computed(() => {
     fen.value;
     return (chess.turn() == playerColor.value) && chess.isCheck();
@@ -173,16 +181,19 @@ export default async function(gameId) {
     return chess.isStalemate();
   });
 
-  const outcome = computed(() => lobby.gameData(gameId).outcome);
+  const checkmatePending = computed(() => {
+    fen.value;
+    return !gameOver.value && inCheckmate.value;
+  });
 
-  const gameOver = computed(() => lobby.gameData(gameId).state == gameState.Finished);
-
-  const isStalemate = computed(() => outcome.value == gameOutcome.Draw);
+  const opponentCheckmatePending = computed(() => {
+    return !gameOver.value && opponentInCheckmate.value;
+  });
 
   const isWinner = computed(() => {
     return isPlayer.value && gameOver.value &&
-          ((isWhitePlayer.value && outcome.value == gameOutcome.WhiteWon) ||
-           (isBlackPlayer.value && outcome.value == gameOutcome.BlackWon));
+          ((isWhitePlayer.value && outcome.value == GameOutcome.WhiteWon) ||
+           (isBlackPlayer.value && outcome.value == GameOutcome.BlackWon));
   });
 
   const isLoser = computed(() => {
@@ -222,12 +233,20 @@ export default async function(gameId) {
     return timeUntilExpiry.value == 0;
   });
 
+  const playerTimeExpired = computed(() => {
+    return isCurrentMove.value && timerExpired.value;
+  });
+
+  const opponentTimeExpired = computed(() => {
+    return !isCurrentMove.value && timerExpired.value;
+  });
+
   /*
    * Event Listeners
    */
 
   async function registerListeners() {
-    console.log('Listen for moves for game', gameId);
+    console.log('Register listeners for game', gameId);
     let lastEvent = await provider.getBlockNumber();
     gameContract.on(MoveSAN(gameId), async (id, player, san, ev) => {
       // Toss duplicate events
@@ -239,6 +258,7 @@ export default async function(gameId) {
       if (player != wallet.address) {
         console.log('Received move', san);
         const move = tryMove(san);
+        playAudioClip('other/Blaster');
         // TODO Dispute illegal moves
       }
       // TODO is there a better way/place to do this?
@@ -252,17 +272,25 @@ export default async function(gameId) {
         refreshBalance(),
         lobby.fetchMetadata(gameId)
       ]);
+
+      if (isWinner.value) playAudioClip('nes/Victory');
+      else if (isLoser.value) playAudioClip('nes/Victory');
+      else playAudioClip('nes/Draw');
     });
   }
 
   async function destroyListeners() {
-    console.log('Destroy Listeners');
+    console.log('Destroy game listeners for', gameId);
     gameContract.off(MoveSAN(gameId));
     gameContract.off(GameOver(gameId));
   }
 
   return {
-    ...useChess(),
+    chess,
+    fen,
+    legalMoves,
+    GameState,
+    GameOutcome,
     moves,
     gameContract,
     gameData,
@@ -278,6 +306,8 @@ export default async function(gameId) {
     opponentInCheck,
     inCheckmate,
     opponentInCheckmate,
+    checkmatePending,
+    opponentCheckmatePending,
     inStalemate,
     outcome,
     gameOver,
@@ -291,12 +321,15 @@ export default async function(gameId) {
     timeOfExpiry,
     timeUntilExpiry,
     timerExpired,
+    playerTimeExpired,
+    opponentTimeExpired,
     tryMove,
     submitMove,
     didSendMove,
     resign,
-    claimVictory,
     didSendResign,
+    claimVictory,
+    didClaimVictory,
     offerStalemate,
     didOfferStalemate
   };

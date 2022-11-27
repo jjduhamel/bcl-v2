@@ -43,7 +43,17 @@ async function doSendChallenge(args) {
         , wagerAmount
         , wagerToken } = args;
   await sendChallenge(opponent, startAsWhite, timePerMove, wagerAmount, wagerToken);
-  hideNewChallenge();
+  newChallengeModal.value = false
+}
+
+async function doAcceptChallenge() {
+  await acceptChallenge();
+  hidePendingChallenge.value = false;
+}
+
+async function doDeclineChallenge() {
+  await acceptChallenge();
+  hidePendingChallenge.value = false;
 }
 
 const pendingChallenge = ref(null);

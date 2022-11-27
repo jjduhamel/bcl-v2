@@ -7,6 +7,7 @@ const gameId = params.id;
 const { wallet } = await useWallet();
 const { lobby } = await useLobby();
 const { truncAddress } = await useEthUtils();
+const { playAudioClip } = useAudioUtils();
 const {
   chess,
   fen,
@@ -20,6 +21,8 @@ const {
   inCheck,
   inCheckmate,
   opponentInCheckmate,
+  checkmatePending,
+  opponentCheckmatePending,
   gameOver,
   isStalemate,
   isWinner,
@@ -31,12 +34,15 @@ const {
   timeOfExpiry,
   timeUntilExpiry,
   timerExpired,
+  playerTimeExpired,
+  opponentTimeExpired,
   tryMove,
   submitMove,
   didSendMove,
   resign,
   didSendResign,
   claimVictory,
+  didClaimVictory,
   offerStalemate,
   didOfferStalemate
 } = await useChessEngine(gameId);
@@ -48,14 +54,16 @@ onUnmounted(() => {
   stopMoveTimer();
 });
 
-const timerExpiredModal = ref(false);
-const opponentTimerExpiredModal = ref(false);
+const playerTimeExpiredModal = ref(playerTimeExpired.value);
+watch(playerTimeExpired, () => playerTimeExpiredModal.value = true);
+const opponentTimeExpiredModal = ref(opponentTimeExpired.value);
+watch(opponentTimeExpired, () => opponentTimeExpiredModal.value = true);
 const offerStalemateModal = ref(false);
 const confirmStalemateModal = ref(false);
 const confirmResignModal = ref(false);
 const opponentResignedModal = ref(false);
 //const checkmateModal = ref(false);
-const inCheckmateModal = ref(!gameOver.value && inCheckmate.value);
+const inCheckmateModal = ref(checkmatePending.value);
 watch(inCheckmate, () => inCheckmateModal.value = true);
 
 const didChooseMove = ref(false);
@@ -65,6 +73,7 @@ function chooseMove(from, to) {
   fen.value = chess.fen();
   if (!move) throw Error('Illegal move', from, '->', to);
   console.log('Choose Move', move.san);
+  playAudioClip('nes/Move');
   proposedMove.value = move.san;
   didChooseMove.value = true;
 }
@@ -120,7 +129,7 @@ NuxtLayout(name='game')
       div(id='action-indicator')
         div(v-if='isWinner') You Won!
         div(v-else-if='isLoser') You Lost
-        div(v-else-if='inCheckmate') Checkmate!
+        div(v-else-if='inCheckmate || opponentInCheckmate') Checkmate!
         div(v-else-if='inCheck') Check!
         div(v-else-if='didSendMove') Pending...
         div(v-else-if='didChooseMove') Submit Move
@@ -156,16 +165,14 @@ NuxtLayout(name='game')
 
       button(
         title='Resign'
-        v-if='!isCurrentMove && !gameOver && opponentInCheckmate'
-        :disabled='!timerExpired'
-        @click='claimVictory'
-      ) Claim Victory
-      button(
-        title='Resign'
-        v-else-if='!gameOver && inCheckmate'
-        :disabled='!inCheckmate'
+        v-if='checkmatePending || playerTimeExpired'
         @click='resign'
       ) Resign
+      button(
+        title='Resign'
+        v-else-if='opponentTimeExpired'
+        @click='claimVictory'
+      ) Claim Victory
       button(
         title='Submit Move'
         v-else
@@ -202,6 +209,30 @@ NuxtLayout(name='game')
           @click='() => resign().then(() => inCheckmateModal = false)'
           :disabled='didSendResign'
         ) Resign
+
+    Modal(
+      title='Time Expired'
+      v-if='!gameOver && playerTimeExpiredModal'
+      @close='() => playerTimeExpiredModal = false'
+    )
+      div(class='text-center') Oh no, you ran out of time!  Please resign now.  We hope you play again!
+      div(id='form-controls' class='flex items-center')
+        button(
+          @click='() => resign().then(() => playerTimeExpiredModal = false)'
+          :disabled='didSendResign'
+        ) Resign
+
+    Modal(
+      title='You Won!'
+      v-if='!gameOver && opponentTimeExpiredModal'
+      @close='() => opponentTimeExpiredModal = false'
+    )
+      div(class='text-center') Your opponent ran out of time.  In order to finish the game, you can claim victory.
+      div(id='form-controls' class='flex items-center')
+        button(
+          @click='() => claimVictory().then(() => opponentTimeExpiredModal = false)'
+          :disabled='didSendResign'
+        ) Victory
 </template>
 
 <style lang='sass'>
