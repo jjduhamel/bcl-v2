@@ -26,7 +26,7 @@ export default async function() {
   }
 
   async function initialize() {
-    console.log('Initialize player lobby');
+    console.log('Initialize player lobby', lobby.address);
 
     const [ challenges, games, history ] = await Promise.all([
       lobbyContract.challenges(),
