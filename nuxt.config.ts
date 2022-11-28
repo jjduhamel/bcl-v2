@@ -12,11 +12,13 @@ export default defineNuxtConfig({
     [ '@pinia/nuxt',
       { autoImports: [ 'defineStore' ] }
     ],
-    '@nuxtjs/tailwindcss'
+    '@nuxtjs/tailwindcss',
+    '@vueuse/nuxt'
     /*'@nuxtjs/svg', 'nuxt-icons', 'nuxt-svg-loader'*/
   ],
   runtimeConfig: {
     public: {
+      infuraId: process.env.INFURA_ID,
       lobbyAddress: {
         local: process.env.LOCAL_LOBBY_ADDR,
         ethereum: process.env.HOMESTEAD_LOBBY_ADDR,

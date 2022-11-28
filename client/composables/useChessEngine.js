@@ -39,12 +39,13 @@ export default async function(gameId) {
 
   console.log('Initialize game', gameId);
   const { wallet, provider, refreshBalance } = await useWallet();
-  const { lobby } = await useLobby();
+  const { lobby, chessEngine, initGameData } = await useLobby();
   const { playAudioClip } = useAudioUtils();
 
-  const gameContract = lobby.chessEngine(gameId);
-  const { MoveSAN, GameOver } = gameContract.filters;
+  if (!lobby.has(gameId)) await initGameData(gameId);
 
+  const gameContract = chessEngine(gameId);
+  const { MoveSAN, GameOver } = gameContract.filters;
   const moves = await gameContract.moves(gameId).then(ref);
 
   // TODO Place illegal moves
@@ -55,7 +56,6 @@ export default async function(gameId) {
     fen.value = chess.fen();
     return move.san;
   }
-
 
   console.log('Initialize', moves.value.length, 'moves');
   _.forEach(moves.value, tryMove);

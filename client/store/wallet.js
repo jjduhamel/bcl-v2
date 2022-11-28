@@ -1,24 +1,18 @@
+import { useStorage } from '@vueuse/core';
 import { ethers, providers } from 'ethers';
 const { Web3Provider } = providers;
 
 export default defineStore('wallet', {
   state: () => {
     return {
+      initialized: false,
       installed: false,
-      connected: false,
+      connecting: false,
+      connected: useStorage('bcl:wallet:connected', false),
+      source: useStorage('bcl:wallet:source', null),
       address: null,
       network: null,
-      balance: 0
-    }
-  },
-  getters: {
-    provider() {
-      // TODO wallet connect
-      return new Web3Provider(window.ethereum);
-    },
-    signer() {
-      // TODO wallet connect
-      return this.provider.getSigner();
-    }
+      balance: 0,
+    };
   }
 });
