@@ -21,11 +21,7 @@ export default async function() {
     GameFinished
   } = lobbyContract.filters;
 
-  if (wallet.connected && !lobby.initialized) {
-    await initialize();
-  }
-
-  async function initialize() {
+  async function initPlayerLobby() {
     console.log('Initialize player lobby', lobby.address);
 
     const [ challenges, games, history ] = await Promise.all([
@@ -298,6 +294,7 @@ export default async function() {
     txPending,
     lobbyContract,
     chessEngine,
+    initPlayerLobby,
     initGameData,
     fetchGameData,
     fetchChessEngine,

@@ -2,20 +2,6 @@ import _ from 'lodash';
 import { Chess, SQUARES } from 'chess.js';
 
 export default async function(gameId) {
-  const chess = new Chess();
-
-  const fen = ref(chess.fen());
-
-  const legalMoves = computed(() => {
-    fen.value;            // Make reactive to FEN updates
-    const out = new Map();
-    _.forEach(SQUARES, sq => {
-      const ms = chess.moves({ square: sq, verbose: true });
-      if (ms.length > 0) out.set(sq, _.map(ms, 'to'));
-    });
-    return out;
-  });
-
   const GameState = {
     Pending: 0,
     Started: 1,
@@ -33,44 +19,87 @@ export default async function(gameId) {
     Draw: 4
   };
 
+  /*
+   * Browser chess engine
+   */
+  const chess = new Chess();
+
+  const fen = ref(chess.fen());
+
+  const legalMoves = computed(() => {
+    fen.value;            // Make reactive to FEN updates
+    const out = new Map();
+    _.forEach(SQUARES, sq => {
+      const ms = chess.moves({ square: sq, verbose: true });
+      if (ms.length > 0) out.set(sq, _.map(ms, 'to'));
+    });
+    return out;
+  });
+
   if (!gameId) {
     return { chess, fen, legalMoves, GameState, GameOutcome };
   }
 
-  console.log('Initialize game', gameId);
-  const { wallet, provider, refreshBalance } = await useWallet();
-  const { lobby, chessEngine, initGameData } = await useLobby();
+  const {
+    wallet,
+    provider,
+    refreshBalance
+  } = await useWallet();
+
+  const {
+    lobby,
+    lobbyContract,
+    chessEngine,
+    initGameData,
+    fetchGameData
+  } = await useLobby();
+
   const { playAudioClip } = useAudioUtils();
 
   if (!lobby.has(gameId)) await initGameData(gameId);
 
   const gameContract = chessEngine(gameId);
   const { MoveSAN, GameOver } = gameContract.filters;
-  const moves = await gameContract.moves(gameId).then(ref);
+  const moves = ref([]);
+  const illegalMoves = ref([]);
 
-  // TODO Place illegal moves
-  function tryMove(san) {
+  function tryMoveSAN(san) {
     console.log('Try move', san);
-    const move = chess.move(san);
-    if (!move) throw Error('Illegal move: '+san);
+    const move = chess.move(san, { sloppy: true });
+    if (!move) {
+      const m = moves.value.length;
+      illegalMoves.value = [ ...illegalMoves.value, m ];
+      console.warn(`Illegal move: ${san} [${chess.turn()}]`);
+    } else {
+      san = move.san;
+    }
+    moves.value = [ ...moves.value, san ];
     fen.value = chess.fen();
-    return move.san;
+    return san;
   }
 
-  console.log('Initialize', moves.value.length, 'moves');
-  _.forEach(moves.value, tryMove);
+  // TODO Place illegal moves on board
+  function tryMoveFromTo(from, to) {
+    return tryMoveSAN(`${from}${to}`);
+  }
 
-  const didSendMove = ref(false);
+  async function fetchMoves() {
+    console.log('Refresh moves for game', gameId);
+    moves.value = [];
+    const cur = await gameContract.moves(gameId);
+    console.log('Fetched', cur.length, 'moves');
+    _.forEach(cur, tryMoveSAN);
+  }
+
+
   const submitMove = san => new Promise(async (resolve, reject) => {
     console.log('Submit move', san);
     try {
       await gameContract.move(gameId, san);
-      didSendMove.value = true;
-      playAudioClip('instrument/swells/swell1');
+      playAudioClip('other/swell1');
       const eventFilter = MoveSAN(gameId, wallet.address);
       gameContract.once(eventFilter, async (id, player, san)  => {
         console.log('Move confirmed', san);
-        didSendMove.value = false;
         resolve(id, player, san);
       });
     } catch(err) {
@@ -79,16 +108,13 @@ export default async function(gameId) {
     }
   });
 
-  const didSendResign = ref(false);
   const resign = () => new Promise(async (resolve, reject) => {
     try {
       await gameContract.resign(gameId);
       console.log('Resigned game', gameId);
-      didSendResign.value = true;
-      playAudioClip('instrument/swells/swell3');
+      playAudioClip('other/swell3');
       gameContract.once(GameOver(gameId), (id, outcome, winner)  => {
         console.log('Resignation confirmed');
-        didSendResign.value = false;
         resolve(id, outcome, winner);
       });
     } catch(err) {
@@ -97,28 +123,38 @@ export default async function(gameId) {
     }
   });
 
-  const didClaimVictory = ref(false);
   const claimVictory = () => new Promise(async (resolve, reject) => {
     try {
       await gameContract.claimVictory(gameId);
       console.log('Claimed victory in game', gameId);
-      didClaimVictory.value = true;
-      playAudioClip('instrument/swells/swell2');
+      playAudioClip('other/swell2');
       gameContract.once(GameOver(gameId), (id, outcome, winner)  => {
-        console.log('Claimed victory');
-        didClaimVictory.value = false;
+        console.log('Victory confirmed');
         resolve(id, outcome, winner);
       });
     } catch(err) {
-      console.error(err);
       reject(err);
     }
   });
 
-  const didOfferStalemate = ref(false);
   async function offerStalemate() {
     // TODO
   }
+
+  const disputeGame = () => new Promise(async (resolve, reject) => {
+    try {
+      await gameContract.disputeGame(gameId);
+      console.log('Disputed game', gameId);
+      playAudioClip('nes/GenericNotify');
+      const { GameDisputed } = lobbyContract.filters;
+      gameContract.once(GameDisputed(gameId), (id, outcome, winner)  => {
+        console.log('Dispute received');
+        resolve(id, outcome, winner);
+      });
+    } catch(err) {
+      reject(err);
+    }
+  });
 
   /*
    * Reactive Properties
@@ -147,8 +183,20 @@ export default async function(gameId) {
     return isWhitePlayer.value ? 'b' : 'w';
   });
 
+
   const isCurrentMove = computed(() =>  lobby.isCurrentMove(gameId));
   const isOpponentsMove = computed(() => !isCurrentMove);
+
+  // Turn follows the current chess engine, as opposed to the contract state
+  const isPlayersTurn = computed(() => {
+    fen.value;
+    return chess.turn() == playerColor.value;
+  });
+
+  const isOpponentsTurn = computed(() => {
+    fen.value;
+    return chess.turn() == opponentColor.value;
+  });
 
   const timeOfLastMove = computed(() => lobby.gameData(gameId).timeOfLastMove);
 
@@ -257,7 +305,7 @@ export default async function(gameId) {
       // In the case of spectators, both players moves get processed.
       if (player != wallet.address) {
         console.log('Received move', san);
-        const move = tryMove(san);
+        const move = tryMoveSAN(san);
         playAudioClip('other/Blaster');
         // TODO Dispute illegal moves
       }
@@ -289,12 +337,15 @@ export default async function(gameId) {
     chess,
     fen,
     legalMoves,
+    moves,
+    illegalMoves,
+    gameContract,
+    fetchMoves,
+    gameData,
     GameState,
     GameOutcome,
-    moves,
-    gameContract,
-    gameData,
     opponent,
+    outcome,
     //playerColor,
     //opponentColor,
     isPlayer,
@@ -302,6 +353,8 @@ export default async function(gameId) {
     isBlackPlayer,
     isCurrentMove,
     isOpponentsMove,
+    isPlayersTurn,
+    isOpponentsTurn,
     inCheck,
     opponentInCheck,
     inCheckmate,
@@ -309,28 +362,25 @@ export default async function(gameId) {
     checkmatePending,
     opponentCheckmatePending,
     inStalemate,
-    outcome,
     gameOver,
     isStalemate,
     isWinner,
     isLoser,
-    registerListeners,
-    destroyListeners,
-    startMoveTimer,
-    stopMoveTimer,
     timeOfExpiry,
     timeUntilExpiry,
     timerExpired,
     playerTimeExpired,
     opponentTimeExpired,
-    tryMove,
+    tryMoveSAN,
+    tryMoveFromTo,
     submitMove,
-    didSendMove,
     resign,
-    didSendResign,
     claimVictory,
-    didClaimVictory,
     offerStalemate,
-    didOfferStalemate
+    disputeGame,
+    startMoveTimer,
+    stopMoveTimer,
+    registerListeners,
+    destroyListeners,
   };
 }

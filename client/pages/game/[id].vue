@@ -12,11 +12,12 @@ const {
   chess,
   fen,
   legalMoves,
-  gameContract,
   moves,
-  gameData,
+  illegalMoves,
+  fetchMoves,
   opponent,
   isCurrentMove,
+  isOpponentsTurn,
   isWhitePlayer,
   inCheck,
   inCheckmate,
@@ -27,55 +28,57 @@ const {
   isStalemate,
   isWinner,
   isLoser,
-  registerListeners,
-  destroyListeners,
-  startMoveTimer,
-  stopMoveTimer,
   timeOfExpiry,
   timeUntilExpiry,
   timerExpired,
   playerTimeExpired,
   opponentTimeExpired,
-  tryMove,
+  tryMoveFromTo,
   submitMove,
-  didSendMove,
   resign,
-  didSendResign,
   claimVictory,
-  didClaimVictory,
   offerStalemate,
-  didOfferStalemate
+  disputeGame,
+  startMoveTimer,
+  stopMoveTimer,
+  registerListeners,
+  destroyListeners,
 } = await useChessEngine(gameId);
 
-registerListeners();
-startMoveTimer();
-onUnmounted(() => {
-  destroyListeners();
-  stopMoveTimer();
+const disputedMove = ref(null);
+/*
+watch(illegalMoves, () => {
+  if (isOpponentsTurn.value) {
+    const j = _.last(illegalMoves.value);
+    const san = moves.value[j]
+    console.log('Dispute move', san);
+    disputedMove.value = san;
+  }
 });
+*/
 
 const playerTimeExpiredModal = ref(playerTimeExpired.value);
-watch(playerTimeExpired, () => playerTimeExpiredModal.value = true);
 const opponentTimeExpiredModal = ref(opponentTimeExpired.value);
-watch(opponentTimeExpired, () => opponentTimeExpiredModal.value = true);
 const offerStalemateModal = ref(false);
 const confirmStalemateModal = ref(false);
 const confirmResignModal = ref(false);
 const opponentResignedModal = ref(false);
 //const checkmateModal = ref(false);
-const inCheckmateModal = ref(checkmatePending.value);
-watch(inCheckmate, () => inCheckmateModal.value = true);
+const inCheckmateModal = ref(false);
+const illegalMoveModal = ref(false);
 
-const didChooseMove = ref(false);
+watch(playerTimeExpired, () => playerTimeExpiredModal.value = true);
+watch(opponentTimeExpired, () => opponentTimeExpiredModal.value = true);
+watch(inCheckmate, () => inCheckmateModal.value = true);
+watch(disputedMove, () => illegalMoveModal.value = true);
+
 const proposedMove = ref(null);
+const didChooseMove = ref(false);
 function chooseMove(from, to) {
-  const move = chess.move({ from, to });
-  fen.value = chess.fen();
-  if (!move) throw Error('Illegal move', from, '->', to);
-  console.log('Choose Move', move.san);
-  playAudioClip('nes/Move');
-  proposedMove.value = move.san;
+  const san = tryMoveFromTo(from, to);
+  proposedMove.value = san;
   didChooseMove.value = true;
+  playAudioClip('nes/Move');
 }
 
 function undoMove() {
@@ -83,6 +86,72 @@ function undoMove() {
   console.log('Undo Move', move.san);
   fen.value = chess.fen();
   didChooseMove.value = false;
+}
+
+const didSendMove = ref(false);
+async function doSendMove() {
+  try {
+    didSendMove.value = true;
+    await submitMove(proposedMove.value);
+    didChooseMove.value = false;
+    proposedMove.value = null;
+  } catch (err) {
+    console.error(err);
+  } finally {
+    didSendMove.value = false;
+  }
+}
+
+const didSendResign = ref(false);
+async function doResign() {
+  try {
+    didSendResign.value = true;
+    await resign();
+  } catch (err) {
+    console.error(err);
+  } finally {
+    didSendResign.value = false;
+  }
+}
+
+const didClaimVictory = ref(false);
+async function doClaimVictory() {
+  try {
+    didClaimVictory.value = true;
+    await claimVictory();
+  } catch (err) {
+    console.error(err);
+  } finally {
+    didSendResign.value = false;
+  }
+}
+
+const didOfferStalemate = ref(false);
+async function doOfferStalemate() {
+  try {
+    didOfferStalemate.value = true;
+    await offerStalemate();
+  } catch (err) {
+    console.error(err);
+  } finally {
+    didOfferStalemate.value = false;
+  }
+}
+
+const didDisputeGame = ref(false);
+async function doDisputeGame() {
+  try {
+    didDisputeGame.value = true;
+    await disputeGame();
+  } catch (err) {
+    console.error(err);
+  } finally {
+    didDisputeGame.value = false;
+  }
+}
+
+function isIllegalMove(j) {
+  return illegalMoves.value.includes(j);
 }
 
 const displayTimer = computed(() => {
@@ -106,6 +175,17 @@ const displayTimer = computed(() => {
     const secs = timeUntilExpiry.value % 60;
     return `${mins}`.padStart(2, 0) + ':' + `${secs}`.padStart(2, 0);
   }
+});
+
+console.log('Initialize game', gameId, 'against', opponent.value);
+await fetchMoves();
+
+registerListeners();
+startMoveTimer();
+
+onUnmounted(() => {
+  destroyListeners();
+  stopMoveTimer();
 });
 </script>
 
@@ -137,7 +217,10 @@ NuxtLayout(name='game')
         div(v-else) Opponent's Move
 
     div(id='moves' class='text-sm')
-      div(v-for='m in moves') {{ m }}
+      div(
+        v-for='(san, j) in moves'
+        :style='isIllegalMove(j) && { color: "red" }'
+      ) {{ san }}
 
     div(id='controls' class='pb-2')
       div(id='controlbar' class='p-2 flex justify-between')
@@ -166,25 +249,26 @@ NuxtLayout(name='game')
       button(
         title='Resign'
         v-if='checkmatePending || playerTimeExpired'
-        @click='resign'
+        @click='doResign'
       ) Resign
       button(
-        title='Resign'
+        title='Claim Victory'
         v-else-if='opponentTimeExpired'
-        @click='claimVictory'
+        @click='doClaimVictory'
       ) Claim Victory
       button(
         title='Submit Move'
         v-else
-        :disabled='!didChooseMove'
-        @click='() => submitMove(proposedMove).then(() => didChooseMove = false)'
+        :disabled='!didChooseMove || didSendMove'
+        @click='doSendMove'
       ) Submit
 
     ConfirmModal(
       title='Resign?'
       v-if='confirmResignModal'
       :loading='didSendResign'
-      @confirm='() => resign().then(() => confirmResignModal = false)'
+      @confirm='() => doResign()\
+          .then(() => confirmResignModal = false)'
       @close='() => confirmResignModal = false'
     )
       div Please confirm you wish to resign by clicking "Confirm".  By resigning, your fair-play deposit will be refunded.
@@ -193,7 +277,8 @@ NuxtLayout(name='game')
       title='Offer Stalemate'
       v-if='offerStalemateModal'
       :loading='didOfferStalemate'
-      @confirm='offerStalemate'
+      @confirm='() => doOfferStalemate()\
+          .then(() => offerStalemateModal = false)'
       @close='() => offerStalemateModal = false'
     )
       div By clicking "Confirm", you'll offer your opponent the opportunity to end the game as a draw.  Both players will receive their wagers back.
@@ -206,7 +291,8 @@ NuxtLayout(name='game')
       div(class='text-center') Oh no, you're in checkmate!  Please resign before the timer expires to be refunded your fair-play deposit.
       div(id='form-controls' class='flex items-center')
         button(
-          @click='() => resign().then(() => inCheckmateModal = false)'
+          @click='() => doResign()\
+            .then(() => inCheckmateModal = false)'
           :disabled='didSendResign'
         ) Resign
 
@@ -218,7 +304,8 @@ NuxtLayout(name='game')
       div(class='text-center') Oh no, you ran out of time!  Please resign now.  We hope you play again!
       div(id='form-controls' class='flex items-center')
         button(
-          @click='() => resign().then(() => playerTimeExpiredModal = false)'
+          @click='() => doResign()\
+            .then(() => playerTimeExpiredModal = false)'
           :disabled='didSendResign'
         ) Resign
 
@@ -230,9 +317,23 @@ NuxtLayout(name='game')
       div(class='text-center') Your opponent ran out of time.  In order to finish the game, you can claim victory.
       div(id='form-controls' class='flex items-center')
         button(
-          @click='() => claimVictory().then(() => opponentTimeExpiredModal = false)'
+          @click='() => doClaimVictory()\
+            .then(() => opponentTimeExpiredModal = false)'
           :disabled='didSendResign'
         ) Victory
+
+    Modal(
+      title='Illegal Move'
+      v-if='!gameOver && illegalMoveModal'
+      @close='() => illegalMoveModal = false'
+    )
+      div(class='text-center') Your opponent submitted an illegal move.  Please send a dispute before your move expires and an arbiter will review the game.
+      div(id='form-controls' class='flex items-center')
+        button(
+          @click='() => doDisputeGame()\
+            .then(() => illegalMoveModal = false)'
+          :disabled='didDisputeGame'
+        ) Dispute
 </template>
 
 <style lang='sass'>

@@ -1,8 +1,15 @@
 <script setup>
 import _ from 'lodash';
+
+definePageMeta({
+  middleware: [ 'auth' ]
+});
+
 const { wallet } = await useWallet();
+
 const {
   lobby,
+  initPlayerLobby,
   txPending,
   sendChallenge,
   acceptChallenge,
@@ -11,11 +18,8 @@ const {
   createListeners,
   destroyListeners
 } = await useLobby();
-const { isAddress, isENSDomain, lookupENS } = useEthUtils();
 
-definePageMeta({
-  middleware: [ 'auth' ]
-});
+const { isAddress, isENSDomain, lookupENS } = useEthUtils();
 
 const searchText = ref(null);
 const lookupAddress = ref(null);
@@ -36,26 +40,6 @@ function hideNewChallenge() {
   newChallengeModal.value = false
 }
 
-async function doSendChallenge(args) {
-  const { opponent
-        , startAsWhite
-        , timePerMove
-        , wagerAmount
-        , wagerToken } = args;
-  await sendChallenge(opponent, startAsWhite, timePerMove, wagerAmount, wagerToken);
-  newChallengeModal.value = false
-}
-
-async function doAcceptChallenge() {
-  await acceptChallenge();
-  hidePendingChallenge.value = false;
-}
-
-async function doDeclineChallenge() {
-  await acceptChallenge();
-  hidePendingChallenge.value = false;
-}
-
 const pendingChallenge = ref(null);
 const pendingChallengeModal = ref(false);
 
@@ -69,10 +53,31 @@ function hidePendingChallenge() {
   pendingChallengeModal.value = false;
 }
 
+async function doSendChallenge(args) {
+  const { opponent
+        , startAsWhite
+        , timePerMove
+        , wagerAmount
+        , wagerToken } = args;
+  await sendChallenge(opponent, startAsWhite, timePerMove, wagerAmount, wagerToken);
+  newChallengeModal.value = false
+}
+
+async function doAcceptChallenge() {
+  await acceptChallenge();
+}
+
+async function doDeclineChallenge() {
+  await acceptChallenge();
+}
+
 async function doModifyChallenge(gameId, gameData) {
   const { startAsWhite, timePerMove, wagerAmount, wagerToken } = gameData;
   await modifyChallenge(gameId, startAsWhite, timePerMove, wagerAmount);
-  hidePendingChallenge();
+}
+
+if (wallet.connected && !lobby.initialized) {
+  initPlayerLobby();
 }
 
 createListeners();
@@ -140,8 +145,8 @@ section
         id='pending-challenge'
         :loading='txPending'
         v-bind='pendingChallenge'
-        @accept='() => acceptChallenge(pendingChallenge.id).then(hidePendingChallenge)'
-        @decline='() => declineChallenge(pendingChallenge.id).then(hidePendingChallenge)'
+        @accept='() => doAcceptChallenge(pendingChallenge.id).then(hidePendingChallenge)'
+        @decline='() => doDeclineChallenge(pendingChallenge.id).then(hidePendingChallenge)'
         @modify='data => doModifyChallenge(pendingChallenge.id, data)'
       )
 </template>

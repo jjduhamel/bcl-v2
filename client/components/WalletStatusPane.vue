@@ -33,7 +33,7 @@ div(id='wallet-status')
     div(id='wallet-controls')
       button(
         title='Disconnect'
-        :disabled='!connected'
+        v-if='connected'
         @click='emit("disconnect")'
       )
         img(class='h-4' src='~assets/icons/bytesize/lock.svg')
@@ -51,7 +51,7 @@ div(id='wallet-status')
   @apply text-sm
 
   #row
-    @apply py-0.5 flex items-center
+    @apply py-0.5 flex items-end
 
     img
       @apply mr-1
@@ -61,7 +61,7 @@ div(id='wallet-status')
       cursor: pointer
 
       img
-        @apply m-0 ml-1
+        @apply m-0 ml-1 mb-0.5
 
       &:disabled
         @apply text-gray-400 border-gray-400
