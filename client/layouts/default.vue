@@ -1,19 +1,10 @@
 <script setup>
-import { formatEther } from 'ethers/lib/utils';
-const { wallet } = await useWallet();
-const { truncAddress } = await useEthUtils();
-
-const displayAddr = computed(() => {
-  return wallet.connected ? truncAddress(wallet.address) : '---';
-});
-
-const displayBalance = computed(() => {
-  return wallet.connected ? (+formatEther(wallet.balance)).toFixed(3) : '---';
-});
-
-const displayNetwork = computed(() => {
-  return wallet.connected ? wallet.network : '---';
-});
+const {
+  wallet,
+  currentNetwork,
+  currentBalance,
+  disconnectWallet
+} = await useWallet();
 </script>
 
 <template lang='pug'>
@@ -25,15 +16,13 @@ div(id='app')
           div The Blockchain
           div Chess Lounge
         div(id='wallet')
-          div(id='item')
-            div Address
-            div {{ displayAddr }}
-          div(id='item')
-            div Balance
-            div {{ displayBalance }}
-          div(id='item')
-            div Network
-            div {{ displayNetwork }}
+          WalletStatusPane(
+            :connected='wallet.connected'
+            :address='wallet.address'
+            :network='currentNetwork'
+            :balance='currentBalance'
+            @disconnect='disconnectWallet'
+          )
         div(id='navigation')
           NuxtLink(to='/lounge') Lounge
           NuxtLink(to='/marketplace') Market
@@ -98,21 +87,8 @@ html, body, #__nuxt, #app
         @apply p-1 mx-1 my-2
         @extend .bordered
 
-        #item
+        #row
           @apply px-0.5 flex justify-end
-          @apply border-b border-black
-
-          &:last-child
-            @apply border-b-0
-
-          div
-            @apply flex-1 flex items-end
-
-          :first-child
-            @apply flex-shrink
-
-          :nth-child(2)
-            @apply text-sm justify-end
 
       #navigation
         @apply mx-2 flex flex-col

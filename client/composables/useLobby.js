@@ -244,7 +244,7 @@ export default async function() {
     lobbyContract.on(createdChallenge, async (id, opponent) => {
       const gameId = BN.from(id).toNumber();
       console.log('Received new challenge from', opponent);
-      await fetchGameData(gameId);
+      await initGameData(gameId);
       lobby.newChallenge(gameId);
       playAudioClip('nes/NewChallenge');
     });

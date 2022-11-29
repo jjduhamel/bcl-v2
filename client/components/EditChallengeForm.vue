@@ -1,7 +1,7 @@
 <script setup>
 import _ from 'lodash';
 import { formatEther, parseEther } from 'ethers/lib/utils';
-const { truncAddress } = await useEthUtils();
+const { truncAddress } = useEthUtils();
 
 const emit = defineEmits([ 'submit', 'cancel' ]);
 

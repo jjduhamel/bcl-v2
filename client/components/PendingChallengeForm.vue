@@ -2,7 +2,7 @@
 import _ from 'lodash';
 import humanizeDuration from 'humanize-duration';
 import { formatEther, parseEther } from 'ethers/lib/utils';
-const { truncAddress } = await useEthUtils();
+const { truncAddress } = useEthUtils();
 
 const emit = defineEmits([ 'accept', 'decline', 'modify' ]);
 

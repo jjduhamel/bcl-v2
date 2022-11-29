@@ -1,7 +1,7 @@
 <script setup>
 import humanizeDuration from 'humanize-duration';
 import { formatEther } from 'ethers/lib/utils';
-const { truncAddress } = await useEthUtils();
+const { truncAddress } = useEthUtils();
 
 const props = defineProps({
   opponent: {

@@ -6,7 +6,7 @@ const { params } = useRoute();
 const gameId = params.id;
 const { wallet } = await useWallet();
 const { lobby } = await useLobby();
-const { truncAddress } = await useEthUtils();
+const { truncAddress } = useEthUtils();
 const { playAudioClip } = useAudioUtils();
 const {
   chess,

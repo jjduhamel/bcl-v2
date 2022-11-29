@@ -1,7 +1,7 @@
 import { ethers, providers } from 'ethers';
 const { JsonRpcProvider } = providers;
 
-export default async function() {
+export default function() {
   const ensProvider = new JsonRpcProvider('https://mainnet.infura.io/v3/2185ad08ea904e85b06c383c4cd6b902');
   const { wallet } = useWallet();
 
@@ -11,6 +11,10 @@ export default async function() {
 
   function isENSDomain(domain) {
     return domain.match(/.+\.eth/) !== null;
+  }
+
+  async function lookupENS(domain) {
+    return ensProvider.resolveName(domain);
   }
 
   function truncAddress(addr, padstart, padstop) {
@@ -23,14 +27,10 @@ export default async function() {
     }
   }
 
-  async function lookupENS(domain) {
-    return ensProvider.resolveName(domain);
-  }
-
   return {
     isAddress,
     isENSDomain,
+    lookupENS,
     truncAddress,
-    lookupENS
   };
 }

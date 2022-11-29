@@ -1,4 +1,5 @@
 import { ethers, BigNumber as BN } from 'ethers';
+import { formatEther } from 'ethers/lib/utils';
 import WalletConnectProvider from '@walletconnect/ethereum-provider';
 import useWalletStore from '../store/wallet';
 const { Web3Provider } = ethers.providers;
@@ -6,7 +7,6 @@ const { Web3Provider } = ethers.providers;
 export default async function() {
   const config = useRuntimeConfig();
   const wallet = useWalletStore();
-  const walletConnectURI = ref(null);
   let provider, signer;
 
   const walletConnect = new WalletConnectProvider({
@@ -76,6 +76,21 @@ export default async function() {
     wallet.balance = await fetchBalance();
   }
 
+  const currentBalance = computed(() => {
+    // TODO Native token
+    return `${(+formatEther(wallet.balance)).toFixed(3)} ETH`;
+  });
+
+  const currentNetwork = computed(() => {
+    switch (wallet.network) {
+      case 'homestead': return 'Ethereum';
+      case 'goerli': return 'Goerli';
+      case 'matic': return 'Polygon';
+      case 'maticmum': return 'Mumbai';
+      default: return wallet.network;
+    }
+  });
+
   async function connectMetamask() {
     console.log('Connect metamask');
     wallet.source = 'metamask';
@@ -85,6 +100,7 @@ export default async function() {
     await _connected();
   }
 
+  const walletConnectURI = ref(null);
   async function connectWalletConnect() {
     console.log('Connect WalletConnect');
     wallet.source = 'walletconnect';
@@ -108,14 +124,24 @@ export default async function() {
     }
   }
 
+  async function disconnectWallet() {
+    if (!wallet.connected) throw Error('Wallet is not connected');
+    console.log('Disconnect wallet');
+    if (wallet.source == 'walletconnect') await walletConnnect.disconnect();
+    _disconnected();
+  }
+
   return {
     wallet,
     provider,
     signer,
+    currentNetwork,
+    currentBalance,
     fetchBalance,
     refreshBalance,
     connectMetamask,
+    walletConnectURI,
     connectWalletConnect,
-    walletConnectURI
+    disconnectWallet
   };
 }

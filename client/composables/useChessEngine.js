@@ -62,9 +62,9 @@ export default async function(gameId) {
 
   const didSendMove = ref(false);
   const submitMove = san => new Promise(async (resolve, reject) => {
+    console.log('Submit move', san);
     try {
       await gameContract.move(gameId, san);
-      console.log('Submit move', san);
       didSendMove.value = true;
       playAudioClip('instrument/swells/swell1');
       const eventFilter = MoveSAN(gameId, wallet.address);
@@ -263,14 +263,14 @@ export default async function(gameId) {
       }
       // TODO is there a better way/place to do this?
       moves.value = [ ...moves.value, san ];
-      await lobby.fetchMetadata(gameId);
+      await fetchGameData(gameId);
     });
 
     gameContract.on(GameOver(gameId), async (id, outcome, winner) => {
       console.log('Game over', id);
       await Promise.all([
         refreshBalance(),
-        lobby.fetchMetadata(gameId)
+        fetchGameData(gameId)
       ]);
 
       if (isWinner.value) playAudioClip('nes/Victory');

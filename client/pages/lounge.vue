@@ -11,7 +11,7 @@ const {
   createListeners,
   destroyListeners
 } = await useLobby();
-const { isAddress, isENSDomain, lookupENS } = await useEthUtils();
+const { isAddress, isENSDomain, lookupENS } = useEthUtils();
 
 definePageMeta({
   middleware: [ 'auth' ]
