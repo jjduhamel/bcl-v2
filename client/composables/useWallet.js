@@ -5,6 +5,7 @@ import useWalletStore from '../store/wallet';
 const { Web3Provider } = ethers.providers;
 
 export default async function() {
+  const { $amplitude } = useNuxtApp();
   const config = useRuntimeConfig();
   const wallet = useWalletStore();
   let provider, signer;
@@ -56,6 +57,12 @@ export default async function() {
     ]);
     wallet.connecting = false;
     wallet.connected = true;
+
+    // Initialize amplitude session
+    await $amplitude.setUserId(wallet.address);
+    await $amplitude.setGroup('network', wallet.network);
+    await $amplitude.setGroup('source', wallet.source);
+    $amplitude.track('WalletConnected');
   }
 
   function _disconnected() {
@@ -65,6 +72,8 @@ export default async function() {
     wallet.address = null;
     wallet.network = null;
     wallet.balance = 0;
+    $amplitude.track('WalletDisconnected');
+    reset();
   }
 
   async function fetchBalance() {
@@ -93,6 +102,7 @@ export default async function() {
 
   async function connectMetamask() {
     console.log('Connect metamask');
+    $amplitude.track('ConnectMetamask');
     wallet.source = 'metamask';
     wallet.connecting = true;
     provider = new Web3Provider(window.ethereum);
@@ -103,6 +113,7 @@ export default async function() {
   const walletConnectURI = ref(null);
   async function connectWalletConnect() {
     console.log('Connect WalletConnect');
+    $amplitude.track('ConnectWalletConnnect');
     wallet.source = 'walletconnect';
     wallet.connecting = true;
 
@@ -125,6 +136,7 @@ export default async function() {
   }
 
   async function disconnectWallet() {
+    $amplitude.track('DisconnectWallet');
     if (!wallet.connected) throw Error('Wallet is not connected');
     console.log('Disconnect wallet');
     if (wallet.source == 'walletconnect') await walletConnnect.disconnect();

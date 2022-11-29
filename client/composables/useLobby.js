@@ -5,6 +5,7 @@ import EngineContract from '../contracts/ChessEngine.sol/ChessEngine.json';
 import useLobbyStore from '../store/lobby';
 
 export default async function() {
+  const { $amplitude } = useNuxtApp();
   const lobby = useLobbyStore();
   const { wallet, provider, signer, refreshBalance } = await useWallet();
   const { playAudioClip } = useAudioUtils();
@@ -99,10 +100,16 @@ export default async function() {
                        , startAsWhite
                        , timePerMove
                        , wagerAmount
-                       , wagerToken) => new Promise(async (resolve, reject) => {
-
+                       , wagerToken) =>
+  new Promise(async (resolve, reject) => {
     try {
       didSendChallenge.value = true;
+      $amplitude.track('SendChallenge', {
+        opponent,
+        startAsWhite,
+        timePerMove,
+        wagerAmount
+      });
       await lobbyContract.challenge(opponent
                                   , startAsWhite
                                   , timePerMove
@@ -120,6 +127,7 @@ export default async function() {
     lobbyContract.once(eventFilter, async id => {
       const gameId = BN.from(id).toNumber();
       console.log('Created challenge', gameId);
+      $amplitude.track('ChallengeSent', { opponent, gameId });
       didSendChallenge.value = false;
       await Promise.all([
         initGameData(gameId),
@@ -140,6 +148,7 @@ export default async function() {
 
     try {
       didAcceptChallenge.value = true;
+      $amplitude.track('AcceptChallenge', { gameId, deposit });
       await gameContract.acceptChallenge(gameId, { value: deposit });
       console.log('Accepted challenge for game', gameId);
     } catch(err) {
@@ -150,6 +159,7 @@ export default async function() {
     const eventFilter = ChallengeAccepted(gameId, wallet.address);
     lobbyContract.once(eventFilter, async (id, addr, opponent) => {
       console.log('Game', gameId, 'started with', opponent);
+      $amplitude.track('ChallengeAccepted', { gameId, opponent });
       didAcceptChallenge.value = false;
       await Promise.all([
         fetchGameData(gameId),
@@ -167,6 +177,7 @@ export default async function() {
 
     try {
       didDeclineChallenge.value = true;
+      $amplitude.track('DeclineChallenge', { gameId });
       await gameContract.declineChallenge(gameId);
       console.log('Declined challenge', gameId);
     } catch(err) {
@@ -177,6 +188,7 @@ export default async function() {
     const eventFilter = ChallengeDeclined(gameId);
     lobbyContract.once(eventFilter, async (id, addr, opponent) => {
       console.log('Challenge', gameId, 'was declined');
+      $amplitude.track('ChallengeDeclined', { gameId, opponent });
       didDeclineChallenge.value = false;
       await Promise.all([
         fetchGameData(gameId),
@@ -192,15 +204,22 @@ export default async function() {
   const modifyChallenge = (gameId, startAsWhite, timePerMove, wagerAmount) => new Promise(async (resolve, reject) => {
     const gameContract = chessEngine(gameId);
     const deposited = await gameContract['balance(uint256)'](gameId);
-    const depositAmount = BN.from(wagerAmount).sub(deposited);
+    const deposit = BN.from(wagerAmount).sub(deposited);
 
     try {
       didModifyChallenge.value = true;
+      $amplitude.track('ModifyChallenge', {
+        gameId,
+        startAsWhite,
+        timePerMove,
+        wager: wagerAmount,
+        deposit
+      });
       await gameContract.modifyChallenge(gameId
                                        , startAsWhite
                                        , timePerMove
                                        , wagerAmount
-                                       , { value: depositAmount });
+                                       , { value: deposit });
       console.log('Modified challenge', gameId);
     } catch(err) {
       didModifyChallenge.value = false;
@@ -211,6 +230,7 @@ export default async function() {
     lobbyContract.once(eventFilter, async (id, addr, opponent) => {
       console.log('Challenge updated', gameId);
       didModifyChallenge.value = false;
+      $amplitude.track('ChallengeModified', { gameId, opponent });
       await Promise.all([
         fetchGameData(gameId),
         refreshBalance()
@@ -240,6 +260,7 @@ export default async function() {
     lobbyContract.on(createdChallenge, async (id, opponent) => {
       const gameId = BN.from(id).toNumber();
       console.log('Received new challenge from', opponent);
+      $amplitude.track('ChallengeCreated', { gameId, opponent });
       await initGameData(gameId);
       lobby.newChallenge(gameId);
       playAudioClip('nes/NewChallenge');
@@ -248,6 +269,7 @@ export default async function() {
     lobbyContract.on(acceptedChallenge, async (id, opponent) => {
       const gameId = BN.from(id).toNumber();
       console.log('Challenge', gameId, 'was accepted by', opponent);
+      $amplitude.track('ChallengeAccepted', { gameId, opponent });
       await fetchGameData(gameId);
       lobby.newGame(gameId);
       await refreshBalance();
@@ -257,6 +279,7 @@ export default async function() {
     lobbyContract.on(declinedChallenge, async (id, opponent) => {
       const gameId = BN.from(id).toNumber();
       console.log('Challenge', gameId, 'was declined by', opponent);
+      $amplitude.track('ChallengeDeclined', { gameId, opponent });
       await fetchGameData(gameId);
       lobby.popChallenge(gameId);
       await refreshBalance();
@@ -266,6 +289,7 @@ export default async function() {
     lobbyContract.on(gameFinished, async id => {
       const gameId = BN.from(id).toNumber();
       console.log('Game', gameId, 'finished');
+      $amplitude.track('GameFinished', { gameId });
       await fetchGameData(gameId);
       lobby.finishGame(id);
       await refreshBalance();
@@ -276,6 +300,7 @@ export default async function() {
     lobbyContract.on(recordUpdated, async (id, opponent) => {
       const gameId = BN.from(id).toNumber();
       console.log('Game', gameId, 'was touched by', opponent);
+      $amplitude.track('ChallengeModified', { gameId, opponent });
       await fetchGameData(gameId);
       playAudioClip('nes/Explosion');
     });

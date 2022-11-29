@@ -11,6 +11,8 @@
     "deploy:lobby": "forge script contracts/script/DesployLobby.s.sol --broadcast"
   },
   "dependencies": {
+    "@amplitude/analytics-browser": "^1.6.4",
+    "@bugsnag/js": "^7.18.0",
     "@diadal/vue3-qr-code-styling": "^1.4.6",
     "@pinia/nuxt": "^0.4.5",
     "@walletconnect/ethereum-provider": "1.8.0",

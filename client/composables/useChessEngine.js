@@ -84,7 +84,7 @@ export default async function(gameId) {
   }
 
   async function fetchMoves() {
-    console.log('Refresh moves for game', gameId);
+    console.log('Refresh moves for', gameId);
     moves.value = [];
     const cur = await gameContract.moves(gameId);
     console.log('Fetched', cur.length, 'moves');
@@ -93,8 +93,9 @@ export default async function(gameId) {
 
 
   const submitMove = san => new Promise(async (resolve, reject) => {
-    console.log('Submit move', san);
     try {
+      console.log('Submit move', san);
+      $amplitude.track('SendMove', { gameId, san });
       await gameContract.move(gameId, san);
       playAudioClip('other/swell1');
       const eventFilter = MoveSAN(gameId, wallet.address);
@@ -110,11 +111,13 @@ export default async function(gameId) {
 
   const resign = () => new Promise(async (resolve, reject) => {
     try {
+      $amplitude.track('ResignGame', { gameId });
       await gameContract.resign(gameId);
       console.log('Resigned game', gameId);
       playAudioClip('other/swell3');
       gameContract.once(GameOver(gameId), (id, outcome, winner)  => {
         console.log('Resignation confirmed');
+        $amplitude.track('ResignedGame', { gameId });
         resolve(id, outcome, winner);
       });
     } catch(err) {
@@ -125,11 +128,13 @@ export default async function(gameId) {
 
   const claimVictory = () => new Promise(async (resolve, reject) => {
     try {
+      $amplitude.track('ClaimVictory', { gameId });
       await gameContract.claimVictory(gameId);
       console.log('Claimed victory in game', gameId);
       playAudioClip('other/swell2');
       gameContract.once(GameOver(gameId), (id, outcome, winner)  => {
         console.log('Victory confirmed');
+        $amplitude.track('VictoryConfirmed', { gameId, outcome, winner });
         resolve(id, outcome, winner);
       });
     } catch(err) {
@@ -143,12 +148,14 @@ export default async function(gameId) {
 
   const disputeGame = () => new Promise(async (resolve, reject) => {
     try {
+      $amplitude.track('DisputeGame', { gameId });
       await gameContract.disputeGame(gameId);
       console.log('Disputed game', gameId);
       playAudioClip('nes/GenericNotify');
       const { GameDisputed } = lobbyContract.filters;
       gameContract.once(GameDisputed(gameId), (id, outcome, winner)  => {
         console.log('Dispute received');
+        $amplitude.track('GameDisputed', { gameId });
         resolve(id, outcome, winner);
       });
     } catch(err) {
@@ -297,6 +304,7 @@ export default async function(gameId) {
     console.log('Register listeners for game', gameId);
     let lastEvent = await provider.getBlockNumber();
     gameContract.on(MoveSAN(gameId), async (id, player, san, ev) => {
+      $amplitude.track('MoveConfirmed', { gameId, player, san });
       // Toss duplicate events
       if (ev.blockNumber <= lastEvent) return;
       lastEvent = ev.blockNumber;
@@ -306,11 +314,9 @@ export default async function(gameId) {
       if (player != wallet.address) {
         console.log('Received move', san);
         const move = tryMoveSAN(san);
-        playAudioClip('other/Blaster');
-        // TODO Dispute illegal moves
       }
-      // TODO is there a better way/place to do this?
       moves.value = [ ...moves.value, san ];
+      playAudioClip('other/Blaster');
       await fetchGameData(gameId);
     });
 
@@ -320,7 +326,7 @@ export default async function(gameId) {
         refreshBalance(),
         fetchGameData(gameId)
       ]);
-
+      $amplitude.track('GameOver', { gameId, outcome, winner });
       if (isWinner.value) playAudioClip('nes/Victory');
       else if (isLoser.value) playAudioClip('nes/Victory');
       else playAudioClip('nes/Draw');
