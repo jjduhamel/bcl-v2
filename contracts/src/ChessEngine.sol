@@ -2,54 +2,12 @@
 pragma solidity >=0.4.22 <0.9.0;
 import '@oz-upgradeable/proxy/utils/Initializable.sol';
 import '@oz-upgradeable/proxy/utils/UUPSUpgradeable.sol';
+import '@oz/utils/structs/EnumerableMap.sol';
+import './IChessEngine.sol';
 import './Lobby.sol';
 
-interface ChessEngineInterface {
-  enum GameState { Pending, Started, Draw, Finished, Review, Migrated }
-  enum GameOutcome { Undecided, Declined, WhiteWon, BlackWon, Draw }
-
-  struct GameData {
-    bool exists;
-    GameState state;
-    GameOutcome outcome;
-    // Game data
-    address payable whitePlayer;
-    address payable blackPlayer;
-    address currentMove;
-    // Time Per Move
-    uint timePerMove;
-    uint timeOfLastMove;
-    // Wagering
-    uint wagerAmount;
-    //address wagerToken;
-  }
-
-  event GameStarted(uint indexed gameId
-                  , address indexed whitePlayer
-                  , address indexed blackPlayer);
-  event GameOver(uint indexed gameId
-               , GameOutcome indexed outcome
-               , address indexed winner);
-  event PlayerMoved(uint indexed gameId
-                  , address indexed sender
-                  , address indexed receiver);
-  event MoveSAN(uint indexed gameId
-              , address indexed player
-              , string san);
-  event OfferedDraw(uint indexed gameId
-                  , address indexed sender
-                  , address indexed receiver);
-  event AcceptedDraw(uint indexed gameId
-                   , address indexed sender
-                   , address indexed receiver);
-  event DeclinedDraw(uint indexed gameId
-                   , address indexed sender
-                   , address indexed receiver);
-  event ArbiterAction(uint indexed gameId
-                    , GameOutcome indexed outcome);
-}
-
-contract ChessEngine is Initializable, UUPSUpgradeable, ChessEngineInterface {
+contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
+  using EnumerableMap for EnumerableMap.UintToUintMap;
   Lobby private __lobby;
 
   mapping(uint => GameData) private __games;
@@ -57,8 +15,13 @@ contract ChessEngine is Initializable, UUPSUpgradeable, ChessEngineInterface {
   mapping(uint => string[]) __moves;
   // map gameId -> bitboards
   mapping(uint => bytes8[6]) __bitboards;
-  // map gameId -> player -> deposit
-  mapping(uint => mapping(address => uint)) __deposits;
+  // map player -> gameId -> deposit[]
+  mapping(address => EnumerableMap.UintToUintMap) __deposits;
+
+  // Platform fees
+  uint __platformFeePerc;
+  uint __platformFeeMin;
+  uint __houseBalance;
 
   constructor() {
     _disableInitializers();
@@ -67,6 +30,10 @@ contract ChessEngine is Initializable, UUPSUpgradeable, ChessEngineInterface {
   function initialize(address lobby) public initializer {
     __UUPSUpgradeable_init();
     __lobby = Lobby(lobby);
+    // Initialize platform fees;
+    __houseBalance = 0;
+    __platformFeePerc = 1;
+    __platformFeeMin = 0;
   }
 
   function _authorizeUpgrade(address newImplementation) internal override
@@ -155,26 +122,35 @@ contract ChessEngine is Initializable, UUPSUpgradeable, ChessEngineInterface {
   }
 
   /*
-   * Deposit Stuff
+   * Deposit, wager, platform fee
    */
 
-  modifier isFunded(uint gameId) {
-    __deposits[gameId][msg.sender] += msg.value;
+  modifier addFunds(uint gameId, address player) {
+    if (msg.value > 0) {
+      uint deposit = playerBalance(gameId, player);
+      __deposits[player].set(gameId, deposit+msg.value);
+    }
     _;
-    uint deposit = __deposits[gameId][msg.sender];
-    require(deposit >= __games[gameId].wagerAmount, 'InvalidDepositAmount');
   }
 
-  modifier playerFunded(uint gameId, address player) {
-    __deposits[gameId][player] += msg.value;
+  modifier isFunded(uint gameId, address player)
+  {
     _;
-    uint deposit = __deposits[gameId][player];
-    require(deposit >= __games[gameId].wagerAmount, 'InvalidDepositAmount');
+    GameData storage gameData = __games[gameId];
+    if (gameData.wagerAmount > 0) {
+      uint deposit = playerBalance(gameId, player);
+      uint requiredAmount = gameData.wagerAmount;
+      if (gameData.state == GameState.Pending) {
+        requiredAmount += platformFee(gameId);
+      }
+      require(deposit >= requiredAmount, 'InvalidDepositAmount');
+    }
   }
 
   function playerBalance(uint gameId, address player) public view
   returns (uint) {
-    return __deposits[gameId][player];
+    (bool exists, uint deposit) = __deposits[player].tryGet(gameId);
+    return exists ? deposit : 0;
   }
 
   function balance(uint gameId) public view
@@ -183,31 +159,63 @@ contract ChessEngine is Initializable, UUPSUpgradeable, ChessEngineInterface {
     return playerBalance(gameId, msg.sender);
   }
 
-  function disburseExcessFunds(uint gameId) private
+  function platformFeePerc() public view
+  returns (uint) {
+    return __platformFeePerc;
+  }
+
+  function platformFee(uint gameId) public view
+  returns (uint) {
+    GameData storage gameData = __games[gameId];
+    uint wagerAmount = gameData.wagerAmount;
+    uint fee = wagerAmount * __platformFeePerc / 100;
+    if (fee < __platformFeeMin) return __platformFeeMin;
+    return fee;
+  }
+
+  function chargePlatformFee(uint gameId, address player) private {
+    GameData storage gameData = __games[gameId];
+    if (gameData.wagerAmount == 0) return;
+    uint deposit = playerBalance(gameId, player);
+    uint fee = platformFee(gameId);
+    require(deposit >= fee, 'InvalidDepositAmount');
+    __deposits[player].set(gameId, deposit-fee);
+    __houseBalance += fee;
+  }
+
+  modifier chargePlatformFees(uint gameId) {
+    GameData storage gameData = __games[gameId];
+    chargePlatformFee(gameId, gameData.whitePlayer);
+    chargePlatformFee(gameId, gameData.blackPlayer);
+    _;
+  }
+
+  function disburseExcessFunds(uint gameId, address payable player) private
     inProgress(gameId)
   {
     GameData storage gameData = __games[gameId];
     uint wagerAmount = gameData.wagerAmount;
-    uint wDeposit = __deposits[gameId][gameData.whitePlayer];
-    uint bDeposit = __deposits[gameId][gameData.blackPlayer];
-
-    if (wDeposit > wagerAmount) {
-      gameData.whitePlayer.transfer(wDeposit - wagerAmount);
-      __deposits[gameId][gameData.whitePlayer] = wagerAmount;
+    uint deposit = playerBalance(gameId, player);
+    if (deposit > wagerAmount) {
+      player.transfer(deposit - wagerAmount);
+      __deposits[player].set(gameId, wagerAmount);
     }
+  }
 
-    if (bDeposit > wagerAmount) {
-      gameData.blackPlayer.transfer(bDeposit - wagerAmount);
-      __deposits[gameId][gameData.blackPlayer] = wagerAmount;
-    }
+  function disburseExcessFunds(uint gameId) private
+    inProgress(gameId)
+  {
+    GameData storage gameData = __games[gameId];
+    disburseExcessFunds(gameId, gameData.whitePlayer);
+    disburseExcessFunds(gameId, gameData.blackPlayer);
   }
 
   function disburseFunds(uint gameId) private
     isFinished(gameId)
   {
     GameData storage gameData = __games[gameId];
-    uint wDeposit = __deposits[gameId][gameData.whitePlayer];
-    uint bDeposit = __deposits[gameId][gameData.blackPlayer];
+    uint wDeposit = playerBalance(gameId, gameData.whitePlayer);
+    uint bDeposit = playerBalance(gameId, gameData.blackPlayer);
 
     if (gameData.outcome == GameOutcome.WhiteWon) {
       gameData.whitePlayer.transfer(wDeposit + bDeposit);
@@ -221,9 +229,30 @@ contract ChessEngine is Initializable, UUPSUpgradeable, ChessEngineInterface {
       revert('InvalidGameOutcome');
     }
 
-    __deposits[gameId][gameData.whitePlayer] = 0;
-    __deposits[gameId][gameData.blackPlayer] = 0;
+    __deposits[gameData.whitePlayer].remove(gameId);
+    __deposits[gameData.blackPlayer].remove(gameId);
   }
+
+  function runningBalance() public view
+    isArbiter
+  returns (uint) {
+    return __houseBalance;
+  }
+
+  function withdrawRunningBalance(address payable receiver) public
+    isArbiter
+  {
+    receiver.transfer(__houseBalance);
+    __houseBalance = 0;
+  }
+
+  function setPlatformFee(uint perc) public
+    isArbiter
+  { __platformFeePerc = perc; }
+
+  function setMinPlatformFee(uint amount) public
+    isArbiter
+  { __platformFeeMin = amount; }
 
   /*
    * Game Logic
@@ -237,12 +266,12 @@ contract ChessEngine is Initializable, UUPSUpgradeable, ChessEngineInterface {
     return (msg.sender == __games[gameId].blackPlayer);
   }
 
-  function isEitherPlayer(uint gameId) private view returns (bool) {
+  function isEitherColor(uint gameId) private view returns (bool) {
     return (isWhitePlayer(gameId) || isBlackPlayer(gameId));
   }
 
   modifier isPlayer(uint gameId) {
-    require(isEitherPlayer(gameId), 'PlayerOnly');
+    require(isEitherColor(gameId), 'PlayerOnly');
     _;
   }
 
@@ -263,9 +292,8 @@ contract ChessEngine is Initializable, UUPSUpgradeable, ChessEngineInterface {
     _;
   }
 
-  modifier validTPM(uint tpm) {
+  function checkTPM(uint tpm) private pure {
     require(tpm >= 60, 'InvalidTimePerMove');
-    _;
   }
 
   function winner(uint gameId) public view
@@ -300,10 +328,11 @@ contract ChessEngine is Initializable, UUPSUpgradeable, ChessEngineInterface {
     uint wagerAmount
   ) public payable
     isLobby
-    validTPM(timePerMove)
-    playerFunded(gameId, sender)
+    addFunds(gameId, sender)
+    isFunded(gameId, sender)
     returns (uint)
   {
+    checkTPM(timePerMove);
     __games[gameId] = GameData(
       true,
       GameState.Pending,
@@ -322,7 +351,8 @@ contract ChessEngine is Initializable, UUPSUpgradeable, ChessEngineInterface {
     isChallenge(gameId)
     isPlayer(gameId)
     isCurrentMove(gameId)
-    isFunded(gameId)
+    addFunds(gameId, msg.sender)
+    isFunded(gameId, msg.sender)
   {
     __lobby.acceptChallenge(gameId, msg.sender, otherPlayer(gameId));
   }
@@ -343,9 +373,10 @@ contract ChessEngine is Initializable, UUPSUpgradeable, ChessEngineInterface {
   ) public payable
     isChallenge(gameId)
     isPlayer(gameId)
-    validTPM(timePerMove)
-    isFunded(gameId)
+    addFunds(gameId, msg.sender)
+    isFunded(gameId, msg.sender)
   {
+    checkTPM(timePerMove);
     GameData storage gameData = __games[gameId];
     address opponent = otherPlayer(gameId);
     address whitePlayer = startAsWhite ? msg.sender : opponent;
@@ -365,12 +396,12 @@ contract ChessEngine is Initializable, UUPSUpgradeable, ChessEngineInterface {
   function startGame(uint gameId) public
     isLobby
     isChallenge(gameId)
+    chargePlatformFees(gameId)
   {
     GameData storage gameData = __games[gameId];
     gameData.state = GameState.Started;
     gameData.currentMove = gameData.whitePlayer;
     gameData.timeOfLastMove = block.timestamp;
-    // TODO Charge platform fee rn
     disburseExcessFunds(gameId);
     emit GameStarted(gameId, gameData.whitePlayer, gameData.blackPlayer);
   }
@@ -471,6 +502,6 @@ contract ChessEngine is Initializable, UUPSUpgradeable, ChessEngineInterface {
     finishGame(gameId, outcome);
     __lobby.resolveDispute(gameId, gameData.whitePlayer, gameData.blackPlayer);
     __lobby.finishGame(gameId, gameData.whitePlayer, gameData.blackPlayer);
-    emit ArbiterAction(gameId, outcome);
+    emit ArbiterAction(gameId, msg.sender, outcome);
   }
 }
