@@ -4,33 +4,10 @@ import '@oz-upgradeable/access/AccessControlEnumerableUpgradeable.sol';
 import '@oz-upgradeable/proxy/utils/Initializable.sol';
 import '@oz-upgradeable/proxy/utils/UUPSUpgradeable.sol';
 import '@lib/ArrayUtils.sol';
+import './ILobby.sol';
 import './ChessEngine.sol';
 
-interface LobbyInterface {
-  event TouchRecord(uint indexed gameId
-                  , address indexed sender
-                  , address indexed receiver);
-  event NewChallenge(uint indexed gameId
-                   , address indexed player1
-                   , address indexed player2);
-  event ChallengeAccepted(uint indexed gameId
-                        , address indexed sender
-                        , address indexed receiver);
-  event ChallengeDeclined(uint indexed gameId
-                        , address indexed sender
-                        , address indexed receiver);
-  event GameFinished(uint indexed gameId
-                   , address indexed sender
-                   , address indexed receiver);
-  event GameDisputed(uint indexed gameId
-                   , address indexed sender
-                   , address indexed receiver);
-  event DisputeResolved(uint indexed gameId
-                      , address indexed sender
-                      , address indexed receiver);
-}
-
-contract Lobby is Initializable, UUPSUpgradeable, AccessControlEnumerableUpgradeable, LobbyInterface {
+contract Lobby is Initializable, UUPSUpgradeable, AccessControlEnumerableUpgradeable, ILobby {
   using ArrayUtils for uint[];
 
   // Lobby Settings

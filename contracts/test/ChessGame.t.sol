@@ -10,7 +10,7 @@ import './Challenge.t.sol';
 abstract contract ChessGameTest is ChallengeTest {
   constructor() {
     setPlayer(p1);
-    lobby.challenge{ value: wager }(p2, true, timePerMove, wager);
+    lobby.challenge{ value: deposit }(p2, true, timePerMove, wager);
     uint[] memory challenges = lobby.challenges();
     gameId = challenges[0];
     switchPlayer();
@@ -35,7 +35,7 @@ contract StartGameTest is ChessGameTest {
   function setUp() public
     syncReceiver
   {
-    engine.acceptChallenge{ value: wager }(gameId);
+    engine.acceptChallenge{ value: deposit }(gameId);
   }
 
   function _testAccepted(address player) public {
@@ -88,7 +88,7 @@ contract ResignGameTest is ChessGameTest {
   function setUp() public
     syncReceiver
   {
-    engine.acceptChallenge{ value: wager }(gameId);
+    engine.acceptChallenge{ value: deposit }(gameId);
   }
 
   function testResignAsSender() public
@@ -135,7 +135,7 @@ contract MoveTimerTest is ChessGameTest {
   function setUp() public
     syncReceiver
   {
-    engine.acceptChallenge{ value: wager }(gameId);
+    engine.acceptChallenge{ value: deposit }(gameId);
     _testMove(p1, 'a3');
     GameData memory gameData = engine.game(gameId);
     assertTrue(gameData.timeOfLastMove > 0);
@@ -163,7 +163,7 @@ contract ClaimVictoryTest is ChessGameTest {
   function setUp() public
     syncReceiver
   {
-    engine.acceptChallenge{ value: wager }(gameId);
+    engine.acceptChallenge{ value: deposit }(gameId);
     _testMove(p1, 'a3');
   }
 
@@ -209,7 +209,7 @@ contract DrawGameTest is ChessGameTest {
   function setUp() public
     syncReceiver
   {
-    engine.acceptChallenge{ value: wager }(gameId);
+    engine.acceptChallenge{ value: deposit }(gameId);
     switchPlayer();
     engine.offerDraw(gameId);
     GameData memory gameData = engine.game(gameId);
@@ -265,7 +265,7 @@ contract DisputeGameTest is ChessGameTest {
   function setUp() public
     syncReceiver
   {
-    engine.acceptChallenge{ value: wager }(gameId);
+    engine.acceptChallenge{ value: deposit }(gameId);
     // Perform a move (illegal but irrelevant for the sake of testing)
     _testMove(p1, 'Ne8');
   }

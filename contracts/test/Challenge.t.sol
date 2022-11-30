@@ -68,9 +68,9 @@ contract CreateChallengeTest is ChallengeTest {
   }
 
   function testChallengeWithWager() public
-    testBalanceDelta(p1, -int(wager))
+    testBalanceDelta(p1, -int(deposit))
   {
-    gameId = lobby.challenge{ value: wager }(p2, true, timePerMove, wager);
+    gameId = lobby.challenge{ value: deposit }(p2, true, timePerMove, wager);
     _testChallenge(gameId);
   }
 
@@ -91,20 +91,20 @@ contract CreateChallengeTest is ChallengeTest {
 
   function testChallengeFailsWithLowDeposit() public {
     vm.expectRevert('InvalidDepositAmount');
-    gameId = lobby.challenge{ value: wager-1 }(p2, true, timePerMove, wager);
+    gameId = lobby.challenge{ value: deposit-1 }(p2, true, timePerMove, wager);
   }
 
   function testChallengeSucceedsWithExcessDeposit() public
-    testBalanceDelta(p1, -int(wager+1))
+    testBalanceDelta(p1, -int(deposit+1))
   {
-    gameId = lobby.challenge{ value: wager+1 }(p2, true, timePerMove, wager);
+    gameId = lobby.challenge{ value: deposit+1 }(p2, true, timePerMove, wager);
     _testChallenge(gameId);
   }
 }
 
 contract AcceptChallengeTest is ChallengeTest {
   function setUp() public {
-    gameId = lobby.challenge{ value: wager }(p2, true, timePerMove, wager);
+    gameId = lobby.challenge{ value: deposit }(p2, true, timePerMove, wager);
     switchPlayer();
   }
 
@@ -132,7 +132,7 @@ contract AcceptChallengeTest is ChallengeTest {
 
   function testAcceptWithDeposit() public {
     _expectGameStarted();
-    engine.acceptChallenge{ value: wager }(gameId);
+    engine.acceptChallenge{ value: deposit }(gameId);
     _testAccepted();
   }
 
@@ -143,12 +143,12 @@ contract AcceptChallengeTest is ChallengeTest {
 
   function testAcceptFailsWithLowDeposit() public {
     vm.expectRevert('InvalidDepositAmount');
-    engine.acceptChallenge{ value: wager-1 }(gameId);
+    engine.acceptChallenge{ value: deposit-1 }(gameId);
   }
 
   function testAcceptWithExcessDeposit() public {
     _expectGameStarted();
-    engine.acceptChallenge{ value: wager+1 }(gameId);
+    engine.acceptChallenge{ value: deposit+1 }(gameId);
     _testAccepted();
   }
 
@@ -156,40 +156,40 @@ contract AcceptChallengeTest is ChallengeTest {
     asSender
   {
     vm.expectRevert('NotCurrentMove');
-    engine.acceptChallenge{ value: wager }(gameId);
+    engine.acceptChallenge{ value: deposit }(gameId);
   }
 
   function testAcceptAsSpectator() public
     asSpectator
   {
     vm.expectRevert('PlayerOnly');
-    engine.acceptChallenge{ value: wager }(gameId);
+    engine.acceptChallenge{ value: deposit }(gameId);
   }
 
   function testAcceptDisbursesExcessFunds() public
     asReceiver
-    testBalanceDelta(p1, int(wager/2))
-    testBalanceDelta(p2, -int(wager/2))
+    testBalanceDelta(p1, int(deposit/2))
+    testBalanceDelta(p2, -int(deposit/2))
   {
-    engine.modifyChallenge{ value: wager*2 }(gameId, true, timePerMove, wager/2);
+    engine.modifyChallenge{ value: wager*2+fee }(gameId, true, timePerMove, wager/2);
     switchPlayer();
     engine.acceptChallenge(gameId);
   }
 
   function testAcceptFailsAfterAccept() public {
-    engine.acceptChallenge{ value: wager }(gameId);
+    engine.acceptChallenge{ value: deposit }(gameId);
     vm.expectRevert('InvalidContractState');
     engine.acceptChallenge(gameId);
   }
 
   function testDeclineFailsAfterAccept() public {
-    engine.acceptChallenge{ value: wager }(gameId);
+    engine.acceptChallenge{ value: deposit }(gameId);
     vm.expectRevert('InvalidContractState');
     engine.declineChallenge(gameId);
   }
 
   function testModifyFailsAfterAccept() public {
-    engine.acceptChallenge{ value: wager }(gameId);
+    engine.acceptChallenge{ value: deposit }(gameId);
     vm.expectRevert('InvalidContractState');
     engine.modifyChallenge(gameId, true, timePerMove, wager);
   }
@@ -197,7 +197,7 @@ contract AcceptChallengeTest is ChallengeTest {
 
 contract DeclineChallengeTest is ChallengeTest {
   function setUp() public {
-    gameId = lobby.challenge{ value: wager }(p2, true, timePerMove, wager);
+    gameId = lobby.challenge{ value: deposit }(p2, true, timePerMove, wager);
     switchPlayer();
   }
 
@@ -223,7 +223,7 @@ contract DeclineChallengeTest is ChallengeTest {
 
   function testDeclineAsSender() public
     asSender
-    testBalanceDelta(p1, int(wager))
+    testBalanceDelta(p1, int(deposit))
     testBalanceDelta(p2, 0)
   {
     _expectDeclinedEvent(p1);
@@ -234,7 +234,7 @@ contract DeclineChallengeTest is ChallengeTest {
 
   function testDeclineAsReceiver() public
     asReceiver
-    testBalanceDelta(p1, int(wager))
+    testBalanceDelta(p1, int(deposit))
     testBalanceDelta(p2, 0)
   {
     _expectDeclinedEvent(p2);
@@ -271,7 +271,7 @@ contract DeclineChallengeTest is ChallengeTest {
 
 contract ModifyChallengeTest is ChallengeTest {
   function setUp() public {
-    gameId = lobby.challenge{ value: wager }(p2, true, timePerMove, wager);
+    gameId = lobby.challenge{ value: deposit }(p2, true, timePerMove, wager);
     switchPlayer();
   }
 
@@ -283,7 +283,7 @@ contract ModifyChallengeTest is ChallengeTest {
 
   function testModifyColor() public {
     _expectTouchRecord(p2);
-    engine.modifyChallenge{ value: wager }(gameId, true, timePerMove, wager);
+    engine.modifyChallenge{ value: deposit }(gameId, true, timePerMove, wager);
     GameData memory gameData = engine.game(gameId);
     assertEq(gameData.currentMove, p1);
     assertEq(gameData.whitePlayer, p2);
@@ -315,38 +315,38 @@ contract ModifyChallengeTest is ChallengeTest {
     GameData memory data = engine.game(gameId);
     assertTrue(data.state == GameState.Pending);
     vm.expectRevert('InvalidDepositAmount');
-    engine.modifyChallenge{ value: wager-1 }(gameId, true, timePerMove, wager);
+    engine.modifyChallenge{ value: deposit-1 }(gameId, true, timePerMove, wager);
   }
 
   function testModifyTimePerMove() public
-    testBalanceDelta(p2, -int(wager))
+    testBalanceDelta(p2, -int(deposit))
   {
     _expectTouchRecord(p2);
-    engine.modifyChallenge{ value: wager }(gameId, false, timePerMove-1, wager);
+    engine.modifyChallenge{ value: deposit }(gameId, false, timePerMove-1, wager);
     GameData memory gameData = engine.game(gameId);
     assertEq(gameData.timePerMove, timePerMove-1);
   }
 
   function testModifyInvalidTPMFails() public {
     vm.expectRevert('InvalidTimePerMove');
-    engine.modifyChallenge{ value: wager }(gameId, false, 59, wager);
+    engine.modifyChallenge{ value: deposit }(gameId, false, 59, wager);
   }
 
   function testModifyWager() public
-    testBalanceDelta(p2, -int(wager-1))
+    testBalanceDelta(p2, -int(deposit-1))
   {
     _expectTouchRecord(p2);
-    engine.modifyChallenge{ value: wager-1 }(gameId, true, timePerMove, wager-1);
+    engine.modifyChallenge{ value: deposit-1 }(gameId, true, timePerMove, wager-1);
     GameData memory gameData = engine.game(gameId);
     assertEq(gameData.wagerAmount, wager-1);
   }
 
   function testIncreaseWagerAsSender() public
     asSender
-    testBalanceDelta(p1, -int(wager))
+    testBalanceDelta(p1, -int(deposit))
   {
     _expectTouchRecord(p1);
-    engine.modifyChallenge{ value: wager }(gameId, true, timePerMove, wager*2);
+    engine.modifyChallenge{ value: deposit }(gameId, true, timePerMove, wager*2);
     GameData memory gameData = engine.game(gameId);
     assertEq(gameData.wagerAmount, wager*2);
   }

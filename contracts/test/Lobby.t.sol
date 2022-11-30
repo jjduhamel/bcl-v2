@@ -7,7 +7,7 @@ import '@oz/proxy/ERC1967/ERC1967Proxy.sol';
 import '@src/Lobby.sol';
 import '@src/ChessEngine.sol';
 
-abstract contract LobbyTest is Test, LobbyInterface, ChessEngineInterface {
+abstract contract LobbyTest is Test, ILobby, IChessEngine {
   Lobby lobby;
   ChessEngine engine;
   address arbiter;
@@ -16,6 +16,8 @@ abstract contract LobbyTest is Test, LobbyInterface, ChessEngineInterface {
   address p3;
   uint timePerMove = 300;
   uint wager = 1 ether;
+  uint fee = wager / 100;
+  uint deposit = wager + fee;
 
   function _initializeLobby() private {
     Lobby lobbyImpl = new Lobby();

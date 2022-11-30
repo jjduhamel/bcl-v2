@@ -2,6 +2,8 @@
 src = 'contracts/src/'
 test = 'contracts/test/'
 libs = [ 'contracts/lib/' ]
+via_ir = true
+#sparse_mode = true
 
 [rpc_endpoints]
 localhost = '127.0.0.1:8545'
