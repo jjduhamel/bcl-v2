@@ -67,7 +67,7 @@ watch(fen, reloadBoard);
 </script>
 
 <template lang='pug'>
-div(id='chessboard' class='ml-4 mb-2 blue merida')
+div(id='chessboard' class='mb-2 blue merida')
   div(ref='board' class='cg-wrap')
 </template>
 
