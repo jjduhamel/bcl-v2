@@ -144,7 +144,9 @@ export default async function() {
     const gameContract = chessEngine(gameId);
     const { wagerAmount } = await gameContract.game(gameId);
     const deposited = await gameContract['balance(uint256)'](gameId);
-    const deposit = BN.from(wagerAmount).sub(deposited);
+    let deposit = BN.from(wagerAmount).sub(deposited);
+    if (deposit.lt(0)) deposit = BN.from(0);
+    console.log('Accept', gameId, deposit);
 
     try {
       didAcceptChallenge.value = true;
@@ -204,7 +206,8 @@ export default async function() {
   const modifyChallenge = (gameId, startAsWhite, timePerMove, wagerAmount) => new Promise(async (resolve, reject) => {
     const gameContract = chessEngine(gameId);
     const deposited = await gameContract['balance(uint256)'](gameId);
-    const deposit = BN.from(wagerAmount).sub(deposited);
+    let deposit = BN.from(wagerAmount).sub(deposited);
+    if (deposit.lt(0)) deposit = BN.from(0);
 
     try {
       didModifyChallenge.value = true;

@@ -2,6 +2,8 @@ import _ from 'lodash';
 import { Chess, SQUARES } from 'chess.js';
 
 export default async function(gameId) {
+  const { $amplitude } = useNuxtApp();
+
   const GameState = {
     Pending: 0,
     Started: 1,
@@ -328,7 +330,7 @@ export default async function(gameId) {
       ]);
       $amplitude.track('GameOver', { gameId, outcome, winner });
       if (isWinner.value) playAudioClip('nes/Victory');
-      else if (isLoser.value) playAudioClip('nes/Victory');
+      else if (isLoser.value) playAudioClip('nes/Defeat');
       else playAudioClip('nes/Draw');
     });
   }
