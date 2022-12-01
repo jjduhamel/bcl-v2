@@ -12,7 +12,7 @@ div(id='game')
   max-height: 27em
 
   #board
-    @apply flex flex-grow
+    @apply flex flex-grow justify-center
 
   #info
     @apply w-48 flex flex-col

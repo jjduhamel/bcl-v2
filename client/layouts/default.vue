@@ -24,9 +24,15 @@ div(id='app')
             @disconnect='disconnectWallet'
           )
         div(id='navigation')
-          NuxtLink(to='/lounge') Lounge
-          NuxtLink(to='/marketplace') Market
-          NuxtLink(to='/about') About
+          NuxtLink(to='/lounge')
+            img(src='@/assets/icons/bytesize/star.svg')
+            div Lounge
+          NuxtLink(to='/marketplace')
+            img(src='@/assets/icons/bytesize/tag.svg')
+            div Market
+          NuxtLink(to='/about')
+            img(src='@/assets/icons/bytesize/info.svg')
+            div About
 
     div(id='content')
       slot
@@ -94,8 +100,14 @@ html, body, #__nuxt, #app
         @apply mx-2 flex flex-col
 
         a
-          @apply m-1 p-0.5 flex-1 text-center
+          @apply m-1 px-2 py-0.5 flex-1 flex items-center
           @extend .bordered
+
+          img
+            @apply h-4
+
+          div
+            @apply flex-1 text-center
 
     #content
       @apply ml-3 mt-2 w-full

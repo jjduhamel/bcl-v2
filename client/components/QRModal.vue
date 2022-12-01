@@ -5,27 +5,26 @@
 import VueQR from './vue3-qr-code-styling';
 
 const props = defineProps({
-  walletConnectURI: {
+  uri: {
     type: String,
     required: true
   }
 });
 
-const { walletConnectURI } = toRefs(props);
+const { uri } = toRefs(props);
 </script>
 
 <template lang='pug'>
-Modal(title='WalletConnect')
-  div(class='my-2 flex justify-center')
+Modal
+  div(class='flex justify-center')
     VueQR(
-      :width=256,
-      :height=256,
-      :data='walletConnectURI',
-      image='assets/icons/wc-qrimg.png',
-      :imageOptions='{ hideBackgroundDots: false }'
+      :width=512,
+      :height=512,
+      :data='uri',
       :dotsOptions='{ type: "extra-rounded", color: "black" }'
       :cornersSquareOptions='{ type: "extra-rounded" }'
       :cornersDotOptions='{ type: "dot" }'
     )
-  div(class='text-center text-sm') Please scan this QR code using a WalletConnect enabled wallet.
+  div(class='my-1 text-center text-xs')
+    slot
 </template>
