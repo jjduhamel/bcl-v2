@@ -13,8 +13,10 @@
   "dependencies": {
     "@amplitude/analytics-browser": "^1.6.4",
     "@bugsnag/js": "^7.18.0",
+    "@coinbase/wallet-sdk": "^3.6.1",
     "@diadal/vue3-qr-code-styling": "^1.4.6",
     "@pinia/nuxt": "^0.4.5",
+    "@wagmi/core": "^0.7.7",
     "@walletconnect/ethereum-provider": "1.8.0",
     "bytesize-icons": "^1.4.0",
     "chess.js": "^1.0.0-alpha.0",

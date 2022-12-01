@@ -1,4 +1,4 @@
-import { ethers, BigNumber as BN } from 'ethers';
+import { BigNumber as BN } from 'ethers';
 import {
   createClient,
   configureChains,
@@ -18,10 +18,8 @@ import { infuraProvider } from '@wagmi/core/providers/infura';
 import { alchemyProvider } from '@wagmi/core/providers/alchemy';
 import { MetaMaskConnector } from '@wagmi/core/connectors/metaMask';
 import { WalletConnectConnector } from '@wagmi/core/connectors/walletConnect';
-import { CoinbaseWalletConnector } from '@wagmi/core/connectors/coinbaseWallet';
 import { formatEther } from 'ethers/lib/utils';
 import useWalletStore from '../store/wallet';
-const { Web3Provider } = ethers.providers;
 
 const config = useRuntimeConfig();
 
@@ -36,7 +34,7 @@ const { chains, provider, webSocketProvider } = configureChains(
 );
 
 const wagmi = createClient({
-  //autoConnect: true,
+  autoConnect: true,
   provider,
   webSocketProvider
 });
@@ -46,35 +44,18 @@ export default async function() {
   const wallet = useWalletStore();
   let signer;
 
-  function initWalletConnect() {
-    return new WalletConnectProvider({
-      infuraId: config.infuraId,
-      qrcode: false
-    });
-  }
-
-  function initCoinbaseWallet() {
-    return new CoinbaseWalletSDK({
-      appName: 'Chessloun.ge',
-      headlessMode: true
-    });
-  }
-
   try {
-    if (wallet.connected) {
-      if (!wallet.initialized) {
-        console.log('Initialize wallet using', wallet.source);
-        if (wallet.source == 'walletconnect') await connectWalletConnect();
-        else if (wallet.source == 'metamask') await connectMetamask();
-      } else {
-        await _connected();
-      }
+    if (!wallet.initialized) {
+      console.log('Initialize wallet using', wallet.source);
+      if (wallet.source == 'walletconnect') await connectWalletConnect();
+      else if (wallet.source == 'metamask') await connectMetamask();
+      wallet.initialized = true;
+    } else {
+      await _connected();
     }
   } catch (err) {
-    wallet.connected = false;
     console.warn(err);
   }
-  wallet.initialized = true;
 
   async function _connected() {
     const { address, isConnected } = getAccount();
@@ -103,8 +84,8 @@ export default async function() {
   }
 
   async function fetchBalance() {
-    const bal = await signer.getBalance();
-    return BN.from(bal).toString();
+    const bal = await fetchBalance();
+    return BN.from(bal.value).toString();
   }
 
   async function refreshBalance() {
@@ -126,71 +107,39 @@ export default async function() {
     }
   });
 
-  async function switchNetwork(chainId) {
-    console.log('Switch to network', chainId);
-    /*
-    if (wallet.source == 'walletconnect') {
-      // TODO
-    } else if (wallet.source == 'coinbase') {
-      const cbProvider = coinbaseWallet.makeWeb3Provider();
-      await cbProvider.switchEthereumChain(80001);
-    } else if (wallet.source == 'metamask') {
-      await provider.send('wallet_switchEthereumChain', [{ chainId }]);
-    }
-    */
-  }
-
   async function connectMetamask() {
     console.log('Connect metamask');
+    wallet.connecting = true;
     wallet.source = 'metamask';
     await connect({
       connector: new MetaMaskConnector()
     });
+    wallet.connecting = false;
     await _connected();
     registerEventListeners();
   }
 
+  const walletConnectURI = ref(null);
   async function connectWalletConnect() {
-    return new Promise(async (resolve, reject) => {
-      console.log('Connect WalletConnect');
-      $amplitude.track('ConnectWalletConnnect');
-      wallet.source = 'walletconnect';
+    console.log('Connect WalletConnect');
+    $amplitude.track('ConnectWalletConnnect');
+    wallet.connecting = true;
+    wallet.source = 'walletconnect';
 
-      const connector = new WalletConnectConnector({
-        options: {
-          qrcode: false
-        }
-      });
-
-      connector.on('message', async msg => {
-        const wc = await connector.getProvider();
-        resolve(wc.connector.uri);
-      });
-
-      setTimeout(() => reject('WalletConnect timed out'), 10000);
-      await connect({ connector });
-      await _connected();
-      registerEventListeners();
+    const connector = new WalletConnectConnector({
+      options: {
+        qrcode: false
+      }
     });
-  }
 
-  async function connectCoinbaseWallet() {
-    return new Promise(async (resolve, reject) => {
-      console.log('Connect Coinbase Wallet');
-      $amplitude.track('ConnectCoinbaseWallet');
-      wallet.source = 'coinbase';
-      const connector = new CoinbaseWalletConnector({
-         options: {
-            appName: 'Chessloun.ge',
-            headlessMode: true
-          },
-      });
-      const cb = await connector.getProvider();
-      resolve(cb.qrUrl);
-      await connect({ connector });
-      await _connected();
-      registerEventListeners();
+    connector.on('message', async msg => {
+      const wc = await connector.getProvider();
+      walletConnectURI.value = wc.connector.uri;
     });
+
+    await connect({ connector });
+    await _connected();
+    registerEventListeners();
   }
 
   async function disconnectWallet() {
@@ -232,17 +181,15 @@ export default async function() {
 
   return {
     wallet,
-    //provider,
+    provider,
     signer,
     currentNetwork,
     currentBalance,
     fetchBalance,
     refreshBalance,
-    switchNetwork,
     connectMetamask,
+    walletConnectURI,
     connectWalletConnect,
-    connectCoinbaseWallet,
-    disconnectWallet,
-    registerEventListeners,
+    disconnectWallet
   };
 }
