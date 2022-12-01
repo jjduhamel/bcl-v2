@@ -25,35 +25,39 @@ const props = defineProps({
 
 <template lang='pug'>
 div(id='wallet-status')
-  div(id='row')
-    div(id='current-player')
-      img(class='h-4' src='~assets/icons/bytesize/user.svg')
-      div(v-if='connected') {{ truncAddress(address) }}
+  div(id='account' class='py-0.5 flex items-center')
+    img(class='h-4' src='~assets/icons/bytesize/user.svg')
+    div(class='flex-1')
+      div(v-if='connected') {{ truncAddress(address, 4) }}
       div(v-else) Disconnected
-    div(id='wallet-controls')
-      button(
-        title='Disconnect'
-        v-if='connected'
-        @click='emit("disconnect")'
-      )
-        img(class='h-4' src='~assets/icons/bytesize/lock.svg')
-  div(id='row')
-    div(id='current-network')
-      img(class='h-4' src='~assets/icons/bytesize/link.svg')
+    button(
+      title='Disconnect'
+      v-if='connected'
+      @click='emit("disconnect")'
+    )
+      img(class='h-4' src='~assets/icons/bytesize/lock.svg')
+  div(id='network' class='py-0.5 flex items-center')
+    img(class='h-4' src='~assets/icons/bytesize/link.svg')
+    div(class='flex-1')
       div(v-if='connected') {{ network }}
       div(v-else) ---
-    div(id='wallet-balance')
-      div {{ balance }}
+    button(
+      id='change-network'
+      v-if='connected'
+      title='Change Network'
+    )
+      img(class='h-4' src='~assets/icons/bytesize/ellipsis-horizontal.svg')
 </template>
 
 <style lang='sass'>
 #wallet-status
   @apply text-sm
 
-  #row
-    @apply py-0.5 flex items-end
-
+  div
     img
+      @apply h-4 mb-0.5
+
+    img:first-child
       @apply mr-1
 
     button
@@ -61,18 +65,14 @@ div(id='wallet-status')
       cursor: pointer
 
       img
-        @apply m-0 ml-1 mb-0.5
+        display: none
 
       &:disabled
         @apply text-gray-400 border-gray-400
         filter: invert(40%)
 
-    div
-      @apply flex
-
-    #current-player, #current-network
-      @apply flex-shrink
-
-    #wallet-controls, #wallet-balance
-      @apply flex-1 justify-end
+    &:hover
+      button
+        img
+          display: block
 </style>

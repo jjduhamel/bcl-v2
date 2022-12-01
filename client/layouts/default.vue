@@ -90,11 +90,8 @@ html, body, #__nuxt, #app
         @apply mx-1 mt-2 text-center text-2xl font-bold
 
       #wallet
-        @apply p-1 mx-1 my-2
+        @apply px-2 py-1 mx-1 my-2
         @extend .bordered
-
-        #row
-          @apply px-0.5 flex justify-end
 
       #navigation
         @apply mx-2 flex flex-col

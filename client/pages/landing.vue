@@ -3,27 +3,45 @@ const {
   wallet,
   connectMetamask,
   connectWalletConnect,
-  walletConnectURI
+  connectCoinbaseWallet,
 } = await useWallet();
 
 if (wallet.connected) {
   await navigateTo('/lounge');
 }
 
-watch(walletConnectURI, (newURI, oldURI) => {
-  if (!oldURI && newURI) {
-    showWCModal.value = true;
-  }
-});
+const showWCModal = ref(false);
+const walletConnectURI = ref(null);
+const wcIsConnecting = ref(false);
+async function startWalletConnect() {
+  walletConnectURI.value = await connectWalletConnect();
+  wcIsConnecting.value = true;
+  showWCModal.value = true;
+}
+
+const showCBModal = ref(false);
+const cbWalletUri = ref(null);
+const cbIsConnecting = ref(false);
+async function startCoinbaseWallet() {
+  cbWalletUri.value = await connectCoinbaseWallet();
+  cbIsConnecting.value = true;
+  showCBModal.value = true;
+}
 
 watch(() => wallet.connected, (isCon, wasCon) => {
   if (!wasCon && isCon) {
-    showWCModal.value = false;
+    if (wcIsConnecting.value) {
+      showWCModal.value = false;
+      wcIsConnecting.value = false;
+    }
+
+    if (cbIsConnecting.value) {
+      showCBModal.value = false;
+      cbIsConnecting.value = false;
+    }
     navigateTo('/lounge');
   }
 });
-
-const showWCModal = ref(false);
 </script>
 
 <template lang='pug'>
@@ -39,15 +57,28 @@ NuxtLayout(name='game')
         button(@click='connectMetamask')
           img(src='@/assets/icons/metamask-32px.png')
           div Metamask
-        button(@click='connectWalletConnect')
+        button(@click='startWalletConnect')
           img(src='@/assets/icons/walletconnect.png')
           div WalletConnect
+        button(@click='startCoinbaseWallet')
+          img(src='@/assets/icons/cbwallet-round.png')
+          div Coinbase
     client-only
-      WalletConnectModal(
+      QRModal(
         v-if='showWCModal'
-        :walletConnectURI='walletConnectURI'
+        title='Wallet Connect'
+        :uri='walletConnectURI'
         @close='() => showWCModal = false'
       )
+        div Please scan this QR Code using a WalletConnect enabled wallet.
+
+      QRModal(
+        v-if='showCBModal'
+        title='Coinbase Wallet'
+        :uri='cbWalletUri'
+        @close='() => showCBModal = false'
+      )
+        div Please scan this QR Code using Coinbase Wallet.
 </template>
 
 <style lang='sass'>
@@ -62,7 +93,7 @@ NuxtLayout(name='game')
       @apply border border-2 border-black rounded-xl
 
       img
-        @apply h-5
+        @apply h-4
 
       div
         @apply flex-1

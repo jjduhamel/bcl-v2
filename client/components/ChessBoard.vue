@@ -53,6 +53,9 @@ onMounted(() => {
       color: playerColor,
       showDests: true,
     },
+    premovable: {
+      enabled: false
+    },
     events: {
       move: (from, to, capture) => emit('moved', from, to, capture)
     }
