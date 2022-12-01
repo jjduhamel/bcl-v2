@@ -18,6 +18,7 @@ export default function() {
   }
 
   function truncAddress(addr, padstart, padstop) {
+    if (!addr) return '???';
     if (!padstart) padstart = 3;
     if (!padstop) padstop = padstart;
     if (addr.match(/0x[a-fA-F0-9]{40}/)) {

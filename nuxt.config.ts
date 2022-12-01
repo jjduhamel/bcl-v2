@@ -20,6 +20,7 @@ export default defineNuxtConfig({
       amplitudeId: process.env.AMPLITUDE_API_KEY,
       bugsnagId: process.env.BUGSNAG_API_KEY,
       infuraId: process.env.INFURA_API_KEY,
+      alchemyId: process.env.ALCHEMY_API_KEY,
       lobbyAddress: {
         local: process.env.LOCAL_LOBBY_ADDR,
         ethereum: process.env.HOMESTEAD_LOBBY_ADDR,

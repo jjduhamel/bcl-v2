@@ -43,9 +43,10 @@ NuxtLayout(name='game')
           img(src='@/assets/icons/walletconnect.png')
           div WalletConnect
     client-only
-      WalletConnectModal(
+      QRModal(
+        title='WalletConnect'
         v-if='showWCModal'
-        :walletConnectURI='walletConnectURI'
+        :uri='walletConnectURI'
         @close='() => showWCModal = false'
       )
 </template>

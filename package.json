@@ -15,7 +15,7 @@
     "@bugsnag/js": "^7.18.0",
     "@diadal/vue3-qr-code-styling": "^1.4.6",
     "@pinia/nuxt": "^0.4.5",
-    "@walletconnect/ethereum-provider": "1.8.0",
+    "@wagmi/core": "^0.7.7",
     "bytesize-icons": "^1.4.0",
     "chess.js": "^1.0.0-alpha.0",
     "chessground": "^8.3.5",

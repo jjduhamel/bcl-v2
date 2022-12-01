@@ -1,18 +1,23 @@
 import _ from 'lodash';
-import { ethers, Contract, BigNumber as BN } from 'ethers';
+import { BigNumber as BN } from 'ethers';
+import { fetchSigner, getContract } from '@wagmi/core';
 import LobbyContract from '../contracts/Lobby.sol/Lobby.json';
 import EngineContract from '../contracts/ChessEngine.sol/ChessEngine.json';
 import useLobbyStore from '../store/lobby';
 
 export default async function() {
   const { $amplitude } = useNuxtApp();
-  const lobby = useLobbyStore();
-  const { wallet, provider, signer, refreshBalance } = await useWallet();
+  const { wallet, refreshBalance } = await useWallet();
   const { playAudioClip } = useAudioUtils();
+  const lobby = useLobbyStore();
 
-  const lobbyContract = new Contract(lobby.address
-                                   , LobbyContract.abi
-                                   , signer || provider);
+  if (!wallet.connected) throw Error('Wallet isn\'t connected');
+  const signer = await fetchSigner();
+  const lobbyContract = getContract({
+    address: lobby.address,
+    abi: LobbyContract.abi,
+    signerOrProvider: signer
+  });
 
   const {
     TouchRecord,
@@ -55,9 +60,11 @@ export default async function() {
   }
 
   function chessEngine(gameId) {
-    return new Contract(lobby.engineAddress(gameId)
-                      , EngineContract.abi
-                      , signer || provider);
+    return getContract({
+      address: lobby.engineAddress(gameId),
+      abi: EngineContract.abi,
+      signerOrProvider: signer
+    });
   }
 
   async function fetchChessEngine(gameId) {

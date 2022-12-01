@@ -1,6 +1,4 @@
 <script setup>
-import _ from 'lodash';
-
 definePageMeta({
   middleware: [ 'auth' ]
 });
@@ -20,6 +18,10 @@ const {
 } = await useLobby();
 
 const { isAddress, isENSDomain, lookupENS } = useEthUtils();
+
+if (!lobby.initialized) {
+  initPlayerLobby();
+}
 
 const searchText = ref(null);
 const lookupAddress = ref(null);
@@ -64,27 +66,23 @@ async function doSendChallenge(args) {
 }
 
 async function doAcceptChallenge() {
-  await acceptChallenge();
+  const gameId = pendingChallenge.value.id;
+  await acceptChallenge(gameId);
 }
 
 async function doDeclineChallenge() {
-  await acceptChallenge();
+  const gameId = pendingChallenge.value.id;
+  await declineChallenge(gameId);
 }
 
-async function doModifyChallenge(gameId, gameData) {
+async function doModifyChallenge(gameData) {
+  const gameId = pendingChallenge.value.id;
   const { startAsWhite, timePerMove, wagerAmount, wagerToken } = gameData;
   await modifyChallenge(gameId, startAsWhite, timePerMove, wagerAmount);
 }
 
-if (wallet.connected && !lobby.initialized) {
-  initPlayerLobby();
-}
-
 createListeners();
-
-onUnmounted(() => {
-  destroyListeners();
-});
+onUnmounted(destroyListeners);
 </script>
 
 <template lang='pug'>
@@ -145,9 +143,9 @@ section
         id='pending-challenge'
         :loading='txPending'
         v-bind='pendingChallenge'
-        @accept='() => doAcceptChallenge(pendingChallenge.id).then(hidePendingChallenge)'
-        @decline='() => doDeclineChallenge(pendingChallenge.id).then(hidePendingChallenge)'
-        @modify='data => doModifyChallenge(pendingChallenge.id, data)'
+        @accept='() => doAcceptChallenge().then(hidePendingChallenge)'
+        @decline='() => doDeclineChallenge().then(hidePendingChallenge)'
+        @modify='data => doModifyChallenge(data)'
       )
 </template>
 
