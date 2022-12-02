@@ -42,6 +42,7 @@
     "nuxt": "^3.0.0-rc.14",
     "postcss": "^8.4.18",
     "pug": "^3.0.2",
+    "rollup-plugin-polyfill-node": "^0.11.0",
     "sass": "^1.55.0",
     "vue-cli-plugin-pug": "~2.0.0"
   }

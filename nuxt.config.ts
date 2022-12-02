@@ -1,7 +1,9 @@
 import path from 'path';
 import { NodeGlobalsPolyfillPlugin } from '@esbuild-plugins/node-globals-polyfill';
 import { NodeModulesPolyfillPlugin } from '@esbuild-plugins/node-modules-polyfill';
+import rollupNodePolyfill from 'rollup-plugin-polyfill-node';
 
+console.log('env', process.env.NODE_ENV);
 // https://v3.nuxtjs.org/api/configuration/nuxt.config
 export default defineNuxtConfig({
   srcDir: 'client/',
@@ -42,7 +44,6 @@ export default defineNuxtConfig({
     }
   },
   vite: {
-    // Needed to make @walletconnect/web3-provider work
     // https://github.com/nuxt/framework/discussions/4393
     optimizeDeps: {
       esbuildOptions: {
@@ -54,9 +55,31 @@ export default defineNuxtConfig({
             process: true,
             buffer: true
           }),
-          NodeModulesPolyfillPlugin()
+          // Seems to be breaking rollupNodePolyfill
+          //NodeModulesPolyfillPlugin()
         ],
       },
-    }
+    },
+    build: {
+      sourcemap: true,
+      // https://github.com/blocknative/web3-onboard/issues/762#issuecomment-997246672
+      // https://stackoverflow.com/questions/71645151/cannnot-initialize-coinbasesdk-in-nuxt3-project
+      plugins: [
+        ...(process.env.NODE_ENV == 'development' ? [
+          rollupNodePolyfill({
+            include: [
+              'node_modules/**/*.js',
+              new RegExp('node_modules/.vite/.*js')
+            ]
+          })
+        ] : [])
+      ],
+      rollupOptions: {
+        plugins: [ rollupNodePolyfill() ]
+      },
+      commonjsOptions: {
+        transformMixedEsModules: true
+      }
+    },
   }
 })
