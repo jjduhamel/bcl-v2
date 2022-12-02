@@ -3,8 +3,11 @@ const {
   wallet,
   currentNetwork,
   currentBalance,
-  disconnectWallet
+  disconnectWallet,
+  changeNetwork,
 } = await useWallet();
+
+const showChangeNetworkModal = ref(false);
 </script>
 
 <template lang='pug'>
@@ -22,6 +25,7 @@ div(id='app')
             :network='currentNetwork'
             :balance='currentBalance'
             @disconnect='disconnectWallet'
+            @changeNetwork='() => showChangeNetworkModal = true'
           )
         div(id='navigation')
           NuxtLink(to='/lounge')
@@ -44,6 +48,12 @@ div(id='app')
         img(class='w-3' src='~assets/icons/bytesize/twitter.svg')
       a(href='https://github.com/jjduhamel/bcl-v2')
         img(class='w-3' src='~assets/icons/bytesize/github.svg')
+
+  div(id='modals')
+    SwitchNetworkModal(
+      v-if='showChangeNetworkModal'
+      @close='() => showChangeNetworkModal = false'
+    )
 </template>
 
 <style lang='sass'>

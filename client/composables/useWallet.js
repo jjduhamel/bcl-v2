@@ -6,10 +6,11 @@ import {
   connect,
   disconnect,
   fetchSigner,
+  fetchBalance,
   getProvider,
   getAccount,
   getNetwork,
-  fetchBalance,
+  switchNetwork,
   watchAccount,
   watchNetwork,
 } from '@wagmi/core';
@@ -65,6 +66,7 @@ export default async function() {
       if (!wallet.initialized) {
         console.log('Initialize wallet using', wallet.source);
         if (wallet.source == 'walletconnect') await connectWalletConnect();
+        else if (wallet.source == 'coinbase') await connectCoinbaseWallet();
         else if (wallet.source == 'metamask') await connectMetamask();
       } else {
         await _connected();
@@ -75,6 +77,38 @@ export default async function() {
     console.warn(err);
   }
   wallet.initialized = true;
+
+  async function fetchCurrentBalance(player) {
+    if (!player) player = wallet.address;
+    const bal = await fetchBalance({
+      address: player
+    });
+    return BN.from(bal).toString();
+  }
+
+  async function refreshBalance() {
+    wallet.balance = await fetchCurrentBalance();
+  }
+
+  const currentBalance = computed(() => {
+    // TODO Native token
+    return `${(+formatEther(wallet.balance)).toFixed(3)} ETH`;
+  });
+
+  const currentNetwork = computed(() => {
+    switch (wallet.network) {
+      case 'homestead': return 'Ethereum';
+      case 'goerli': return 'Goerli';
+      case 'matic': return 'Polygon';
+      case 'maticmum': return 'Mumbai';
+      default: return wallet.network;
+    }
+  });
+
+  async function changeNetwork(chainId) {
+    console.log('Switch to network', chainId);
+    await switchNetwork({ chainId });
+  }
 
   async function _connected() {
     const { address, isConnected } = getAccount();
@@ -100,44 +134,6 @@ export default async function() {
     wallet.address = null;
     wallet.network = null;
     wallet.balance = 0;
-  }
-
-  async function fetchBalance() {
-    const bal = await signer.getBalance();
-    return BN.from(bal).toString();
-  }
-
-  async function refreshBalance() {
-    wallet.balance = await fetchBalance();
-  }
-
-  const currentBalance = computed(() => {
-    // TODO Native token
-    return `${(+formatEther(wallet.balance)).toFixed(3)} ETH`;
-  });
-
-  const currentNetwork = computed(() => {
-    switch (wallet.network) {
-      case 'homestead': return 'Ethereum';
-      case 'goerli': return 'Goerli';
-      case 'matic': return 'Polygon';
-      case 'maticmum': return 'Mumbai';
-      default: return wallet.network;
-    }
-  });
-
-  async function switchNetwork(chainId) {
-    console.log('Switch to network', chainId);
-    /*
-    if (wallet.source == 'walletconnect') {
-      // TODO
-    } else if (wallet.source == 'coinbase') {
-      const cbProvider = coinbaseWallet.makeWeb3Provider();
-      await cbProvider.switchEthereumChain(80001);
-    } else if (wallet.source == 'metamask') {
-      await provider.send('wallet_switchEthereumChain', [{ chainId }]);
-    }
-    */
   }
 
   async function connectMetamask() {
@@ -232,13 +228,14 @@ export default async function() {
 
   return {
     wallet,
+    chains,
     //provider,
     signer,
     currentNetwork,
     currentBalance,
     fetchBalance,
     refreshBalance,
-    switchNetwork,
+    changeNetwork,
     connectMetamask,
     connectWalletConnect,
     connectCoinbaseWallet,

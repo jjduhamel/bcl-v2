@@ -1,7 +1,7 @@
 <script setup>
 const { truncAddress } = useEthUtils();
 
-const emit = defineEmits([ 'disconnect' ]);
+const emit = defineEmits([ 'disconnect', 'changeNetwork' ]);
 
 const props = defineProps({
   connected: {
@@ -45,6 +45,7 @@ div(id='wallet-status')
       id='change-network'
       v-if='connected'
       title='Change Network'
+      @click='emit("changeNetwork")'
     )
       img(class='h-4' src='~assets/icons/bytesize/ellipsis-horizontal.svg')
 </template>
@@ -64,6 +65,8 @@ div(id='wallet-status')
       all: unset
       cursor: pointer
 
+  #network
+    button
       img
         display: none
 
