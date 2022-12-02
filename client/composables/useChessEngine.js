@@ -1,5 +1,6 @@
 import _ from 'lodash';
 import { Chess, SQUARES } from 'chess.js';
+import { fetchBlockNumber } from '@wagmi/core';
 
 export default async function(gameId) {
   const { $amplitude } = useNuxtApp();
@@ -75,7 +76,6 @@ export default async function(gameId) {
     } else {
       san = move.san;
     }
-    moves.value = [ ...moves.value, san ];
     fen.value = chess.fen();
     return san;
   }
@@ -90,7 +90,10 @@ export default async function(gameId) {
     moves.value = [];
     const cur = await gameContract.moves(gameId);
     console.log('Fetched', cur.length, 'moves');
-    _.forEach(cur, tryMoveSAN);
+    _.forEach(cur, san => {
+      tryMoveSAN(san);
+      moves.value = [ ...moves.value, san ];
+    });
   }
 
 
@@ -104,6 +107,7 @@ export default async function(gameId) {
       gameContract.once(eventFilter, async (id, player, san)  => {
         console.log('Move confirmed', san);
         resolve(id, player, san);
+        await fetchGameData(gameId);
       });
     } catch(err) {
       console.error(err);
@@ -304,12 +308,14 @@ export default async function(gameId) {
 
   async function registerListeners() {
     console.log('Register listeners for game', gameId);
-    let lastEvent = await provider.getBlockNumber();
+    let lastEvent = await fetchBlockNumber();
     gameContract.on(MoveSAN(gameId), async (id, player, san, ev) => {
+      console.log('Received move from', player);
       $amplitude.track('MoveConfirmed', { gameId, player, san });
       // Toss duplicate events
       if (ev.blockNumber <= lastEvent) return;
       lastEvent = ev.blockNumber;
+
       // If these come from the current player, then we already tried
       // the move and it succeeded.  Trying again would throw an error.
       // In the case of spectators, both players moves get processed.
@@ -317,9 +323,10 @@ export default async function(gameId) {
         console.log('Received move', san);
         const move = tryMoveSAN(san);
       }
+
       moves.value = [ ...moves.value, san ];
-      playAudioClip('other/Blaster');
       await fetchGameData(gameId);
+      playAudioClip('other/Blaster');
     });
 
     gameContract.on(GameOver(gameId), async (id, outcome, winner) => {

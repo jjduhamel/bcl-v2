@@ -11,7 +11,8 @@ export default defineNuxtConfig({
   css: [ '@/assets/styles/tailwind.css' ],
   app: {
     head: {
-      title: 'Chessloun.ge'
+      title: 'Chessloun.ge',
+      link: [{ rel: 'icon', type: 'image/x-icon', href: '/favicon.ico?v1' }]
     }
   },
   router: {
