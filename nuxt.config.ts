@@ -3,13 +3,17 @@ import { NodeGlobalsPolyfillPlugin } from '@esbuild-plugins/node-globals-polyfil
 import { NodeModulesPolyfillPlugin } from '@esbuild-plugins/node-modules-polyfill';
 import rollupNodePolyfill from 'rollup-plugin-polyfill-node';
 
-console.log('env', process.env.NODE_ENV);
 // https://v3.nuxtjs.org/api/configuration/nuxt.config
 export default defineNuxtConfig({
   srcDir: 'client/',
   target: 'static',
   ssr: false,
   css: [ '@/assets/styles/tailwind.css' ],
+  router: {
+    options: {
+      hashMode: 'true',
+    }
+  },
   modules: [
     [ '@pinia/nuxt',
       { autoImports: [ 'defineStore' ] }
@@ -44,22 +48,6 @@ export default defineNuxtConfig({
     }
   },
   vite: {
-    // https://github.com/nuxt/framework/discussions/4393
-    optimizeDeps: {
-      esbuildOptions: {
-        define: {
-          global: 'globalThis',
-        },
-        plugins: [
-          NodeGlobalsPolyfillPlugin({
-            process: true,
-            buffer: true
-          }),
-          // Seems to be breaking rollupNodePolyfill
-          //NodeModulesPolyfillPlugin()
-        ],
-      },
-    },
     build: {
       sourcemap: true,
       // https://github.com/blocknative/web3-onboard/issues/762#issuecomment-997246672
@@ -80,6 +68,22 @@ export default defineNuxtConfig({
       commonjsOptions: {
         transformMixedEsModules: true
       }
+    },
+    // https://github.com/nuxt/framework/discussions/4393
+    optimizeDeps: {
+      esbuildOptions: {
+        define: {
+          global: 'globalThis',
+        },
+        plugins: [
+          NodeGlobalsPolyfillPlugin({
+            process: true,
+            buffer: true
+          }),
+          // Seems to be breaking rollupNodePolyfill
+          //NodeModulesPolyfillPlugin()
+        ],
+      },
     },
   }
 })

@@ -119,10 +119,11 @@ export default async function() {
     wallet.network = net.chain.network;
     wallet.chainId = net.chain.id;
     wallet.connected = true;
+    console.log('Wallet connected');
     // Initialize amplitude session
-    await $amplitude.setUserId(wallet.address);
-    await $amplitude.setGroup('network', wallet.network);
-    await $amplitude.setGroup('source', wallet.source);
+    $amplitude.setUserId(wallet.address);
+    $amplitude.setGroup('network', wallet.network);
+    $amplitude.setGroup('source', wallet.source);
     $amplitude.track('WalletConnected');
   }
 
