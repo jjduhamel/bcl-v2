@@ -9,6 +9,11 @@ export default defineNuxtConfig({
   target: 'static',
   ssr: false,
   css: [ '@/assets/styles/tailwind.css' ],
+  app: {
+    head: {
+      title: 'Chessloun.ge'
+    }
+  },
   router: {
     options: {
       hashMode: 'true',
