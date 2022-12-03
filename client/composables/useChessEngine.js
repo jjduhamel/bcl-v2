@@ -43,11 +43,7 @@ export default async function(gameId) {
     return { chess, fen, legalMoves, GameState, GameOutcome };
   }
 
-  const {
-    wallet,
-    provider,
-    refreshBalance
-  } = await useWallet();
+  const { wallet, refreshBalance } = await useWallet();
 
   const {
     lobby,
