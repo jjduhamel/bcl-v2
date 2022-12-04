@@ -78,7 +78,7 @@ contract WageringDisabledTest is LobbyTest {
 
   function _testPlayerLobby(address player) private returns (uint[] memory) {
     changePrank(player);
-    uint[] memory challenges = lobby.challenges();
+    uint[] memory challenges = lobby.challenges(player);
     assertEq(challenges.length, 1);
     return challenges;
   }
@@ -111,7 +111,7 @@ contract WageringEnabledTest is LobbyTest {
 
   function _testPlayerLobby(address player) private returns (uint[] memory) {
     changePrank(player);
-    uint[] memory challenges = lobby.challenges();
+    uint[] memory challenges = lobby.challenges(player);
     assertEq(challenges.length, 1);
     return challenges;
   }
