@@ -7,7 +7,14 @@ import '@oz/proxy/ERC1967/ERC1967Proxy.sol';
 import '@src/Lobby.sol';
 import '@src/ChessEngine.sol';
 
+contract WhoAmI {
+  function who() public returns (address) {
+    return msg.sender;
+  }
+}
+
 abstract contract LobbyTest is Test, ILobby, IChessEngine {
+  WhoAmI me;
   Lobby lobby;
   ChessEngine engine;
   address arbiter;
@@ -42,9 +49,34 @@ abstract contract LobbyTest is Test, ILobby, IChessEngine {
     vm.deal(p2, 100 ether);
     p3 = makeAddr('player3');
     vm.deal(p3, 100 ether);
+    me = new WhoAmI();
     vm.startPrank(arbiter);
     _initializeLobby();
     _initializeEngine();
+  }
+
+  function totalWagers(address player) internal returns (uint) {
+    address i = me.who();
+    changePrank(player);
+    uint wagers = lobby.grossWagers();
+    changePrank(i);
+    return wagers;
+  }
+
+  function totalWinnings(address player) internal returns (uint) {
+    address i = me.who();
+    changePrank(player);
+    uint winnings = lobby.grossWinnings();
+    changePrank(i);
+    return winnings;
+  }
+
+  function totalLosses(address player) internal returns (uint) {
+    address i = me.who();
+    changePrank(player);
+    uint losses = lobby.grossLosses();
+    changePrank(i);
+    return losses;
   }
 }
 

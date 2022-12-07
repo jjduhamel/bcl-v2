@@ -2,8 +2,8 @@
 pragma solidity >=0.4.22 <0.9.0;
 
 interface IChessEngine {
-  enum GameState { Pending, Started, Draw, Finished, Review, Migrated }
-  enum GameOutcome { Undecided, Declined, WhiteWon, BlackWon, Draw }
+  enum GameState { Pending, Declined, Started, Draw, Finished, Review, Migrated }
+  enum GameOutcome { Undecided, WhiteWon, BlackWon, Draw }
 
   struct GameData {
     bool exists;
@@ -25,8 +25,8 @@ interface IChessEngine {
                   , address indexed whitePlayer
                   , address indexed blackPlayer);
   event GameOver(uint indexed gameId
-               , GameOutcome indexed outcome
-               , address indexed winner);
+               , address indexed winner
+               , address indexed loser);
   event PlayerMoved(uint indexed gameId
                   , address indexed sender
                   , address indexed receiver);

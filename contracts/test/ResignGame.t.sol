@@ -9,19 +9,12 @@ contract ResignGameTest is ChessGameTest {
     engine.acceptChallenge{ value: deposit }(gameId);
   }
 
-  modifier testResign(GameOutcome outcome, address winner) {
-    vm.expectEmit(true, true, true, true, address(engine));
-    emit GameOver(gameId, outcome, winner);
-    _;
-    GameData memory gameData = engine.game(gameId);
-    assertTrue(gameData.state == GameState.Finished);
-    assertTrue(gameData.outcome == outcome);
-  }
-
   function testResignAsWhite() public
     testBalanceDelta(p1, 0)
     testBalanceDelta(p2, int(2*wager))
-    testResign(GameOutcome.BlackWon, p2)
+    testOutcome(GameOutcome.BlackWon)
+    testWinner(p2)
+    testLoser(p1)
   {
     changePrank(p1);
     engine.resign(gameId);
@@ -30,7 +23,9 @@ contract ResignGameTest is ChessGameTest {
   function testResignAsBlack() public
     testBalanceDelta(p1, int(2*wager))
     testBalanceDelta(p2, 0)
-    testResign(GameOutcome.WhiteWon, p1)
+    testOutcome(GameOutcome.WhiteWon)
+    testWinner(p1)
+    testLoser(p2)
   {
     changePrank(p2);
     engine.resign(gameId);

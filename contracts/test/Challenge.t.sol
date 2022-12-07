@@ -43,11 +43,14 @@ abstract contract ChallengeTest is LobbyTest {
 
   modifier testGameStarted(uint gameId, address player) {
     uint nGames = lobby.gamesStarted(player);
+    uint wagers = totalWagers(player);
     _;
+    changePrank(player);
     uint[] memory games = lobby.games(player);
     ChessEngine.GameData memory gameData = engine.game(gameId);
-    assertEq(lobby.gamesStarted(player), nGames+1);
     assertEq(gameId, games[nGames]);
+    assertEq(lobby.gamesStarted(player), nGames+1);
+    assertEq(totalWagers(player), wagers+gameData.wagerAmount);
     assertTrue(gameData.state == IChessEngine.GameState.Started);
     assertTrue(gameData.outcome == IChessEngine.GameOutcome.Undecided);
   }

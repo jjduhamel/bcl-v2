@@ -19,38 +19,49 @@ contract ResolveDisputeTest is ChessGameTest {
     _;
   }
 
-  modifier testResolved(GameOutcome outcome) {
+  modifier testResolved() {
+    address i = me.who();
     changePrank(arbiter);
     uint nDisputes = lobby.disputes().length;
+    changePrank(i);
     _;
     changePrank(arbiter);
-    GameData memory gameData = engine.game(gameId);
-    assertTrue(gameData.state == GameState.Finished);
-    assertTrue(gameData.outcome == outcome);
     uint[] memory disputes = lobby.disputes();
     assertEq(disputes.length, nDisputes-1);
   }
 
   function testResolveDisputeForWhite() public
-    testResolved(GameOutcome.WhiteWon)
+    testOutcome(GameOutcome.WhiteWon)
     testBalanceDelta(p1, int(2*wager))
     testBalanceDelta(p2, 0)
+    testWinner(p1)
+    testLoser(p2)
+    testResolved
+    expectDisputeResolved(p1, p2)
   {
     engine.resolveDispute(gameId, GameOutcome.WhiteWon);
   }
 
   function testResolveDisputeForBlack() public
-    testResolved(GameOutcome.BlackWon)
+    testOutcome(GameOutcome.BlackWon)
     testBalanceDelta(p1, 0)
     testBalanceDelta(p2, int(2*wager))
+    testLoser(p1)
+    testWinner(p2)
+    testResolved
+    expectDisputeResolved(p1, p2)
   {
     engine.resolveDispute(gameId, GameOutcome.BlackWon);
   }
 
   function testResolveDisputeAsDraw() public
-    testResolved(GameOutcome.Draw)
+    testOutcome(GameOutcome.Draw)
     testBalanceDelta(p1, int(wager))
     testBalanceDelta(p2, int(wager))
+    testDraw(p1)
+    testDraw(p2)
+    testResolved
+    expectDisputeResolved(p1, p2)
   {
     engine.resolveDispute(gameId, GameOutcome.Draw);
   }

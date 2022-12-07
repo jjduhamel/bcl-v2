@@ -2,7 +2,7 @@
 src = 'contracts/src/'
 test = 'contracts/test/'
 libs = [ 'contracts/lib/' ]
-via_ir = true
+#via_ir = true
 #sparse_mode = true
 
 [rpc_endpoints]

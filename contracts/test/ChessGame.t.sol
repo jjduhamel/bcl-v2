@@ -28,4 +28,53 @@ abstract contract ChessGameTest is ChallengeTest {
     if (moves.length == 0) return;
     assertEq(moves[moves.length-1], san);
   }
+
+  modifier expectGameOver(address winner, address loser) {
+    vm.expectEmit(true, true, true, true, address(engine));
+    emit GameOver(gameId, winner, loser);
+    _;
+  }
+
+  modifier testOutcome(GameOutcome outcome) {
+    _;
+    GameData memory gameData = engine.game(gameId);
+    assertTrue(gameData.state == GameState.Finished);
+    assertTrue(gameData.outcome == outcome);
+  }
+
+  modifier testWinner(address player) {
+    uint wins = lobby.totalWins(player);
+    uint winnings = totalWinnings(player);
+    _;
+    GameData memory gameData = engine.game(gameId);
+    assertTrue(gameData.state == GameState.Finished);
+    assertEq(engine.winner(gameId), player);
+    assertEq(lobby.totalWins(player), wins+1);
+    assertEq(totalWinnings(player), winnings+gameData.wagerAmount);
+  }
+
+  modifier testLoser(address player) {
+    uint lost = lobby.totalLosses(player);
+    uint losses = totalLosses(player);
+    _;
+    GameData memory gameData = engine.game(gameId);
+    assertTrue(gameData.state == GameState.Finished);
+    assertEq(engine.loser(gameId), player);
+    assertEq(lobby.totalLosses(player), lost+1);
+    assertEq(totalLosses(player), losses+gameData.wagerAmount);
+  }
+
+  modifier testDraw(address player) {
+    uint draws = lobby.totalDraws(player);
+    uint winnings = totalWinnings(player);
+    uint losses = totalLosses(player);
+    _;
+    GameData memory gameData = engine.game(gameId);
+    assertTrue(gameData.state == GameState.Finished);
+    assertEq(engine.winner(gameId), address(0));
+    assertEq(engine.loser(gameId), address(0));
+    assertEq(lobby.totalDraws(player), draws+1);
+    assertEq(totalWinnings(player), winnings);
+    assertEq(totalLosses(player), losses);
+  }
 }

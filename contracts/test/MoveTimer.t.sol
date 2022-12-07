@@ -46,15 +46,14 @@ contract ClaimVictoryTest is ChessGameTest {
   function testClaimVictoryAsWinner() public
     testBalanceDelta(p1, int(2*wager))
     testBalanceDelta(p2, 0)
+    testOutcome(GameOutcome.WhiteWon)
+    testWinner(p1)
+    testLoser(p2)
+    expectGameOver(p1, p2)
   {
     skip(timePerMove+1);
     assertTrue(engine.timeDidExpire(gameId));
-    vm.expectEmit(true, true, true, true, address(engine));
-    emit GameOver(gameId, GameOutcome.WhiteWon, p1);
     engine.claimVictory(gameId);
-    GameData memory gameData = engine.game(gameId);
-    assertTrue(gameData.state == GameState.Finished);
-    assertTrue(gameData.outcome == GameOutcome.WhiteWon);
   }
 
   function testClaimVictoryAsLoser() public {

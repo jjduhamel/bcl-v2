@@ -21,6 +21,9 @@ contract DrawGameTest is ChessGameTest {
   }
 
   function testAcceptDraw() public
+    testOutcome(GameOutcome.Draw)
+    testDraw(p1)
+    testDraw(p2)
     testBalanceDelta(p1, int(wager))
     testBalanceDelta(p2, int(wager))
   {
