@@ -3,8 +3,8 @@ pragma solidity >=0.4.22 <0.9.0;
 import '@oz-upgradeable/proxy/utils/Initializable.sol';
 import '@oz-upgradeable/proxy/utils/UUPSUpgradeable.sol';
 import '@oz/utils/structs/EnumerableMap.sol';
+import '@lib/Bitboard.sol';
 import './IChessEngine.sol';
-import './Bitboard.sol';
 import './Lobby.sol';
 
 contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {

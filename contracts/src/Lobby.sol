@@ -5,7 +5,6 @@ import '@oz-upgradeable/proxy/utils/Initializable.sol';
 import '@oz-upgradeable/proxy/utils/UUPSUpgradeable.sol';
 import '@oz/utils/structs/EnumerableMap.sol';
 import '@oz/utils/Counters.sol';
-import '@lib/ArrayUtils.sol';
 import './ILobby.sol';
 import './IChessEngine.sol';
 import './ChessEngine.sol';
@@ -19,7 +18,6 @@ contract Lobby is
   using EnumerableSet for EnumerableSet.AddressSet;
   using EnumerableSet for EnumerableSet.UintSet;
   using Counters for Counters.Counter;
-  using ArrayUtils for uint[];
 
   // Lobby Settings
   bool private __allowChallenges;

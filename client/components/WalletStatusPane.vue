@@ -9,11 +9,11 @@ const props = defineProps({
     default: false
   },
   address: {
-    type: String,
+    type: [ String, null ],
     required: true
   },
   network: {
-    type: String,
+    type: [ String, null ],
     required: true
   },
   balance: {
