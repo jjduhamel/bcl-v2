@@ -30,8 +30,12 @@ contract BitboardWrapper {
     b.place(c, p, i);
   }
 
-  function move(Color c, Piece p, uint8 from, uint8 to) public {
-    b.move(c, p, from, to);
+  function pluck(Color c, Piece p, uint8 i) public {
+    b.pluck(c, p, i);
+  }
+
+  function move(Color c, uint8 from, uint8 to) public returns (Piece) {
+    return b.move(c, from, to);
   }
 
   function bitboard(Color c, Piece p) public view returns (bytes8) {
@@ -45,6 +49,34 @@ contract BitboardWrapper {
   function bitboard() public view returns (bytes8) {
     return b.bitboard();
   }
+
+  function captures(Color c) public view returns (Piece[] memory) {
+    return b.captures(c);
+  }
+
+  function lookup(Color c, uint8 i) public view returns (Piece) {
+    return b.lookup(c, i);
+  }
+
+  function disableCastling() public {
+    b.__allowKingSideCastle = false;
+    b.__allowQueenSideCastle = false;
+  }
+
+  function clear() public {
+    b.initialize(Color.White, Piece.Pawn, uint64(0x00));
+    b.initialize(Color.White, Piece.Rook, uint64(0x00));
+    b.initialize(Color.White, Piece.Knight, uint64(0x00));
+    b.initialize(Color.White, Piece.Bishop, uint64(0x00));
+    b.initialize(Color.White, Piece.Queen, uint64(0x00));
+    b.initialize(Color.White, Piece.King, uint64(0x00));
+    b.initialize(Color.Black, Piece.Pawn, uint64(0x00));
+    b.initialize(Color.Black, Piece.Rook, uint64(0x00));
+    b.initialize(Color.Black, Piece.Knight, uint64(0x00));
+    b.initialize(Color.Black, Piece.Bishop, uint64(0x00));
+    b.initialize(Color.Black, Piece.Queen, uint64(0x00));
+    b.initialize(Color.Black, Piece.King, uint64(0x00));
+  }
 }
 
 abstract contract BitboardTest is Test {
@@ -55,7 +87,7 @@ abstract contract BitboardTest is Test {
   }
 
   function setUp() virtual public {
-    clearBitboard();
+    b.clear();
   }
 
   function printBitboard(bytes8 bb1, bytes8 bb2, bytes8 bb3) internal {
@@ -94,68 +126,40 @@ abstract contract BitboardTest is Test {
   }
 
   function printBitboard(Color c, Piece p, uint8 dest) internal {
-    printBitboard(b.bitboard(c, p), b.bitboard(), Bitboard.mask(dest));
+    printBitboard(b.bitboard(c, p), b.bitboard(), Bitboard._mask(dest));
   }
 
   function printBitboard() internal {
     printBitboard(b.bitboard());
   }
 
-  function clearBitboard() internal {
-    // Place white pieces
-    b.initialize(Color.White, Piece.Pawn, 1, 0x00);
-    b.initialize(Color.White, Piece.Rook, 0x00);
-    b.initialize(Color.White, Piece.Knight, 0x00);
-    b.initialize(Color.White, Piece.Bishop, 0x00);
-    b.initialize(Color.White, Piece.Queen, 0x00);
-    b.initialize(Color.White, Piece.King, 0x00);
-    // Place black pieces
-    b.initialize(Color.Black, Piece.Pawn, 0x00);
-    b.initialize(Color.Black, Piece.Rook, 0x00);
-    b.initialize(Color.Black, Piece.Knight, 0x00);
-    b.initialize(Color.Black, Piece.Bishop, 0x00);
-    b.initialize(Color.Black, Piece.Queen, 0x00);
-    b.initialize(Color.Black, Piece.King, 0x00);
-  }
-
-  /*
-  function testInitialBoard() public {
-    b.initialize();
-    assertEq(b.bitboard(Color.White, Piece.Pawn)
-           , bytes8(uint64(0xFF00)));
-    assertEq(b.bitboard(Color.White, Piece.Rook)
-           , bytes8(uint64(0x81)));
-    assertEq(b.bitboard(Color.White, Piece.Knight)
-           , bytes8(uint64(0x42)));
-    assertEq(b.bitboard(Color.White, Piece.Bishop)
-           , bytes8(uint64(0x24)));
-    assertEq(b.bitboard(Color.White, Piece.Queen)
-           , bytes8(uint64(0x08)));
-    assertEq(b.bitboard(Color.White, Piece.King)
-           , bytes8(uint64(0x10)));
-
-    assertEq(b.bitboard(Color.Black, Piece.Pawn)
-           , bytes8(uint64(0xFF) << (8*6)));
-    assertEq(b.bitboard(Color.Black, Piece.Rook)
-           , bytes8(uint64(0x81) << (8*7)));
-    assertEq(b.bitboard(Color.Black, Piece.Knight)
-           , bytes8(uint64(0x42) << (8*7)));
-    assertEq(b.bitboard(Color.Black, Piece.Bishop)
-           , bytes8(uint64(0x24) << (8*7)));
-    assertEq(b.bitboard(Color.Black, Piece.Queen)
-           , bytes8(uint64(0x08) << (8*7)));
-    assertEq(b.bitboard(Color.Black, Piece.King)
-           , bytes8(uint64(0x10) << (8*7)));
-  }
-  */
-
   function _testLegalMove(Color c, Piece p, uint8 from, uint8 to) public {
-    b.move(c, p, from, to);
-    // TODO
+    Color o = Color(1-uint(c));
+    Piece pd = b.lookup(o, to);
+    bytes8 bbo = b.bitboard(o, pd);
+    Piece po = b.move(c, from, to);
+    assertTrue(pd == po);
+    if (pd != Piece.Empty) {
+      assertTrue(b.bitboard(o, po) != bbo);
+    } else {
+      assertTrue(b.bitboard(o, po) == bbo);
+    }
   }
 
   function _testIllegalMove(Color c, Piece p, uint8 from, uint8 to) public {
     vm.expectRevert('InvalidMove');
-    b.move(c, p, from, to);
+    b.move(c, from, to);
+  }
+
+  modifier expectCapture(Color o, Piece p) {
+    Color c = Color(1-uint(o));
+    Piece[] memory start = b.captures(c);
+    _;
+    Piece[] memory end = b.captures(c);
+    console.log(start.length, end.length);
+    assertTrue(end.length > start.length);
+    for (uint j=start.length; j<end.length; j++) {
+      //assertTrue(end[j] == p);
+    }
   }
 }

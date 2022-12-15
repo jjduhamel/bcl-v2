@@ -6,10 +6,6 @@ import './Bitboard.t.sol';
 contract PawnTest is BitboardTest {
   using SignedMathI8 for int8;
 
-  function setUp() override public {
-    b.initialize();
-  }
-
   function _tWP(uint8 f) internal {
     b.initialize();
     _testLegalMove(Color.White, Piece.Pawn, 0x08+f, 0x10+f);
@@ -34,11 +30,37 @@ contract PawnTest is BitboardTest {
     _tBP(f);
   }
 
+  function testWhitePawnCantMoveToOrigin(uint8 from) public {
+    vm.assume(from < 0x40);
+    b.clear();
+    b.place(Color.White, Piece.Pawn, from);
+    _testIllegalMove(Color.White, Piece.Pawn, from, from);
+  }
+
+  function testBlackPawnCantMoveToOrigin(uint8 from) public {
+    vm.assume(from < 0x40);
+    b.clear();
+    b.place(Color.Black, Piece.Pawn, from);
+    _testIllegalMove(Color.Black, Piece.Pawn, from, from);
+  }
+
+  function testWhitePawnCantMoveToOccupiedSquare(uint8 f) public {
+    vm.assume(f < 8);
+    b.place(Color.White, Piece.Pawn, f+8);
+    _testIllegalMove(Color.White, Piece.Pawn, f, f+8);
+  }
+
+  function testBlackPawnCantMoveToOccupiedSquare(uint8 f) public {
+    vm.assume(f < 8);
+    uint8 from = 0x30+f;
+    b.place(Color.Black, Piece.Pawn, from-8);
+    _testIllegalMove(Color.Black, Piece.Pawn, from, from-8);
+  }
+
   function testWhiteMoves(uint8 from) public {
     vm.assume(from < 64);
-    clearBitboard();
     b.initialize(Color.White, Piece.Pawn, uint64(1)<<from);
-    uint r = Bitboard.rank(from);
+    uint r = Bitboard._rank(from);
     for (uint8 to=0; to<64; to++) {
       console.log(r, Strings.toHexString(from), '->', Strings.toHexString(to));
       if (r == 1 && to == from+0x10) {
@@ -55,9 +77,8 @@ contract PawnTest is BitboardTest {
 
   function testBlackMoves(uint8 from) public {
     vm.assume(from < 64);
-    clearBitboard();
     b.initialize(Color.Black, Piece.Pawn, uint64(1)<<from);
-    uint r = Bitboard.rank(from);
+    uint r = Bitboard._rank(from);
     for (uint8 to=0; to<64; to++) {
       console.log(r, Strings.toHexString(from), '->', Strings.toHexString(to));
       if (r == 6 && from == to+0x10) {
@@ -74,10 +95,9 @@ contract PawnTest is BitboardTest {
 
   function testWhiteCaptures(uint8 from) public {
     vm.assume(from < 64);
-    clearBitboard();
     b.initialize(Color.Black, Piece.Pawn, uint64(0xFFFFFFFFFFFFFFFF));
     b.initialize(Color.White, Piece.Pawn, uint64(1)<<from);
-    uint r = Bitboard.rank(from);
+    uint r = Bitboard._rank(from);
     for (uint8 to=0; to<64; to++) {
       int8 _dr = Bitboard._dr(from, to);
       int8 _df = Bitboard._df(from, to);
@@ -93,10 +113,9 @@ contract PawnTest is BitboardTest {
 
   function testBlackCaptures(uint8 from) public {
     vm.assume(from < 64);
-    clearBitboard();
     b.initialize(Color.White, Piece.Pawn, uint64(0xFFFFFFFFFFFFFFFF));
     b.initialize(Color.Black, Piece.Pawn, uint64(1)<<from);
-    uint r = Bitboard.rank(from);
+    uint r = Bitboard._rank(from);
     for (uint8 to=0; to<64; to++) {
       int8 _dr = Bitboard._dr(from, to);
       int8 _df = Bitboard._df(from, to);
@@ -114,17 +133,29 @@ contract PawnTest is BitboardTest {
    * Corner-cases
    */
 
+  function testWhiteBlockedHomerow(uint8 f) public {
+    vm.assume(f < 8);
+    b.initialize(Color.White, Piece.Pawn, 1, 0xFF);
+    b.initialize(Color.Black, Piece.Pawn, 2, 0xFF);
+    _testIllegalMove(Color.White, Piece.Pawn, 0x08+f, 0x18+f);
+  }
+
+  function testBlackBlockedHomerow(uint8 f) public {
+    vm.assume(f < 8);
+    b.initialize(Color.Black, Piece.Pawn, 6, 0xFF);
+    b.initialize(Color.White, Piece.Pawn, 5, 0xFF);
+    _testIllegalMove(Color.Black, Piece.Pawn, 0x30+f, 0x20+f);
+  }
+
   // Test that players can't overflow the squares and wrap around
   // to the other side of the board.  
   function testPlus7Overflow() public {
-    clearBitboard();
     b.place(Color.White, Piece.Pawn, 0x08);
     b.place(Color.Black, Piece.Pawn, 0x0F);
     _testIllegalMove(Color.White, Piece.Pawn, 0x08, 0x0F);
   }
 
   function testPlus9Overflow() public {
-    clearBitboard();
     b.place(Color.White, Piece.Pawn, 0x0F);
     b.place(Color.Black, Piece.Pawn, 0x18);
     _testIllegalMove(Color.White, Piece.Pawn, 0x0F, 0x18);
