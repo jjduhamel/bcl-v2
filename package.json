@@ -7,8 +7,8 @@
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "compile": "forge build",
-    "devchain": "anvil -m $(cat .mnemonic)",
-    "deploy:lobby": "forge script contracts/script/DesployLobby.s.sol --broadcast"
+    "devchain": "anvil -m \"$(cat .mnemonic)\"",
+    "deploy:lobby": "forge script contracts/script/DeployLobby.s.sol --broadcast"
   },
   "dependencies": {
     "@amplitude/analytics-browser": "^1.6.4",
