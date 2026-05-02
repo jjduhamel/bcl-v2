@@ -156,10 +156,9 @@ abstract contract BitboardTest is Test {
     Piece[] memory start = b.captures(c);
     _;
     Piece[] memory end = b.captures(c);
-    console.log(start.length, end.length);
     assertTrue(end.length > start.length);
     for (uint j=start.length; j<end.length; j++) {
-      //assertTrue(end[j] == p);
+      assertTrue(end[j] == p);
     }
   }
 }

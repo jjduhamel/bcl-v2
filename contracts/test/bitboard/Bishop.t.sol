@@ -34,15 +34,15 @@ abstract contract BishopTest is BitboardTest {
     _testIllegalMove(c, Piece.Bishop, from, from);
   }
 
-  function testQueenCantMoveToOccupiedSquare(uint8 from) public {
+  function testBishopCantMoveToOccupiedSquare(uint8 from) public {
     vm.assume(from < 0x40);
     for (uint8 to=0; to<0x40; to++) {
       int8 dr = Bitboard._dr(from, to);
       int8 df = Bitboard._df(from, to);
-      b.initialize(c, Piece.Queen, uint64(1)<<from);
+      b.initialize(c, Piece.Bishop, uint64(1)<<from);
       b.initialize(c, Piece.Pawn, uint64(1) << to);
       if (dr.abs() ==  df.abs() && dr != 0) {
-        _testIllegalMove(c, Piece.Queen, from, to);
+        _testIllegalMove(c, Piece.Bishop, from, to);
       }
     }
   }

@@ -30,7 +30,8 @@ const { chains, provider, webSocketProvider } = configureChains(
   [ chain.mainnet
   , chain.polygon
   , chain.goerli
-  , chain.polygonMumbai ],
+  , chain.polygonMumbai
+  , chain.foundry ],
   //[ alchemyProvider({ apiKey: config.alchemyId })
   [ infuraProvider({ apiKey: config.infuraId })
   , publicProvider() ]
@@ -83,7 +84,7 @@ export default async function() {
     const bal = await fetchBalance({
       address: player
     });
-    return BN.from(bal).toString();
+    return BN.from(bal.value).toString();
   }
 
   async function refreshBalance() {

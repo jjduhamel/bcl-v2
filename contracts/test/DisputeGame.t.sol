@@ -31,10 +31,6 @@ contract DisputeGameTest is ChessGameTest {
     assertEq(gameId, disputes[nDisputes]);
   }
 
-  function _expectOutcome(GameOutcome outcome) private {
-    GameData memory gameData = engine.game(gameId);
-  }
-
   function testDisputeAsSender() public {
     changePrank(p1);
     vm.expectRevert('NotCurrentMove');

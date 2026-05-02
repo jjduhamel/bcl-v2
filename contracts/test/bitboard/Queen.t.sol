@@ -60,7 +60,7 @@ abstract contract QueenTest is BitboardTest {
     for (uint8 to=0; to<0x40; to++) {
       int8 dr = Bitboard._dr(from, to);
       int8 df = Bitboard._df(from, to);
-      if (dr != 0 || df != 0 || dr.abs() != df.abs()) continue;
+      if (dr != 0 && df != 0 && dr.abs() != df.abs()) continue;
       if (dr == 0 && df == 0) continue;
       b.initialize(c, Piece.Queen, uint64(1)<<from);
       b.initialize(o, Piece.Pawn, uint64(1) << to);

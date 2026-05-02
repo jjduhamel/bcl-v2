@@ -63,12 +63,12 @@ async function doSendChallenge(args) {
   newChallengeModal.value = false
 }
 
-async function doAcceptChallenge() {
-  await acceptChallenge();
+async function doAcceptChallenge(gameId) {
+  await acceptChallenge(gameId);
 }
 
-async function doDeclineChallenge() {
-  await acceptChallenge();
+async function doDeclineChallenge(gameId) {
+  await declineChallenge(gameId);
 }
 
 async function doModifyChallenge(gameId, gameData) {

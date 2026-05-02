@@ -314,7 +314,7 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
     isChallenge(gameId)
   {
     uint deposit = balance(gameId, player);
-    __earnings[player] = deposit;
+    __earnings[player] += deposit;
     __escrow[player].remove(gameId);
   }
 

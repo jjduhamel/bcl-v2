@@ -190,11 +190,11 @@ contract Lobby is
   }
 
   function games(address player) public view returns (uint[] memory) {
-    return __lobby[msg.sender].currentGames.values();
+    return __lobby[player].currentGames.values();
   }
 
   function history(address player) public view returns (uint[] memory) {
-    return __lobby[msg.sender].finishedGames.values();
+    return __lobby[player].finishedGames.values();
   }
 
   function challengesSent(address player) public view returns (uint) {

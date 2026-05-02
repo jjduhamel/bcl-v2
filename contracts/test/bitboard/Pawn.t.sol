@@ -160,4 +160,16 @@ contract PawnTest is BitboardTest {
     b.place(Color.Black, Piece.Pawn, 0x18);
     _testIllegalMove(Color.White, Piece.Pawn, 0x0F, 0x18);
   }
+
+  function testPlus1Overflow() public {
+    b.place(Color.White, Piece.Pawn, 0x0F);  // H2
+    b.place(Color.Black, Piece.Pawn, 0x10);  // A3
+    _testIllegalMove(Color.White, Piece.Pawn, 0x0F, 0x10);
+  }
+
+  function testMinus1Overflow() public {
+    b.place(Color.Black, Piece.Pawn, 0x30);  // A7
+    b.place(Color.White, Piece.Pawn, 0x2F);  // H6
+    _testIllegalMove(Color.Black, Piece.Pawn, 0x30, 0x2F);
+  }
 }

@@ -61,6 +61,21 @@ abstract contract RookTest is BitboardTest {
     }
   }
 
+  function testRookCaptures(uint8 from) public {
+    vm.assume(from < 0x40);
+    for (uint8 to=0; to<0x40; to++) {
+      int8 dr = Bitboard._dr(from, to);
+      int8 df = Bitboard._df(from, to);
+      b.initialize(c, Piece.Rook, uint64(1)<<from);
+      b.initialize(o, Piece.Pawn, uint64(1) << to);
+      if (dr == 0 && df.abs() > 0) {
+        _testLegalMove(c, Piece.Rook, from, to);
+      } else if (df == 0 && dr.abs() > 0) {
+        _testLegalMove(c, Piece.Rook, from, to);
+      }
+    }
+  }
+
   function testIllegalMoves(uint8 from) public {
     vm.assume(from < 0x40);
     uint8 r = Bitboard._rank(from);

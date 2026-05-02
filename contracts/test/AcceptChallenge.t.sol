@@ -76,11 +76,13 @@ contract AcceptChallengeTest is ChallengeTest {
     testGameStarted(gameId, p2)
     testBalanceDelta(p1, int(deposit/2))
     testBalanceDelta(p2, -int(deposit/2))
-    expectGameStarted(p2, p1)
   {
     engine.modifyChallenge{ value: wager*2+fee }
                           (gameId, true, timePerMove, wager/2);
     changePrank(p1);
+    // We need to do this here because otherwise modifyChallenge throws a touch event 
+    vm.expectEmit(true, true, true, true, address(engine));
+    emit GameStarted(gameId, p2, p1);
     engine.acceptChallenge(gameId);
   }
 

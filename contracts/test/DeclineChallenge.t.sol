@@ -52,6 +52,16 @@ contract DeclineChallengeTest is ChallengeTest {
     engine.declineChallenge(gameId);
   }
 
+  function testRefundAccumulatesEarnings() public
+    testBalanceDelta(p1, int(deposit))
+  {
+    engine.declineChallenge(gameId);
+    changePrank(p1);
+    uint gameId2 = lobby.challenge{ value: deposit }(p2, true, timePerMove, wager);
+    changePrank(p2);
+    engine.declineChallenge(gameId2);
+  }
+
   function testDeclineAsSpectator() public {
     changePrank(p3);
     vm.expectRevert('PlayerOnly');
