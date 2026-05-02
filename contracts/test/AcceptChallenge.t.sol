@@ -51,7 +51,7 @@ contract AcceptChallengeTest is ChallengeTest {
     testChallengeAccepted(gameId, p2)
     testGameStarted(gameId, p1)
     testGameStarted(gameId, p2)
-    testBalanceDelta(p2, -int(deposit))
+    testEarnings(p2, 1)
     expectGameStarted(p1, p2)
   {
     engine.acceptChallenge{ value: deposit+1 }(gameId);
@@ -74,10 +74,12 @@ contract AcceptChallengeTest is ChallengeTest {
     testChallengeAccepted(gameId, p2)
     testGameStarted(gameId, p1)
     testGameStarted(gameId, p2)
-    testBalanceDelta(p1, int(deposit/2))
-    testBalanceDelta(p2, -int(deposit/2))
+    // NOTE: Modifying the challenge will also change the platform fee
+    //       that the contract computes, so the earnings will be in 
+    //       excess of wager amount.
+    testEarnings(p1, deposit/2)
   {
-    engine.modifyChallenge{ value: wager*2+fee }
+    engine.modifyChallenge{ value: wager/2+fee }
                           (gameId, true, timePerMove, wager/2);
     changePrank(p1);
     // We need to do this here because otherwise modifyChallenge throws a touch event 

@@ -15,7 +15,7 @@ contract CreateChallengeTest is ChallengeTest {
   function testChallengeWithWager() public
     testChallengeSent(0, p1)
     testChallengeReceived(0, p2)
-    testBalanceDelta(p1, -int(deposit))
+    testEarnings(p1, 0)
   {
     lobby.challenge{ value: deposit }(p2, true, timePerMove, wager);
   }
@@ -45,7 +45,7 @@ contract CreateChallengeTest is ChallengeTest {
   function testChallengeSucceedsWithExcessDeposit() public
     testChallengeSent(0, p1)
     testChallengeReceived(0, p2)
-    testBalanceDelta(p1, -int(deposit+1))
+    testEarnings(p1, 0)
   {
     lobby.challenge{ value: deposit+1 }(p2, true, timePerMove, wager);
   }

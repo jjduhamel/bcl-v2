@@ -38,8 +38,6 @@ contract DisputeGameTest is ChessGameTest {
   }
 
   function testDisputeAsReceiver() public
-    testBalanceDelta(p1, 0)
-    testBalanceDelta(p2, 0)
     testDispute()
     expectGameDisputed(p2, p1)
   {

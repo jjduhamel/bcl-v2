@@ -15,14 +15,12 @@ abstract contract ChallengeTest is LobbyTest {
     changePrank(p1);
   }
 
-  modifier testBalanceDelta(address player, int delta) {
-    int initialBalance = int(player.balance);
+  modifier testEarnings(address player, uint expected) {
     _;
     address i = me.who();
     changePrank(player);
-    engine.withdraw();
+    assertEq(engine.earnings(), expected);
     changePrank(i);
-    assertEq(int(player.balance)-initialBalance, delta);
   }
 
   modifier testChallengeSent(uint gameId, address player) {

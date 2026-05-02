@@ -32,8 +32,8 @@ contract ResolveDisputeTest is ChessGameTest {
 
   function testResolveDisputeForWhite() public
     testOutcome(GameOutcome.WhiteWon)
-    testBalanceDelta(p1, int(2*wager))
-    testBalanceDelta(p2, 0)
+    testEarnings(p1, 2*wager)
+    testEarnings(p2, 0)
     testWinner(p1)
     testLoser(p2)
     testResolved
@@ -44,8 +44,8 @@ contract ResolveDisputeTest is ChessGameTest {
 
   function testResolveDisputeForBlack() public
     testOutcome(GameOutcome.BlackWon)
-    testBalanceDelta(p1, 0)
-    testBalanceDelta(p2, int(2*wager))
+    testEarnings(p1, 0)
+    testEarnings(p2, 2*wager)
     testLoser(p1)
     testWinner(p2)
     testResolved
@@ -56,8 +56,8 @@ contract ResolveDisputeTest is ChessGameTest {
 
   function testResolveDisputeAsDraw() public
     testOutcome(GameOutcome.Draw)
-    testBalanceDelta(p1, int(wager))
-    testBalanceDelta(p2, int(wager))
+    testEarnings(p1, wager)
+    testEarnings(p2, wager)
     testDraw(p1)
     testDraw(p2)
     testResolved

@@ -44,8 +44,8 @@ contract ClaimVictoryTest is ChessGameTest {
   }
 
   function testClaimVictoryAsWinner() public
-    testBalanceDelta(p1, int(2*wager))
-    testBalanceDelta(p2, 0)
+    testEarnings(p1, 2*wager)
+    testEarnings(p2, 0)
     testOutcome(GameOutcome.WhiteWon)
     testWinner(p1)
     testLoser(p2)

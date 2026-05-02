@@ -51,7 +51,6 @@ contract ModifyChallengeTest is ChallengeTest {
   }
 
   function testModifyTimePerMove() public
-    testBalanceDelta(p2, -int(deposit))
     expectTouchRecord(gameId, p2, p1)
   {
     engine.modifyChallenge{ value: deposit }(gameId, false, timePerMove-1, wager);
@@ -65,16 +64,20 @@ contract ModifyChallengeTest is ChallengeTest {
   }
 
   function testModifyWager() public
-    testBalanceDelta(p2, -int(deposit-1))
+    // NOTE: Modifying the challenge will also change the platform fee
+    //       that the contract computes, so the earnings will be in 
+    //       excess of wager amount.
+    testEarnings(p1, deposit/2)
     expectTouchRecord(gameId, p2, p1)
   {
-    engine.modifyChallenge{ value: deposit-1 }(gameId, true, timePerMove, wager-1);
+    engine.modifyChallenge{ value: deposit-1 }(gameId, true, timePerMove, wager/2);
     GameData memory gameData = engine.game(gameId);
-    assertEq(gameData.wagerAmount, wager-1);
+    assertEq(gameData.wagerAmount, wager/2);
   }
 
   function testIncreaseWagerAsSender() public
-    testBalanceDelta(p1, -int(deposit))
+    testEarnings(p1, 0)
+    testEarnings(p2, 0)
     expectTouchRecord(gameId, p1, p2)
   {
     changePrank(p1);

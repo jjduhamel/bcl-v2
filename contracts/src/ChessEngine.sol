@@ -258,7 +258,7 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
     return exists ? deposit : 0;
   }
 
-  function earnings() public returns (uint) {
+  function earnings() public view returns (uint) {
     return __earnings[msg.sender];
   }
 
@@ -406,13 +406,21 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
     require(timePerMove >= 60, 'InvalidTimePerMove');
     GameData storage gameData = __games[gameId];
     address receiver = opponent(gameId);
-    address white = startAsWhite ? msg.sender : receiver;
-    address black = startAsWhite ? receiver : msg.sender;
-    gameData.whitePlayer = payable(white);
-    gameData.blackPlayer = payable(black);
-    gameData.currentMove = receiver;
-    gameData.timePerMove = timePerMove;
-    gameData.wagerAmount = wagerAmount;
+    if (startAsWhite && isBlackPlayer(gameId)
+    || !startAsWhite && isWhitePlayer(gameId)) {
+      address white = startAsWhite ? msg.sender : receiver;
+      address black = startAsWhite ? receiver : msg.sender;
+      gameData.whitePlayer = payable(white);
+      gameData.blackPlayer = payable(black);
+      gameData.currentMove = receiver;
+    }
+    if (timePerMove != gameData.timePerMove) {
+      gameData.timePerMove = timePerMove;
+    }
+    if (wagerAmount != gameData.wagerAmount) {
+      gameData.wagerAmount = wagerAmount;
+      refundExcess(gameId, payable(receiver));
+    }
     __lobby.touch(gameId, msg.sender, receiver);
   }
 

@@ -10,8 +10,8 @@ contract ResignGameTest is ChessGameTest {
   }
 
   function testResignAsWhite() public
-    testBalanceDelta(p1, 0)
-    testBalanceDelta(p2, int(2*wager))
+    testEarnings(p1, 0)
+    testEarnings(p2, 2*wager)
     testOutcome(GameOutcome.BlackWon)
     testWinner(p2)
     testLoser(p1)
@@ -21,8 +21,8 @@ contract ResignGameTest is ChessGameTest {
   }
 
   function testResignAsBlack() public
-    testBalanceDelta(p1, int(2*wager))
-    testBalanceDelta(p2, 0)
+    testEarnings(p1, 2*wager)
+    testEarnings(p2, 0)
     testOutcome(GameOutcome.WhiteWon)
     testWinner(p1)
     testLoser(p2)

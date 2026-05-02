@@ -24,8 +24,8 @@ contract DrawGameTest is ChessGameTest {
     testOutcome(GameOutcome.Draw)
     testDraw(p1)
     testDraw(p2)
-    testBalanceDelta(p1, int(wager))
-    testBalanceDelta(p2, int(wager))
+    testEarnings(p1, wager)
+    testEarnings(p2, wager)
   {
     engine.respondDraw(gameId, true);
     GameData memory gameData = engine.game(gameId);
@@ -34,8 +34,8 @@ contract DrawGameTest is ChessGameTest {
   }
 
   function testDeclineDraw() public
-    testBalanceDelta(p1, 0)
-    testBalanceDelta(p2, 0)
+    testEarnings(p1, 0)
+    testEarnings(p2, 0)
   {
     engine.respondDraw(gameId, false);
     GameData memory gameData = engine.game(gameId);

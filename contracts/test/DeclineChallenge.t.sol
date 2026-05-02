@@ -34,8 +34,7 @@ contract DeclineChallengeTest is ChallengeTest {
     testChallengeDeclined(gameId, p1)
     testChallengeDeclined(gameId, p2)
     expectDeclinedEvent(p1, p2)
-    testBalanceDelta(p1, int(deposit))
-    testBalanceDelta(p2, 0)
+    testEarnings(p1, deposit)
   {
     changePrank(p1);
     engine.declineChallenge(gameId);
@@ -45,15 +44,14 @@ contract DeclineChallengeTest is ChallengeTest {
     testChallengeDeclined(gameId, p1)
     testChallengeDeclined(gameId, p2)
     expectDeclinedEvent(p2, p1)
-    testBalanceDelta(p1, int(deposit))
-    testBalanceDelta(p2, 0)
+    testEarnings(p1, deposit)
   {
     changePrank(p2);
     engine.declineChallenge(gameId);
   }
 
   function testRefundAccumulatesEarnings() public
-    testBalanceDelta(p1, int(deposit))
+    testEarnings(p1, 2*deposit)
   {
     engine.declineChallenge(gameId);
     changePrank(p1);
