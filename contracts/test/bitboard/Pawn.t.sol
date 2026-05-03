@@ -67,7 +67,8 @@ contract PawnTest is BitboardTest {
         _testLegalMove(Color.White, Piece.Pawn, from, to);
         b.initialize(Color.White, Piece.Pawn, uint64(1)<<from);
       } else if (to == from+0x08) {
-        _testLegalMove(Color.White, Piece.Pawn, from, to);
+        if (r == 6) _testLegalMove(Color.White, Piece.Pawn, from, to, Piece.Queen);
+        else _testLegalMove(Color.White, Piece.Pawn, from, to);
         b.initialize(Color.White, Piece.Pawn, uint64(1)<<from);
       } else {
         _testIllegalMove(Color.White, Piece.Pawn, from, to);
@@ -85,7 +86,8 @@ contract PawnTest is BitboardTest {
         _testLegalMove(Color.Black, Piece.Pawn, from, to);
         b.initialize(Color.Black, Piece.Pawn, uint64(1)<<from);
       } else if (from == to+0x08) {
-        _testLegalMove(Color.Black, Piece.Pawn, from, to);
+        if (r == 1) _testLegalMove(Color.Black, Piece.Pawn, from, to, Piece.Queen);
+        else _testLegalMove(Color.Black, Piece.Pawn, from, to);
         b.initialize(Color.Black, Piece.Pawn, uint64(1)<<from);
       } else {
         _testIllegalMove(Color.Black, Piece.Pawn, from, to);
@@ -103,7 +105,8 @@ contract PawnTest is BitboardTest {
       int8 _df = Bitboard._df(from, to);
       console.log(r, Strings.toHexString(from), '->', Strings.toHexString(to));
       if (_dr == 1 && _df.abs() == 1) {
-        _testLegalMove(Color.White, Piece.Pawn, from, to);
+        if (Bitboard._rank(to) == 7) _testLegalMove(Color.White, Piece.Pawn, from, to, Piece.Queen);
+        else _testLegalMove(Color.White, Piece.Pawn, from, to);
         b.initialize(Color.White, Piece.Pawn, uint64(1)<<from);
       } else {
         _testIllegalMove(Color.White, Piece.Pawn, from, to);
@@ -121,7 +124,8 @@ contract PawnTest is BitboardTest {
       int8 _df = Bitboard._df(from, to);
       console.log(r, Strings.toHexString(from), '->', Strings.toHexString(to));
       if (_dr == -1 && _df.abs() == 1) {
-        _testLegalMove(Color.Black, Piece.Pawn, from, to);
+        if (Bitboard._rank(to) == 0) _testLegalMove(Color.Black, Piece.Pawn, from, to, Piece.Queen);
+        else _testLegalMove(Color.Black, Piece.Pawn, from, to);
         b.initialize(Color.Black, Piece.Pawn, uint64(1)<<from);
       } else {
         _testIllegalMove(Color.Black, Piece.Pawn, from, to);

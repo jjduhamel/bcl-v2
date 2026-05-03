@@ -103,27 +103,27 @@ library Bitboard {
     b.__bitboard[c][p] = bitboard(b, c, p) ^ bytes8(uint64(1)<<i);
   }
 
-  function _mask(uint8 i) internal view
+  function _mask(uint8 i) internal pure
   returns (bytes8) {
     return bytes8(uint64(1) << i);
   }
 
-  function _rank(uint8 i) internal view
+  function _rank(uint8 i) internal pure
   returns (uint8) {
     return i / 8;
   }
 
-  function _file(uint8 i) internal view
+  function _file(uint8 i) internal pure
   returns (uint8) {
     return i % 8;
   }
 
-  function _dr(uint8 from, uint8 to) internal view
+  function _dr(uint8 from, uint8 to) internal pure
   returns (int8) {
     return int8(_rank(to)) - int8(_rank(from));
   }
 
-  function _df(uint8 from, uint8 to) internal view
+  function _df(uint8 from, uint8 to) internal pure
   returns (int8) {
     return int8(_file(to)) - int8(_file(from));
   }
@@ -251,8 +251,23 @@ library Bitboard {
     else if (p == Piece.King) _vKg(b, c, from, to);
   }
 
+  function _isPromotionSquare(Color c, uint8 to) internal pure returns (bool) {
+    return c == Color.White ? _rank(to) == 7 : _rank(to) == 0;
+  }
+
+  // Reverts on invalid move.  Returns the captured piece if any.
+  function move(Bitboard storage b, Color c, uint8 from, uint8 to, Piece promotion) internal
+  returns (Piece) {
+    return _move(b, c, from, to, promotion);
+  }
+
   // Reverts on invalid move.  Returns the captured piece if any.
   function move(Bitboard storage b, Color c, uint8 from, uint8 to) internal
+  returns (Piece) {
+    return _move(b, c, from, to, Piece.Empty);
+  }
+
+  function _move(Bitboard storage b, Color c, uint8 from, uint8 to, Piece promotion) private
   returns (Piece) {
     bytes8 orig = _mask(from);
     bytes8 dest = _mask(to);
@@ -266,6 +281,17 @@ library Bitboard {
     // Check if it's a legal move.  You can assume the move is legal if
     // this doesn't revert.
     _validate(b, c, p, from, to);
+
+    // Promotion checks happen after validation so illegal pawn moves still
+    // revert with InvalidMove rather than PromotionRequired.
+    if (p == Piece.Pawn) {
+      if (_isPromotionSquare(c, to)) {
+        require(promotion != Piece.Empty, 'PromotionRequired');
+        require(promotion != Piece.Pawn && promotion != Piece.King, 'InvalidPromotion');
+      } else {
+        require(promotion == Piece.Empty, 'InvalidPromotion');
+      }
+    }
 
     // Detect if a piece was captured
     Piece pc = lookup(b, o, to);
@@ -305,6 +331,12 @@ library Bitboard {
     }
 
     b.__bitboard[c][p] = bitboard(b, c, p) ^ (orig | dest);
+
+    if (p == Piece.Pawn && _isPromotionSquare(c, to)) {
+      b.__bitboard[c][Piece.Pawn] = bitboard(b, c, Piece.Pawn) ^ dest;
+      b.__bitboard[c][promotion] = bitboard(b, c, promotion) ^ dest;
+    }
+
     return pc;
   }
 }

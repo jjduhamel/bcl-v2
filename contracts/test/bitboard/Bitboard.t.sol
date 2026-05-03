@@ -38,6 +38,10 @@ contract BitboardWrapper {
     return b.move(c, from, to);
   }
 
+  function move(Color c, uint8 from, uint8 to, Piece promotion) public returns (Piece) {
+    return b.move(c, from, to, promotion);
+  }
+
   function bitboard(Color c, Piece p) public view returns (bytes8) {
     return b.bitboard(c, p);
   }
@@ -136,15 +140,36 @@ abstract contract BitboardTest is Test {
   }
 
   function _testLegalMove(Color c, Piece p, uint8 from, uint8 to) public {
-    Color o = Color(1-uint(c));
-    Piece pd = b.lookup(o, to);
-    bytes8 bbo = b.bitboard(o, pd);
+    Color opp = Color(1-uint(c));
+    // Lookup opponent piece on destination
+    Piece pd = b.lookup(opp, to);
+    // Lookup opponent bitboard for piece
+    bytes8 bbo = b.bitboard(opp, pd);
+    // If the move detects a capture, it will return that piece
     Piece po = b.move(c, from, to);
     assertTrue(pd == po);
+    // Assert capture on opponent bitboard
     if (pd != Piece.Empty) {
-      assertTrue(b.bitboard(o, po) != bbo);
+      assertTrue(b.bitboard(opp, po) != bbo);
     } else {
-      assertTrue(b.bitboard(o, po) == bbo);
+      assertTrue(b.bitboard(opp, po) == bbo);
+    }
+  }
+
+  function _testLegalMove(Color c, Piece p, uint8 from, uint8 to, Piece promotion) public {
+    Color opp = Color(1-uint(c));
+    // Lookup opponent piece on destination
+    Piece pd = b.lookup(opp, to);
+    // Lookup opponent bitboard for piece
+    bytes8 bbo = b.bitboard(opp, pd);
+    // If the move detects a capture, it will return that piece
+    Piece po = b.move(c, from, to, promotion);
+    assertTrue(pd == po);
+    // Assert capture on opponent bitboard
+    if (pd != Piece.Empty) {
+      assertTrue(b.bitboard(opp, po) != bbo);
+    } else {
+      assertTrue(b.bitboard(opp, po) == bbo);
     }
   }
 
