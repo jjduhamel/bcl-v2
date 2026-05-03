@@ -13,11 +13,37 @@ contract Lobby is
   Initializable,
   UUPSUpgradeable,
   AccessControlEnumerableUpgradeable,
-  ILobby 
+  ILobby
 {
   using EnumerableSet for EnumerableSet.AddressSet;
   using EnumerableSet for EnumerableSet.UintSet;
   using Counters for Counters.Counter;
+
+  struct LobbyMetadata {
+    Counters.Counter gamesCreated;
+    Counters.Counter gamesStarted;
+    Counters.Counter gamesFinished;
+    uint netWagers;
+    uint netEarnings;
+  }
+
+  struct PlayerMetadata {
+    Counters.Counter challengesSent;
+    Counters.Counter challengesReceived;
+    Counters.Counter gamesStarted;
+    Counters.Counter gamesWon;
+    Counters.Counter gamesLost;
+    Counters.Counter gamesDrawn;
+    uint netWagers;
+    uint netWinnings;
+    uint netLosses;
+  }
+
+  struct PlayerLobby {
+    EnumerableSet.UintSet pendingChallenges;
+    EnumerableSet.UintSet currentGames;
+    EnumerableSet.UintSet finishedGames;
+  }
 
   // Lobby Settings
   bool private __allowChallenges;

@@ -47,7 +47,7 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
    */
 
   modifier isAdmin() {
-    require(__lobby.hasRole(__lobby.ADMIN_ROLE(), msg.sender), 'ArbiterOnly');
+    require(__lobby.hasRole(__lobby.ADMIN_ROLE(), msg.sender), 'AdminOnly');
     _;
   }
 
@@ -85,7 +85,7 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
     EnumerableMap.UintToUintMap storage deposits = __escrow[player];
     uint[2][] memory out = new uint[2][](deposits.length());
     for (uint j=0; j<deposits.length(); j++) {
-      (out[0][j],out[1][j]) = deposits.at(j);
+      (out[j][0],out[j][1]) = deposits.at(j);
     }
     return out;
   }
@@ -248,7 +248,7 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
     EnumerableMap.UintToUintMap storage deposits = __escrow[msg.sender];
     uint[2][] memory out = new uint[2][](deposits.length());
     for (uint j=0; j<deposits.length(); j++) {
-      (out[0][j],out[1][j]) = deposits.at(j);
+      (out[j][0],out[j][1]) = deposits.at(j);
     }
     return out;
   }
