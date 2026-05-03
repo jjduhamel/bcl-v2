@@ -15,18 +15,18 @@ abstract contract ChessGameTest is ChallengeTest {
     changePrank(p2);
   }
 
-  function _move(address player, string memory san) internal {
+  function _move(address player, string memory uci) internal {
     changePrank(player);
-    engine.move(gameId, san);
+    engine.move(gameId, uci);
   }
 
-  function _testMove(address player, string memory san) internal {
+  function _testMove(address player, string memory uci) internal {
     vm.expectEmit(true, true, true, true, address(engine));
-    emit MoveSAN(gameId, player, san);
-    _move(player, san);
+    emit MoveSAN(gameId, player, uci);
+    _move(player, uci);
     string[] memory moves = engine.moves(gameId);
     if (moves.length == 0) return;
-    assertEq(moves[moves.length-1], san);
+    assertEq(moves[moves.length-1], uci);
   }
 
   modifier expectGameOver(address winner, address loser) {

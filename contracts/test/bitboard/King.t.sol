@@ -212,6 +212,16 @@ abstract contract KingTest is BitboardTest {
       _testIllegalMove(c, Piece.King, 0x3C, 0x3A);
     }
   }
+  function testKingCanBeCaptured() public {
+    uint8 kingPos  = c == Color.White ? 0x04 : 0x3C;
+    uint8 queenPos = c == Color.White ? 0x05 : 0x3D;
+    b.initialize(c, Piece.King,  uint64(1) << kingPos);
+    b.initialize(o, Piece.Queen, uint64(1) << queenPos);
+    Piece captured = b.move(o, queenPos, kingPos);
+    assertTrue(captured == Piece.King);
+    assertEq(b.bitboard(c, Piece.King), bytes8(0));
+  }
+
   function testKingMoveDoesNotAffectOpponentCastle() public {
     b.initialize();
     if (c == Color.White) {

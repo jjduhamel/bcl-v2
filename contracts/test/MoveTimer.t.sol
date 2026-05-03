@@ -7,33 +7,34 @@ import './ChessGame.t.sol';
 contract MoveTimerTest is ChessGameTest {
   function setUp() public {
     engine.acceptChallenge{ value: deposit }(gameId);
-    _testMove(p1, 'a3');
+    _testMove(p1, 'a2a3');
     GameData memory gameData = engine.game(gameId);
     assertTrue(gameData.timeOfLastMove > 0);
   }
 
   function testTimerActive() public {
     assertFalse(engine.timeDidExpire(gameId));
-    _testMove(p2, 'b6');
+    _testMove(p2, 'b7b6');
   }
 
   function testTimerAlmostExpired() public {
     skip(timePerMove);
-    testTimerActive();
+    assertFalse(engine.timeDidExpire(gameId));
+    _testMove(p2, 'b7b6');
   }
 
   function testTimerExpired() public {
     skip(timePerMove+1);
     assertTrue(engine.timeDidExpire(gameId));
     vm.expectRevert('TimerExpired');
-    _move(p2, 'b6');
+    _move(p2, 'b7b6');
   }
 }
 
 contract ClaimVictoryTest is ChessGameTest {
   function setUp() public {
     engine.acceptChallenge{ value: deposit }(gameId);
-    _testMove(p1, 'a3');
+    _testMove(p1, 'a2a3');
     changePrank(p1);
   }
 

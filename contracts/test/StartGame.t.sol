@@ -28,20 +28,35 @@ contract StartGameTest is ChessGameTest {
   }
 
   function testSomeLegalMoves() public {
-    _testMove(p1, 'a3');
-    _testMove(p2, 'b6');
-    _testMove(p1, 'c4');
-    _testMove(p2, 'd5');
+    _testMove(p1, 'a2a3');
+    _testMove(p2, 'b7b6');
+    _testMove(p1, 'c2c4');
+    _testMove(p2, 'd7d5');
   }
 
   function testFirstMoveAsBlackFails() public {
     vm.expectRevert('NotCurrentMove');
-    _move(p2, 'b6');
+    _move(p2, 'b7b6');
+  }
+
+  function testKingCapture() public
+    testEarnings(p1, 0)
+    testEarnings(p2, 2*wager)
+    testOutcome(GameOutcome.BlackWon)
+    testWinner(p2)
+    testLoser(p1)
+  {
+    _testMove(p1, 'f2f3');
+    _testMove(p2, 'e7e5');
+    _testMove(p1, 'g2g4');
+    _testMove(p2, 'd8h4');
+    _testMove(p1, 'a2a3');
+    _testMove(p2, 'h4e1');
   }
 
   function testConsecutiveMoveFails() public {
-    _testMove(p1, 'a3');
+    _testMove(p1, 'a2a3');
     vm.expectRevert('NotCurrentMove');
-    _move(p1, 'b4');
+    _move(p1, 'b2b4');
   }
 }

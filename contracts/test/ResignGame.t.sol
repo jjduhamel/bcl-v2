@@ -40,6 +40,6 @@ contract ResignGameTest is ChessGameTest {
   function testMoveFailsAfterResign() public {
     engine.resign(gameId);
     vm.expectRevert('InvalidContractState');
-    _move(p1, 'a3');
+    _move(p1, 'a2a3');
   }
 }

@@ -7,7 +7,8 @@ import './ChessGame.t.sol';
 contract ResolveDisputeTest is ChessGameTest {
   function setUp() public {
     engine.acceptChallenge{ value: deposit }(gameId);
-    _testMove(p1, 'illegal');
+    // This has to be a legal move now because of bitboard logic
+    _testMove(p1, 'a2a3');
     changePrank(p2);
     engine.disputeGame(gameId);
     changePrank(arbiter);

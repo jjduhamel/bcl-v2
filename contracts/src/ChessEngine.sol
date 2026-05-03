@@ -4,6 +4,7 @@ import '@oz-upgradeable/proxy/utils/Initializable.sol';
 import '@oz-upgradeable/proxy/utils/UUPSUpgradeable.sol';
 import '@oz/utils/structs/EnumerableMap.sol';
 import '@lib/Bitboard.sol';
+import '@lib/UCI.sol';
 import './IChessEngine.sol';
 import './Lobby.sol';
 
@@ -13,7 +14,7 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
   Lobby private __lobby;
 
   mapping(uint => GameData) private __games;
-  // map gameId -> moves (san or [ from, to ])
+  // map gameId -> moves (uci)
   mapping(uint => string[]) __moves;
   // map gameId -> bitboards
   mapping(uint => Bitboard.Bitboard) __bitboards;
@@ -442,21 +443,33 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
     emit GameStarted(gameId, gameData.whitePlayer, gameData.blackPlayer);
   }
 
-  //function move(uint gameId, bytes1 piece, bytes1 from, bytes1 to) public
-  function move(uint gameId, string memory san) public
+  function _applyMove(uint gameId, string memory uci) private returns (GameOutcome) {
+    (uint8 from, uint8 to, Piece promotion) = UCI.parse(uci);
+    Color c = isWhitePlayer(gameId) ? Color.White : Color.Black;
+    Piece captured = __bitboards[gameId].move(c, from, to, promotion);
+    if (captured == Piece.King) {
+      return c == Color.White ? GameOutcome.WhiteWon : GameOutcome.BlackWon;
+    }
+    return GameOutcome.Undecided;
+  }
+
+  function move(uint gameId, string memory uci) public
     inProgress(gameId)
     isPlayer(gameId)
     isCurrentMove(gameId)
     timerActive(gameId)
   {
+    GameOutcome outcome = _applyMove(gameId, uci);
+    __moves[gameId].push(uci);
+    emit MoveSAN(gameId, msg.sender, uci);
     GameData storage gameData = __games[gameId];
-    // TODO Check if move is legal
-    __moves[gameId].push(san);
-    //__moves[gameId].push([ from, to ]);
     gameData.currentMove = opponent(gameId);
     gameData.timeOfLastMove = block.timestamp;
-    emit MoveSAN(gameId, msg.sender, san);
-    __lobby.touch(gameId, msg.sender, opponent(gameId));
+    if (outcome != GameOutcome.Undecided) {
+      finishGame(gameId, outcome);
+    } else {
+      __lobby.touch(gameId, msg.sender, opponent(gameId));
+    }
   }
 
   function finishGame(uint gameId, GameOutcome outcome) private {

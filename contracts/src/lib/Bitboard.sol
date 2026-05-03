@@ -99,7 +99,7 @@ library Bitboard {
   }
 
   function pluck(Bitboard storage b, Color c, Piece p, uint8 i) internal {
-    require(bitboard(b) & _mask(i) > 0, 'SquareOccupied');
+    require(bitboard(b) & _mask(i) > 0, 'SquareEmpty');
     b.__bitboard[c][p] = bitboard(b, c, p) ^ bytes8(uint64(1)<<i);
   }
 
@@ -156,7 +156,7 @@ library Bitboard {
     }
   }
 
-  function _vRk(Bitboard storage b, Color c, uint8 from, uint8 to) internal view {
+  function _vRk(Bitboard storage b, uint8 from, uint8 to) internal view {
     int8 dr = _dr(from, to);
     int8 df = _df(from, to);
     require(df == 0 || dr == 0, 'InvalidMove');
@@ -177,7 +177,7 @@ library Bitboard {
     }
   }
 
-  function _vKt(Bitboard storage b, Color c, uint8 from, uint8 to) internal {
+  function _vKt(uint8 from, uint8 to) internal pure {
     int8 dr = _dr(from, to);
     int8 df = _df(from, to);
     require(dr.abs() == 1 || dr.abs() == 2, 'InvalidMove');
@@ -185,10 +185,11 @@ library Bitboard {
     else require(df.abs() == 1, 'InvalidMove');
   }
 
-  function _vBp(Bitboard storage b, Color c, uint8 from, uint8 to) internal {
+  function _vBp(Bitboard storage b, uint8 from, uint8 to) internal view {
     int8 dr = _dr(from, to);
     int8 df = _df(from, to);
     require(dr.abs() == df.abs(), 'InvalidMove');
+    // Check bishop won't jump over other pieces
     for (int8 _dx=1; _dx<int8(df.abs()); _dx++) {
       int8 _di = df > 0 ? _dx : -_dx;
       _di += (dr > 0 ? _dx : -_dx)*8;
@@ -196,11 +197,11 @@ library Bitboard {
     }
   }
 
-  function _vQn(Bitboard storage b, Color c, uint8 from, uint8 to) internal {
+  function _vQn(Bitboard storage b, uint8 from, uint8 to) internal view {
     int8 dr = _dr(from, to);
     int8 df = _df(from, to);
-    if (dr == 0 || df == 0) _vRk(b, c, from, to);
-    else _vBp(b, c, from, to);
+    if (dr == 0 || df == 0) _vRk(b, from, to);
+    else _vBp(b, from, to);
   }
 
   function _vKg(Bitboard storage b, Color c, uint8 from, uint8 to) internal {
@@ -244,10 +245,10 @@ library Bitboard {
   ) internal {
     if (p == Piece.Empty) revert('InvalidPiece');
     else if (p == Piece.Pawn) _vPn(b, c, from, to);
-    else if (p == Piece.Rook) _vRk(b, c, from, to);
-    else if (p == Piece.Knight) _vKt(b, c, from, to);
-    else if (p == Piece.Bishop) _vBp(b, c, from, to);
-    else if (p == Piece.Queen) _vQn(b, c, from, to);
+    else if (p == Piece.Rook) _vRk(b, from, to);
+    else if (p == Piece.Knight) _vKt(from, to);
+    else if (p == Piece.Bishop) _vBp(b, from, to);
+    else if (p == Piece.Queen) _vQn(b, from, to);
     else if (p == Piece.King) _vKg(b, c, from, to);
   }
 
@@ -307,8 +308,12 @@ library Bitboard {
       int8 df = _df(from, to);
       // Regardless of whether it's a castle, if you move the king then
       // castling is permanantly disallowed.
-      if (b.__allowQueenSideCastle[uint(c)]) b.__allowQueenSideCastle[uint(c)] = false;
-      if (b.__allowKingSideCastle[uint(c)]) b.__allowKingSideCastle[uint(c)] = false;
+      if (b.__allowQueenSideCastle[uint(c)]) {
+        b.__allowQueenSideCastle[uint(c)] = false;
+      }
+      if (b.__allowKingSideCastle[uint(c)]) {
+        b.__allowKingSideCastle[uint(c)] = false;
+      }
       // Update the location of the rooks if we're castling.  The king
       // location will be updated later in the final step.
       if (df == 2 && dr == 0) {
@@ -323,10 +328,14 @@ library Bitboard {
     } else if (p == Piece.Rook) {
       if (_file(from) == 0) {
         // Queen side rook, disallow queen side castling.
-        if (b.__allowQueenSideCastle[uint(c)]) b.__allowQueenSideCastle[uint(c)] = false;
+        if (b.__allowQueenSideCastle[uint(c)]) {
+          b.__allowQueenSideCastle[uint(c)] = false;
+        }
       } else if (_file(from) == 7) {
         // King side rook, disallow king side castling.
-        if (b.__allowKingSideCastle[uint(c)]) b.__allowKingSideCastle[uint(c)] = false;
+        if (b.__allowKingSideCastle[uint(c)]) {
+          b.__allowKingSideCastle[uint(c)] = false;
+        }
       }
     }
 

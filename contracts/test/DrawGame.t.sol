@@ -17,7 +17,7 @@ contract DrawGameTest is ChessGameTest {
 
   function testMoveFailsDuringDraw() public {
     vm.expectRevert('InvalidContractState');
-    _move(p2, 'b6');
+    _move(p2, 'b7b6');
   }
 
   function testAcceptDraw() public
@@ -41,8 +41,8 @@ contract DrawGameTest is ChessGameTest {
     GameData memory gameData = engine.game(gameId);
     assertEq(uint(gameData.state), uint(GameState.Started));
     assertEq(uint(gameData.outcome), uint(GameOutcome.Undecided));
-    _testMove(p1, 'a3');
-    _testMove(p2, 'b6');
+    _testMove(p1, 'a2a3');
+    _testMove(p2, 'b7b6');
   }
 
   function testRespondDrawFailsAsSender() public {
