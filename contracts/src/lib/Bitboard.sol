@@ -11,8 +11,8 @@ library Bitboard {
   struct Bitboard {
     mapping(Color => mapping(Piece => bytes8)) __bitboard;
     mapping(Color => Piece[]) __captures;
-    bool __allowKingSideCastle;
-    bool __allowQueenSideCastle;
+    bool[2] __allowKingSideCastle;
+    bool[2] __allowQueenSideCastle;
   }
 
   function initialize(Bitboard storage b, Color c, Piece p, bytes8 bb) internal {
@@ -43,8 +43,10 @@ library Bitboard {
     initialize(b, Color.Black, Piece.Queen, 7, 0x08);
     initialize(b, Color.Black, Piece.King, 7, 0x10);
     // Setup everything else
-    b.__allowKingSideCastle = true;
-    b.__allowQueenSideCastle = true;
+    b.__allowKingSideCastle[0] = true;
+    b.__allowKingSideCastle[1] = true;
+    b.__allowQueenSideCastle[0] = true;
+    b.__allowQueenSideCastle[1] = true;
   }
 
   function bitboard(Bitboard storage b, Color c, Piece p) internal view
@@ -213,13 +215,13 @@ library Bitboard {
       require(_file(from) == 0x04, 'InvalidMove');
       if(df == 2) {
         // King side castle
-        require(b.__allowKingSideCastle, 'InvalidMove');
+        require(b.__allowKingSideCastle[uint(c)], 'InvalidMove');
         require(bitboard(b) & _mask(from+1) == 0, 'InvalidMove');
         require(bitboard(b) & _mask(from+2) == 0, 'InvalidMove');
         require(bitboard(b, c, Piece.Rook) & _mask(from+3) > 0, 'InvalidMove');
       } else if(df == -2) {
         // Queen side castle
-        require(b.__allowQueenSideCastle, 'InvalidMove');
+        require(b.__allowQueenSideCastle[uint(c)], 'InvalidMove');
         require(bitboard(b) & _mask(from-1) == 0, 'InvalidMove');
         require(bitboard(b) & _mask(from-2) == 0, 'InvalidMove');
         require(bitboard(b) & _mask(from-3) == 0, 'InvalidMove');
@@ -279,8 +281,8 @@ library Bitboard {
       int8 df = _df(from, to);
       // Regardless of whether it's a castle, if you move the king then
       // castling is permanantly disallowed.
-      if (b.__allowQueenSideCastle) b.__allowQueenSideCastle = false;
-      if (b.__allowKingSideCastle) b.__allowKingSideCastle = false;
+      if (b.__allowQueenSideCastle[uint(c)]) b.__allowQueenSideCastle[uint(c)] = false;
+      if (b.__allowKingSideCastle[uint(c)]) b.__allowKingSideCastle[uint(c)] = false;
       // Update the location of the rooks if we're castling.  The king
       // location will be updated later in the final step.
       if (df == 2 && dr == 0) {
@@ -295,10 +297,10 @@ library Bitboard {
     } else if (p == Piece.Rook) {
       if (_file(from) == 0) {
         // Queen side rook, disallow queen side castling.
-        if (b.__allowQueenSideCastle) b.__allowQueenSideCastle = false;
+        if (b.__allowQueenSideCastle[uint(c)]) b.__allowQueenSideCastle[uint(c)] = false;
       } else if (_file(from) == 7) {
         // King side rook, disallow king side castling.
-        if (b.__allowKingSideCastle) b.__allowKingSideCastle = false;
+        if (b.__allowKingSideCastle[uint(c)]) b.__allowKingSideCastle[uint(c)] = false;
       }
     }
 

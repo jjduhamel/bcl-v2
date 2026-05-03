@@ -59,8 +59,10 @@ contract BitboardWrapper {
   }
 
   function disableCastling() public {
-    b.__allowKingSideCastle = false;
-    b.__allowQueenSideCastle = false;
+    b.__allowKingSideCastle[0] = false;
+    b.__allowKingSideCastle[1] = false;
+    b.__allowQueenSideCastle[0] = false;
+    b.__allowQueenSideCastle[1] = false;
   }
 
   function clear() public {

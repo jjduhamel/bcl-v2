@@ -212,6 +212,26 @@ abstract contract KingTest is BitboardTest {
       _testIllegalMove(c, Piece.King, 0x3C, 0x3A);
     }
   }
+  function testKingMoveDoesNotAffectOpponentCastle() public {
+    b.initialize();
+    if (c == Color.White) {
+      b.pluck(c, Piece.Bishop, 0x05);
+      b.pluck(c, Piece.Knight, 0x06);
+      b.pluck(o, Piece.Bishop, 0x3D);
+      b.pluck(o, Piece.Knight, 0x3E);
+      _testLegalMove(c, Piece.King, 0x04, 0x05);
+      _testLegalMove(c, Piece.King, 0x05, 0x04);
+      _testLegalMove(o, Piece.King, 0x3C, 0x3E);
+    } else {
+      b.pluck(c, Piece.Bishop, 0x3D);
+      b.pluck(c, Piece.Knight, 0x3E);
+      b.pluck(o, Piece.Bishop, 0x05);
+      b.pluck(o, Piece.Knight, 0x06);
+      _testLegalMove(c, Piece.King, 0x3C, 0x3D);
+      _testLegalMove(c, Piece.King, 0x3D, 0x3C);
+      _testLegalMove(o, Piece.King, 0x04, 0x06);
+    }
+  }
 }
 
 contract WhiteKingTest is KingTest {
