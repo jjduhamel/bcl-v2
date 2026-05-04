@@ -42,4 +42,14 @@ contract ResignGameTest is ChessGameTest {
     vm.expectRevert('InvalidContractState');
     _move(p1, 'a2a3');
   }
+
+  function testWithdrawETHAfterWin() public {
+    changePrank(p1);
+    engine.resign(gameId);
+    changePrank(p2);
+    uint balBefore = p2.balance;
+    engine.withdraw(address(0));
+    assertEq(p2.balance - balBefore, 2 * wager);
+    assertEq(engine.earnings(address(0)), 0);
+  }
 }

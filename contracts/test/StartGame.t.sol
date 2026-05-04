@@ -59,4 +59,35 @@ contract StartGameTest is ChessGameTest {
     vm.expectRevert('NotCurrentMove');
     _move(p1, 'b2b4');
   }
+
+  function testWagerTokenIsETH() public {
+    GameData memory gameData = engine.game(gameId);
+    assertEq(gameData.wagerToken, address(0));
+  }
+
+  function testPlatformFeeAccrues() public {
+    _testMove(p1, 'f2f3');
+    _testMove(p2, 'e7e5');
+    _testMove(p1, 'g2g4');
+    _testMove(p2, 'd8h4');
+    _testMove(p1, 'a2a3');
+    _testMove(p2, 'h4e1');
+    changePrank(arbiter);
+    assertEq(engine.profit(address(0)), 2 * fee);
+  }
+
+  function testPlatformFeeWithdrawal() public {
+    _testMove(p1, 'f2f3');
+    _testMove(p2, 'e7e5');
+    _testMove(p1, 'g2g4');
+    _testMove(p2, 'd8h4');
+    _testMove(p1, 'a2a3');
+    _testMove(p2, 'h4e1');
+    changePrank(arbiter);
+    address payable receiver = payable(makeAddr('feeReceiver'));
+    uint before = receiver.balance;
+    engine.withdraw(address(0), receiver);
+    assertEq(receiver.balance - before, 2 * fee);
+    assertEq(engine.profit(address(0)), 0);
+  }
 }

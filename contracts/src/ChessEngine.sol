@@ -2,15 +2,14 @@
 pragma solidity >=0.4.22 <0.9.0;
 import '@oz-upgradeable/proxy/utils/Initializable.sol';
 import '@oz-upgradeable/proxy/utils/UUPSUpgradeable.sol';
-import '@oz/utils/structs/EnumerableMap.sol';
 import '@lib/Bitboard.sol';
 import '@lib/UCI.sol';
+import '@lib/Escrow.sol';
 import './IChessEngine.sol';
 import './Lobby.sol';
 
-contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
+contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine, Escrow {
   using Bitboard for Bitboard.Bitboard;
-  using EnumerableMap for EnumerableMap.UintToUintMap;
   Lobby private __lobby;
 
   mapping(uint => GameData) private __games;
@@ -18,10 +17,6 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
   mapping(uint => string[]) __moves;
   // map gameId -> bitboards
   mapping(uint => Bitboard.Bitboard) __bitboards;
-  // map player -> gameId -> deposit
-  mapping(address => EnumerableMap.UintToUintMap) __escrow;
-  // map player -> earnings
-  mapping(address => uint) __earnings;
 
   // Platform fees
   uint __platformFeePerc;
@@ -66,34 +61,16 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
     isAdmin
   { __platformFeeMin = amount; }
 
-  function profit() public view
+  function profit(address token) public view
     isArbiter
   returns (uint) {
-    return __earnings[address(0)];
+    return earnings(address(0), token);
   }
 
-  function withdraw(address payable receiver) public
+  function withdraw(address token, address payable receiver) public
     isAdmin
   {
-    receiver.transfer(profit());
-    __earnings[address(0)] = 0;
-  }
-
-  function deposits(address player) public view
-    isArbiter
-  returns (uint[2][] memory) {
-    EnumerableMap.UintToUintMap storage deposits = __escrow[player];
-    uint[2][] memory out = new uint[2][](deposits.length());
-    for (uint j=0; j<deposits.length(); j++) {
-      (out[j][0],out[j][1]) = deposits.at(j);
-    }
-    return out;
-  }
-
-  function earnings(address player) public
-    isArbiter
-  returns (uint) {
-    return __earnings[player];
+    withdrawPlatform(token, receiver);
   }
 
   /*
@@ -224,49 +201,18 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
     _;
   }
 
-  /*
-   * Deposit, wager, platform fee
-   */
-
-  modifier deposit(uint gameId, address player)
-  {
-    // Update player deposit
-    if (msg.value > 0) {
-      uint deposit = balance(gameId, player);
-      __escrow[player].set(gameId, deposit+msg.value);
-    }
-    _;
-    // Check the player has enough left over after tx
-    if (__games[gameId].wagerAmount > 0) {
-      require(balance(gameId, player) >= requiredBalance(gameId)
-             , 'InvalidDepositAmount');
-    }
-  }
-
-  function deposits() public view
-  returns (uint[2][] memory) {
-    EnumerableMap.UintToUintMap storage deposits = __escrow[msg.sender];
-    uint[2][] memory out = new uint[2][](deposits.length());
-    for (uint j=0; j<deposits.length(); j++) {
-      (out[j][0],out[j][1]) = deposits.at(j);
-    }
-    return out;
-  }
-
   function balance(uint gameId, address player) public view
   returns (uint) {
-    (bool exists, uint deposit) = __escrow[player].tryGet(gameId);
-    return exists ? deposit : 0;
+    return escrow(player, gameId).amount;
   }
 
-  function earnings() public view returns (uint) {
-    return __earnings[msg.sender];
+  function earnings(address token) public view
+  returns (uint) {
+    return earnings(msg.sender, token);
   }
 
-  function withdraw() public {
-    uint balance = __earnings[msg.sender];
-    payable(msg.sender).transfer(balance);
-    __earnings[msg.sender] = 0;
+  function withdraw(address token) public {
+    withdraw(msg.sender, token);
   }
 
   function platformFeePerc() public view returns (uint) {
@@ -291,54 +237,6 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
     }
   }
 
-  function chargePlatformFee(uint gameId, address player) private {
-    if (__games[gameId].wagerAmount == 0) return;
-    uint deposit = balance(gameId, player);
-    uint fee = platformFee(gameId);
-    require(deposit >= fee, 'InvalidDepositAmount');
-    __escrow[player].set(gameId, deposit-fee);
-    __earnings[address(0)] += fee;
-  }
-
-  function refundExcess(uint gameId, address payable player) private
-    isChallenge(gameId)
-  {
-    uint required = requiredBalance(gameId);
-    uint deposit = balance(gameId, player);
-    if (deposit > required) {
-      __earnings[player] += deposit-required;
-      __escrow[player].set(gameId, required);
-    }
-  }
-
-  function refund(uint gameId, address payable player) private
-    isChallenge(gameId)
-  {
-    uint deposit = balance(gameId, player);
-    __earnings[player] += deposit;
-    __escrow[player].remove(gameId);
-  }
-
-  function disburse(uint gameId) private
-    isFinished(gameId)
-  {
-    GameData storage gameData = __games[gameId];
-    uint wDeposit = balance(gameId, gameData.whitePlayer);
-    uint bDeposit = balance(gameId, gameData.blackPlayer);
-    __escrow[gameData.whitePlayer].remove(gameId);
-    __escrow[gameData.blackPlayer].remove(gameId);
-    if (gameData.outcome == GameOutcome.WhiteWon) {
-      __earnings[gameData.whitePlayer] += wDeposit+bDeposit;
-    } else if (gameData.outcome == GameOutcome.BlackWon) {
-      __earnings[gameData.blackPlayer] += wDeposit+bDeposit;
-    } else if (gameData.outcome == GameOutcome.Draw) {
-      __earnings[gameData.whitePlayer] += wDeposit;
-      __earnings[gameData.blackPlayer] += bDeposit;
-    } else {
-      revert('InvalidGameOutcome');
-    }
-  }
-
   /*
    * Challenging Logic
    */
@@ -349,10 +247,10 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
     address receiver,
     bool startAsWhite,
     uint timePerMove,
-    uint wagerAmount
+    uint wagerAmount,
+    address wagerToken
   ) public payable
     isLobby
-    deposit(gameId, sender)
   returns (uint) {
     require(timePerMove >= 60, 'InvalidTimePerMove');
     address white = startAsWhite ? sender : receiver;
@@ -366,8 +264,13 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
       receiver,
       timePerMove,
       0,
-      wagerAmount
+      wagerAmount,
+      wagerToken
     );
+    if (wagerAmount > 0) {
+      deposit(sender, gameId, wagerToken, wagerToken == address(0) ? msg.value : requiredBalance(gameId));
+      require(escrow(sender, gameId).amount >= requiredBalance(gameId), 'InvalidDepositAmount');
+    }
     return gameId;
   }
 
@@ -375,11 +278,17 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
     isChallenge(gameId)
     isPlayer(gameId)
     isCurrentMove(gameId)
-    deposit(gameId, msg.sender)
   {
     GameData storage gameData = __games[gameId];
-    refundExcess(gameId, gameData.whitePlayer);
-    refundExcess(gameId, gameData.blackPlayer);
+    if (gameData.wagerAmount > 0) {
+      uint required = requiredBalance(gameId);
+      deposit(msg.sender, gameId, gameData.wagerToken, gameData.wagerToken == address(0) ? msg.value : required);
+      require(escrow(msg.sender, gameId).amount >= required, 'InvalidDepositAmount');
+      uint wBal = escrow(gameData.whitePlayer, gameId).amount;
+      if (wBal > required) refund(gameData.whitePlayer, gameId, wBal - required);
+      uint bBal = escrow(gameData.blackPlayer, gameId).amount;
+      if (bBal > required) refund(gameData.blackPlayer, gameId, bBal - required);
+    }
     __lobby.acceptChallenge(gameId, msg.sender, opponent(gameId));
   }
 
@@ -388,8 +297,8 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
     isPlayer(gameId)
   {
     GameData storage gameData = __games[gameId];
-    refund(gameId, gameData.whitePlayer);
-    refund(gameId, gameData.blackPlayer);
+    refund(gameData.whitePlayer, gameId);
+    refund(gameData.blackPlayer, gameId);
     gameData.state = GameState.Declined;
     __lobby.cancelChallenge(gameId, msg.sender, opponent(gameId));
   }
@@ -402,7 +311,6 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
   ) public payable
     isChallenge(gameId)
     isPlayer(gameId)
-    deposit(gameId, msg.sender)
   {
     require(timePerMove >= 60, 'InvalidTimePerMove');
     GameData storage gameData = __games[gameId];
@@ -420,7 +328,21 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
     }
     if (wagerAmount != gameData.wagerAmount) {
       gameData.wagerAmount = wagerAmount;
-      refundExcess(gameId, payable(receiver));
+      // Trim receiver's escrow if new wager is lower
+      uint required = requiredBalance(gameId);
+      uint recvBal = escrow(receiver, gameId).amount;
+      if (recvBal > required) refund(receiver, gameId, recvBal - required);
+    }
+    if (gameData.wagerAmount > 0) {
+      uint required = requiredBalance(gameId);
+      address token = gameData.wagerToken;
+      if (token == address(0)) {
+        deposit(msg.sender, gameId, address(0), msg.value);
+      } else {
+        uint senderBal = escrow(msg.sender, gameId).amount;
+        if (senderBal < required) deposit(msg.sender, gameId, token, required - senderBal);
+      }
+      require(escrow(msg.sender, gameId).amount >= required, 'InvalidDepositAmount');
     }
     __lobby.touch(gameId, msg.sender, receiver);
   }
@@ -434,8 +356,9 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
     isChallenge(gameId)
   {
     GameData storage gameData = __games[gameId];
-    chargePlatformFee(gameId, gameData.whitePlayer);
-    chargePlatformFee(gameId, gameData.blackPlayer);
+    uint fee = platformFee(gameId);
+    chargeFee(gameData.whitePlayer, gameId, gameData.wagerToken, fee);
+    chargeFee(gameData.blackPlayer, gameId, gameData.wagerToken, fee);
     __bitboards[gameId].initialize();
     gameData.state = GameState.Started;
     gameData.currentMove = gameData.whitePlayer;
@@ -476,7 +399,7 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
     GameData storage gameData = __games[gameId];
     gameData.state = GameState.Finished;
     gameData.outcome = outcome;
-    disburse(gameId);
+    disburse(gameData.whitePlayer, gameData.blackPlayer, gameId, outcome);
     emit GameOver(gameId, winner(gameId), loser(gameId));
     __lobby.finishGame(gameId, outcome);
   }

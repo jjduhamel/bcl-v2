@@ -9,7 +9,7 @@ import './Challenge.t.sol';
 abstract contract ChessGameTest is ChallengeTest {
   constructor() {
     changePrank(p1);
-    lobby.challenge{ value: deposit }(p2, true, timePerMove, wager);
+    lobby.challenge{ value: deposit }(p2, true, timePerMove, wager, address(0));
     uint[] memory challenges = lobby.challenges(p1);
     gameId = challenges[0];
     changePrank(p2);

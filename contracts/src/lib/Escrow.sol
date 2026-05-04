@@ -37,6 +37,14 @@ abstract contract Escrow {
     __escrow[player].remove(gameId);
   }
 
+  function refund(address player, uint gameId, uint amount) internal {
+    (bool exists, TokenDeposit memory d) = __escrow[player].tryGet(gameId);
+    if (!exists || amount == 0) return;
+    require(d.amount >= amount, 'InsufficientFunds');
+    __earnings[player].set(d.token, earnings(player, d.token) + amount);
+    __escrow[player].set(gameId, d.token, d.amount - amount);
+  }
+
   function disburse(
     address white,
     address black,

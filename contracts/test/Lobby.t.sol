@@ -96,7 +96,7 @@ contract ChallengingDisabledTest is LobbyTest {
 
   function testChallengeDisabled() public {
     vm.expectRevert('ChallengingDisabled');
-    lobby.challenge(p2, true, 60, 10);
+    lobby.challenge(p2, true, 60, 10, address(0));
   }
 }
 
@@ -109,7 +109,7 @@ contract WageringDisabledTest is LobbyTest {
   function testChallengeWithoutWager() public {
     vm.expectEmit(false, true, true, true, address(lobby));
     emit NewChallenge(0, p1, p2);
-    lobby.challenge(p2, true, 60, 0);
+    lobby.challenge(p2, true, 60, 0, address(0));
   }
 
   function _testPlayerLobby(address player) private returns (uint[] memory) {
@@ -120,7 +120,7 @@ contract WageringDisabledTest is LobbyTest {
   }
 
   function testPlayersReceiveChallenge() public {
-    lobby.challenge(p2, true, 60, 0);
+    lobby.challenge(p2, true, 60, 0, address(0));
     uint[] memory c1 = _testPlayerLobby(p1);
     uint[] memory c2 = _testPlayerLobby(p2);
     assertEq(c1, c2);
@@ -128,7 +128,7 @@ contract WageringDisabledTest is LobbyTest {
 
   function testWageringDisabled() public {
     vm.expectRevert('WageringDisabled');
-    lobby.challenge{ value: wager }(p2, true, wager, 60);
+    lobby.challenge{ value: wager }(p2, true, wager, 60, address(0));
   }
 }
 
@@ -142,7 +142,7 @@ contract WageringEnabledTest is LobbyTest {
   function testChallengeWithWager() public {
     vm.expectEmit(false, false, false, false, address(lobby));
     emit NewChallenge(0, p1, p2);
-    lobby.challenge{ value: wager }(p2, true, wager, 60);
+    lobby.challenge{ value: wager }(p2, true, wager, 60, address(0));
   }
 
   function _testPlayerLobby(address player) private returns (uint[] memory) {
@@ -153,7 +153,7 @@ contract WageringEnabledTest is LobbyTest {
   }
 
   function testPlayersReceiveChallenge() public {
-    lobby.challenge{ value: wager }(p2, true, wager, 60);
+    lobby.challenge{ value: wager }(p2, true, wager, 60, address(0));
     uint[] memory c1 = _testPlayerLobby(p1);
     uint[] memory c2 = _testPlayerLobby(p2);
     assertEq(c1, c2);
@@ -161,11 +161,11 @@ contract WageringEnabledTest is LobbyTest {
 
   function testInsufficientDepositAmount() public {
     vm.expectRevert('InvalidDepositAmount');
-    lobby.challenge{ value: wager/2 }(p2, true, 60, wager);
+    lobby.challenge{ value: wager/2 }(p2, true, 60, wager, address(0));
   }
 
   function testExcessDepositAmount() public {
-    lobby.challenge{ value: wager*2 }(p2, true, 60, wager);
+    lobby.challenge{ value: wager*2 }(p2, true, 60, wager, address(0));
     // TODO
   }
 }
@@ -179,7 +179,7 @@ contract BanUserTest is LobbyTest {
 
   function testChallengeFails() public {
     vm.expectRevert('UserBanned');
-    lobby.challenge(p2, true, 60, 0);
+    lobby.challenge(p2, true, 60, 0, address(0));
   }
 
   function testUnbanUser() public {
@@ -188,6 +188,6 @@ contract BanUserTest is LobbyTest {
     changePrank(p1);
     vm.expectEmit(false, true, true, true, address(lobby));
     emit NewChallenge(0, p1, p2);
-    lobby.challenge(p2, true, 60, 0);
+    lobby.challenge(p2, true, 60, 0, address(0));
   }
 }

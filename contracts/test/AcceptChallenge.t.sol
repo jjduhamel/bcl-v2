@@ -6,7 +6,7 @@ import './Challenge.t.sol';
 
 contract AcceptChallengeTest is ChallengeTest {
   function setUp() public {
-    gameId = lobby.challenge{ value: deposit }(p2, true, timePerMove, wager);
+    gameId = lobby.challenge{ value: deposit }(p2, true, timePerMove, wager, address(0));
     changePrank(p2);
   }
 

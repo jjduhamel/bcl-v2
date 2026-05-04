@@ -18,7 +18,7 @@ interface IChessEngine {
     uint timeOfLastMove;
     // Wagering
     uint wagerAmount;
-    //address wagerToken;
+    address wagerToken;
   }
 
   event GameStarted(uint indexed gameId

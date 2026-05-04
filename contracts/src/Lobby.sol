@@ -189,10 +189,10 @@ contract Lobby is
     _;
   }
 
-  modifier allowWager(uint _amount) {
+  modifier allowWager(uint _amount, address _token) {
     if (_amount > 0) {
       require(__allowWagers, 'WageringDisabled');
-      require(msg.value >= _amount, 'InvalidDepositAmount');
+      if (_token == address(0)) require(msg.value >= _amount, 'InvalidDepositAmount');
     }
     _;
   }
@@ -305,11 +305,12 @@ contract Lobby is
     address opponent,
     bool startAsWhite,
     uint timePerMove,
-    uint wagerAmount
+    uint wagerAmount,
+    address wagerToken
   ) external payable
     notBanned
     allowChallenge
-    allowWager(wagerAmount)
+    allowWager(wagerAmount, wagerToken)
   returns (uint) {
     initPlayerLobby(msg.sender, opponent);
     // Create a new challenge on the current game engine
@@ -319,7 +320,8 @@ contract Lobby is
                                                  , opponent
                                                  , startAsWhite
                                                  , timePerMove
-                                                 , wagerAmount);
+                                                 , wagerAmount
+                                                 , wagerToken);
     __house.gamesCreated++;
     // Set the game engine
     __gameEngine[gameId] = address(__currentEngine);
