@@ -28,17 +28,17 @@ contract CreateChallengeTest is ChallengeTest {
   }
 
   function testChallengeFailsWithInvalidTPM() public {
-    vm.expectRevert('InvalidTimePerMove');
+    vm.expectRevert(ChessEngine.InvalidTimePerMove.selector);
     lobby.challenge(p2, true, 59, 0, address(0));
   }
 
   function testChallengeFailsWithNoDeposit() public {
-    vm.expectRevert('InvalidDepositAmount');
+    vm.expectRevert(ChessEngine.InvalidDepositAmount.selector);
     lobby.challenge(p2, true, timePerMove, wager, address(0));
   }
 
   function testChallengeFailsWithLowDeposit() public {
-    vm.expectRevert('InvalidDepositAmount');
+    vm.expectRevert(ChessEngine.InvalidDepositAmount.selector);
     lobby.challenge{ value: deposit-1 }(p2, true, timePerMove, wager, address(0));
   }
 

@@ -22,7 +22,7 @@ contract EscrowERC20WithdrawTest is EscrowTest {
   }
 
   function testZeroEarningsReverts() public {
-    vm.expectRevert('InsufficientBalance');
+    vm.expectRevert(InsufficientBalance.selector);
     withdraw(p2, address(token));
   }
 }
@@ -46,7 +46,7 @@ contract EscrowETHWithdrawTest is EscrowETHTest {
   }
 
   function testZeroEarningsReverts() public {
-    vm.expectRevert('InsufficientBalance');
+    vm.expectRevert(InsufficientBalance.selector);
     withdraw(p2, address(0));
   }
 }

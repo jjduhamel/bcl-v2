@@ -95,7 +95,7 @@ contract ChallengingDisabledTest is LobbyTest {
   }
 
   function testChallengeDisabled() public {
-    vm.expectRevert('ChallengingDisabled');
+    vm.expectRevert(Lobby.ChallengingDisabled.selector);
     lobby.challenge(p2, true, 60, 10, address(0));
   }
 }
@@ -127,7 +127,7 @@ contract WageringDisabledTest is LobbyTest {
   }
 
   function testWageringDisabled() public {
-    vm.expectRevert('WageringDisabled');
+    vm.expectRevert(Lobby.WageringDisabled.selector);
     lobby.challenge{ value: wager }(p2, true, wager, 60, address(0));
   }
 }
@@ -160,7 +160,7 @@ contract WageringEnabledTest is LobbyTest {
   }
 
   function testInsufficientDepositAmount() public {
-    vm.expectRevert('InvalidDepositAmount');
+    vm.expectRevert(Lobby.InvalidDepositAmount.selector);
     lobby.challenge{ value: wager/2 }(p2, true, 60, wager, address(0));
   }
 
@@ -178,7 +178,7 @@ contract BanUserTest is LobbyTest {
   }
 
   function testChallengeFails() public {
-    vm.expectRevert('UserBanned');
+    vm.expectRevert(Lobby.UserBanned.selector);
     lobby.challenge(p2, true, 60, 0, address(0));
   }
 

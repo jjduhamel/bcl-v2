@@ -14,6 +14,12 @@ contract Lobby is
   AccessControlEnumerableUpgradeable,
   ILobby
 {
+  error ChessEngineOnly();
+  error GameEngineOnly();
+  error ChallengingDisabled();
+  error WageringDisabled();
+  error InvalidDepositAmount();
+  error UserBanned();
   using EnumerableSet for EnumerableSet.AddressSet;
   using EnumerableSet for EnumerableSet.UintSet;
 
@@ -175,30 +181,30 @@ contract Lobby is
   }
 
   modifier isChessEngine() {
-    require(__chessEngines.contains(msg.sender), 'ChessEngineOnly');
+    if (!__chessEngines.contains(msg.sender)) revert ChessEngineOnly();
     _;
   }
 
   modifier isGameEngine(uint gameId) {
-    require(msg.sender == __gameEngine[gameId], 'GameEngineOnly');
+    if (msg.sender != __gameEngine[gameId]) revert GameEngineOnly();
     _;
   }
 
   modifier allowChallenge() {
-    require(__allowChallenges, 'ChallengingDisabled');
+    if (!__allowChallenges) revert ChallengingDisabled();
     _;
   }
 
   modifier allowWager(uint _amount, address _token) {
     if (_amount > 0) {
-      require(__allowWagers, 'WageringDisabled');
-      if (_token == address(0)) require(msg.value >= _amount, 'InvalidDepositAmount');
+      if (!__allowWagers) revert WageringDisabled();
+      if (_token == address(0) && msg.value < _amount) revert InvalidDepositAmount();
     }
     _;
   }
 
   modifier notBanned() {
-    require(!hasRole(BANNED_ROLE, msg.sender), 'UserBanned');
+    if (hasRole(BANNED_ROLE, msg.sender)) revert UserBanned();
     _;
   }
 

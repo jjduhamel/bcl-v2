@@ -26,7 +26,7 @@ contract MoveTimerTest is ChessGameTest {
   function testTimerExpired() public {
     skip(timePerMove+1);
     assertTrue(engine.timeDidExpire(gameId));
-    vm.expectRevert('TimerExpired');
+    vm.expectRevert(ChessEngine.TimerExpired.selector);
     _move(p2, 'b7b6');
   }
 }
@@ -40,7 +40,7 @@ contract ClaimVictoryTest is ChessGameTest {
 
   function testClaimVictoryFailsWhileTimerActive() public {
     assertFalse(engine.timeDidExpire(gameId));
-    vm.expectRevert('TimerActive');
+    vm.expectRevert(ChessEngine.TimerActive.selector);
     engine.claimVictory(gameId);
   }
 
@@ -61,7 +61,7 @@ contract ClaimVictoryTest is ChessGameTest {
     skip(timePerMove+1);
     assertTrue(engine.timeDidExpire(gameId));
     changePrank(p2);
-    vm.expectRevert('NotOpponentsMove');
+    vm.expectRevert(ChessEngine.NotOpponentsMove.selector);
     engine.claimVictory(gameId);
   }
 
@@ -69,7 +69,7 @@ contract ClaimVictoryTest is ChessGameTest {
     skip(timePerMove+1);
     assertTrue(engine.timeDidExpire(gameId));
     changePrank(p3);
-    vm.expectRevert('PlayerOnly');
+    vm.expectRevert(ChessEngine.PlayerOnly.selector);
     engine.claimVictory(gameId);
   }
 }

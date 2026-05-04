@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 import '@forge/Test.sol';
+import '@src/lib/GameIDToTokenDepositMap.sol';
 import './Escrow.t.sol';
 import './MockERC20Token.sol';
 
@@ -36,7 +37,7 @@ contract EscrowERC20DisburseTest is EscrowTest {
 
   function testDisburseSameGameTwiceReverts() public {
     disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
-    vm.expectRevert('NoDeposit');
+    vm.expectRevert(GameIDToTokenDepositMap.NoDeposit.selector);
     disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
   }
 }
@@ -73,7 +74,7 @@ contract EscrowETHDisburseTest is EscrowETHTest {
 
   function testDisburseSameGameTwiceReverts() public {
     disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
-    vm.expectRevert('NoDeposit');
+    vm.expectRevert(GameIDToTokenDepositMap.NoDeposit.selector);
     disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
   }
 }

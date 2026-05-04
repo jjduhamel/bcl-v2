@@ -17,20 +17,20 @@ contract EscrowERC20PlatformTest is EscrowTest {
 
   function testWithdrawPlatformTransfersTokens() public {
     address recipient = makeAddr('recipient');
-    withdrawPlatform(address(token), recipient);
+    withdrawPlatformFunds(address(token), recipient);
     assertEq(token.balanceOf(recipient), 2 * fee);
   }
 
   function testWithdrawPlatformClearsEarnings() public {
     address recipient = makeAddr('recipient');
-    withdrawPlatform(address(token), recipient);
+    withdrawPlatformFunds(address(token), recipient);
     assertEq(earnings(address(0), address(token)), 0);
   }
 
   function testWithdrawPlatformZeroBalanceIsNoop() public {
     address recipient = makeAddr('recipient');
-    withdrawPlatform(address(token), recipient);
-    withdrawPlatform(address(token), recipient);
+    withdrawPlatformFunds(address(token), recipient);
+    withdrawPlatformFunds(address(token), recipient);
     assertEq(token.balanceOf(recipient), 2 * fee);
   }
 }
@@ -50,20 +50,20 @@ contract EscrowETHPlatformTest is EscrowETHTest {
   function testWithdrawPlatformTransfersETH() public {
     address payable recipient = payable(makeAddr('recipient'));
     uint before = recipient.balance;
-    withdrawPlatform(address(0), recipient);
+    withdrawPlatformFunds(address(0), recipient);
     assertEq(recipient.balance, before + 2 * fee);
   }
 
   function testWithdrawPlatformClearsEarnings() public {
     address recipient = makeAddr('recipient');
-    withdrawPlatform(address(0), recipient);
+    withdrawPlatformFunds(address(0), recipient);
     assertEq(earnings(address(0), address(0)), 0);
   }
 
   function testWithdrawPlatformZeroBalanceIsNoop() public {
     address payable recipient = payable(makeAddr('recipient'));
-    withdrawPlatform(address(0), recipient);
-    withdrawPlatform(address(0), recipient);
+    withdrawPlatformFunds(address(0), recipient);
+    withdrawPlatformFunds(address(0), recipient);
     assertEq(recipient.balance, 2 * fee);
   }
 }

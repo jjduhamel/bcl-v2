@@ -27,7 +27,7 @@ contract EscrowERC20FeeTest is EscrowTest {
   }
 
   function testFeeExceedsBalanceReverts() public {
-    vm.expectRevert('InsufficientFunds');
+    vm.expectRevert(InsufficientFunds.selector);
     chargeFee(p1, gameId, address(token), wager + fee + 1);
   }
 
@@ -63,7 +63,7 @@ contract EscrowETHFeeTest is EscrowETHTest {
   }
 
   function testFeeExceedsBalanceReverts() public {
-    vm.expectRevert('InsufficientFunds');
+    vm.expectRevert(InsufficientFunds.selector);
     chargeFee(p1, gameId, address(0), wager + fee + 1);
   }
 

@@ -29,14 +29,14 @@ contract EscrowERC20DepositTest is EscrowTest {
     token2.mint(p1, wager);
     vm.prank(p1);
     token2.approve(address(this), type(uint256).max);
-    vm.expectRevert('InvalidToken');
+    vm.expectRevert(InvalidToken.selector);
     deposit(p1, gameId, address(token2), wager);
   }
 
   function testAmountOverflowReverts() public {
     uint overflow = uint(type(uint96).max) + 1;
     token.mint(p1, overflow);
-    vm.expectRevert('AmountOverflow');
+    vm.expectRevert(AmountOverflow.selector);
     deposit(p1, gameId, address(token), overflow);
   }
 
@@ -76,7 +76,7 @@ contract EscrowETHDepositTest is EscrowETHTest {
   }
 
   function testInsufficientValueReverts() public {
-    vm.expectRevert('InsufficientFunds');
+    vm.expectRevert(InsufficientFunds.selector);
     this.depositETH{value: wager - 1}(p2, gameId, address(0), wager);
   }
 
@@ -124,13 +124,13 @@ contract EscrowMultiGameTest is EscrowTest {
 contract EscrowCrossTypeDepositTest is EscrowETHTest {
   function testETHDepositThenERC20Reverts() public {
     this.depositETH{value: wager}(p1, gameId, address(0), wager);
-    vm.expectRevert('InvalidToken');
+    vm.expectRevert(InvalidToken.selector);
     deposit(p1, gameId, address(token), wager);
   }
 
   function testERC20DepositThenETHReverts() public {
     deposit(p1, gameId, address(token), wager);
-    vm.expectRevert('InvalidToken');
+    vm.expectRevert(InvalidToken.selector);
     this.depositETH{value: wager}(p1, gameId, address(0), wager);
   }
 }

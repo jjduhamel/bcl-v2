@@ -11,6 +11,12 @@ abstract contract Escrow {
   using EnumerableMap for EnumerableMap.AddressToUintMap;
   using GameIDToTokenDepositMap for GameIDToTokenDepositMap.Map;
 
+  error InvalidToken();
+  error InsufficientFunds();
+  error AmountOverflow();
+  error InsufficientBalance();
+  error TransferFailed();
+
   // player -> gameId -> token deposit (address(0) token = ETH)
   mapping(address => GameIDToTokenDepositMap.Map) private __escrow;
   // player -> token -> claimable amount (address(0) player = platform fees)
@@ -40,7 +46,7 @@ abstract contract Escrow {
   function refund(address player, uint gameId, uint amount) internal {
     (bool exists, TokenDeposit memory d) = __escrow[player].tryGet(gameId);
     if (!exists || amount == 0) return;
-    require(d.amount >= amount, 'InsufficientFunds');
+    if (d.amount < amount) revert InsufficientFunds();
     __earnings[player].set(d.token, earnings(player, d.token) + amount);
     __escrow[player].set(gameId, d.token, d.amount - amount);
   }
@@ -70,8 +76,8 @@ abstract contract Escrow {
   function chargeFee(address player, uint gameId, address token, uint fee) internal {
     (bool exists, TokenDeposit memory d) = __escrow[player].tryGet(gameId);
     if (!exists) return;  // Don't charge any fee for zero-wager games
-    require(d.token == token, 'InvalidToken');
-    require(d.amount >= fee, 'InsufficientFunds');
+    if (d.token != token) revert InvalidToken();
+    if (d.amount < fee) revert InsufficientFunds();
     d.amount -= uint96(fee);
     __escrow[player].set(gameId, d.token, d.amount);
     __earnings[address(0)].set(token, earnings(address(0), token) + fee);
@@ -82,19 +88,18 @@ abstract contract Escrow {
    */
 
   function _depositETH(address player, uint gameId, address token, uint amount) private {
-    require(msg.value >= amount, 'InsufficientFunds');
+    if (msg.value < amount) revert InsufficientFunds();
     (bool exists, TokenDeposit memory d) = __escrow[player].tryGet(gameId);
-    if (exists) require(d.token == address(0), 'InvalidToken');
+    if (exists && d.token != address(0)) revert InvalidToken();
     uint total = exists ? d.amount + amount : amount;
     __escrow[player].set(gameId, address(0), total);
   }
 
   function _depositERC20(address player, uint gameId, address token, uint amount) private {
     (bool exists, TokenDeposit memory d) = __escrow[player].tryGet(gameId);
-    if (exists) require(d.token == token, 'InvalidToken');
+    if (exists && d.token != token) revert InvalidToken();
     uint total = exists ? d.amount + amount : amount;
-    require(total <= type(uint96).max, 'AmountOverflow');
-    require(IERC20(token).allowance(player, address(this)) >= amount, 'InsufficientFunds');
+    if (total > type(uint96).max) revert AmountOverflow();
     IERC20(token).safeTransferFrom(player, address(this), amount);
     __escrow[player].set(gameId, token, total);
   }
@@ -108,16 +113,16 @@ abstract contract Escrow {
    */
 
   function _withdrawETH(address player, address token) private {
-    require(token == address(0), 'InvalidToken');
+    if (token != address(0)) revert InvalidToken();
     uint amount = earnings(player, address(0));
-    require(amount > 0, 'InsufficientBalance');
+    if (amount == 0) revert InsufficientBalance();
     __earnings[player].set(address(0), 0);
     payable(player).transfer(amount);
   }
 
   function _withdrawERC20(address player, address token) private {
     uint amount = earnings(player, token);
-    require(amount > 0, 'InsufficientBalance');
+    if (amount == 0) revert InsufficientBalance();
     __earnings[player].set(token, 0);
     IERC20(token).safeTransfer(player, amount);
   }
@@ -131,10 +136,13 @@ abstract contract Escrow {
    */
 
   function _withdrawPlatformETH(address token, address receiver) private {
-    require(token == address(0), 'InvalidToken');
+    if (token != address(0)) revert InvalidToken();
     uint amount = earnings(address(0), address(0));
     __earnings[address(0)].set(address(0), 0);
-    if (amount > 0) payable(receiver).transfer(amount);
+    if (amount > 0) {
+      (bool ok,) = payable(receiver).call{value: amount}("");
+      if (!ok) revert TransferFailed();
+    }
   }
 
   function _withdrawPlatformERC20(address token, address receiver) private {
@@ -143,7 +151,7 @@ abstract contract Escrow {
     if (amount > 0) IERC20(token).safeTransfer(receiver, amount);
   }
 
-  function withdrawPlatform(address token, address receiver) internal {
+  function withdrawPlatformFunds(address token, address receiver) internal {
     (token == address(0) ? _withdrawPlatformETH : _withdrawPlatformERC20)(token, payable(receiver));
   }
 }

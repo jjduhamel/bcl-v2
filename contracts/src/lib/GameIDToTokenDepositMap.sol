@@ -11,6 +11,9 @@ struct TokenDeposit {
 library GameIDToTokenDepositMap {
   using EnumerableMap for EnumerableMap.UintToBytes32Map;
 
+  error NoDeposit();
+  error AmountOverflow();
+
   struct Map {
     EnumerableMap.UintToBytes32Map _inner;
   }
@@ -27,13 +30,13 @@ library GameIDToTokenDepositMap {
   }
 
   function set(Map storage map, uint gameId, address token, uint amount) internal {
-    require(amount <= type(uint96).max, 'AmountOverflow');
+    if (amount > type(uint96).max) revert AmountOverflow();
     map._inner.set(gameId, _encode(token, uint96(amount)));
   }
 
   function get(Map storage map, uint gameId) internal view returns (TokenDeposit memory) {
     (bool exists, bytes32 val) = map._inner.tryGet(gameId);
-    require(exists, 'NoDeposit');
+    if (!exists) revert NoDeposit();
     return _decode(val);
   }
 

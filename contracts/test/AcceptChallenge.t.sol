@@ -37,12 +37,12 @@ contract AcceptChallengeTest is ChallengeTest {
   }
 
   function testAcceptFailsWithoutDeposit() public {
-    vm.expectRevert('InvalidDepositAmount');
+    vm.expectRevert(ChessEngine.InvalidDepositAmount.selector);
     engine.acceptChallenge(gameId);
   }
 
   function testAcceptFailsWithLowDeposit() public {
-    vm.expectRevert('InvalidDepositAmount');
+    vm.expectRevert(ChessEngine.InvalidDepositAmount.selector);
     engine.acceptChallenge{ value: deposit-1 }(gameId);
   }
 
@@ -59,13 +59,13 @@ contract AcceptChallengeTest is ChallengeTest {
 
   function testAcceptFailsAsSender() public {
     changePrank(p1);
-    vm.expectRevert('NotCurrentMove');
+    vm.expectRevert(ChessEngine.NotCurrentMove.selector);
     engine.acceptChallenge{ value: deposit }(gameId);
   }
 
   function testAcceptAsSpectator() public {
     changePrank(p3);
-    vm.expectRevert('PlayerOnly');
+    vm.expectRevert(ChessEngine.PlayerOnly.selector);
     engine.acceptChallenge{ value: deposit }(gameId);
   }
 
@@ -90,19 +90,19 @@ contract AcceptChallengeTest is ChallengeTest {
 
   function testAcceptFailsAfterAccept() public {
     engine.acceptChallenge{ value: deposit }(gameId);
-    vm.expectRevert('InvalidContractState');
+    vm.expectRevert(ChessEngine.InvalidContractState.selector);
     engine.acceptChallenge(gameId);
   }
 
   function testDeclineFailsAfterAccept() public {
     engine.acceptChallenge{ value: deposit }(gameId);
-    vm.expectRevert('InvalidContractState');
+    vm.expectRevert(ChessEngine.InvalidContractState.selector);
     engine.declineChallenge(gameId);
   }
 
   function testModifyFailsAfterAccept() public {
     engine.acceptChallenge{ value: deposit }(gameId);
-    vm.expectRevert('InvalidContractState');
+    vm.expectRevert(ChessEngine.InvalidContractState.selector);
     engine.modifyChallenge(gameId, true, timePerMove, wager);
   }
 }

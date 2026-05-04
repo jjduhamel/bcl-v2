@@ -9,6 +9,18 @@ import './IChessEngine.sol';
 import './Lobby.sol';
 
 contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine, Escrow {
+  error InvalidTimePerMove();
+  error InvalidDepositAmount();
+  error InvalidContractState();
+  error NotCurrentMove();
+  error NotOpponentsMove();
+  error TimerActive();
+  error TimerExpired();
+  error PlayerOnly();
+  error LobbyContractOnly();
+  error MissingRecord();
+  error AdminOnly();
+  error ArbiterOnly();
   using Bitboard for Bitboard.Bitboard;
   Lobby private __lobby;
 
@@ -42,13 +54,13 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine, Escrow {
    */
 
   modifier isAdmin() {
-    require(__lobby.hasRole(__lobby.ADMIN_ROLE(), msg.sender), 'AdminOnly');
+    if (!__lobby.hasRole(__lobby.ADMIN_ROLE(), msg.sender)) revert AdminOnly();
     _;
   }
 
   modifier isArbiter() {
     if (!__lobby.hasRole(__lobby.ADMIN_ROLE(), msg.sender)) {
-      require(__lobby.hasRole(__lobby.ARBITER_ROLE(), msg.sender), 'ArbiterOnly');
+      if (!__lobby.hasRole(__lobby.ARBITER_ROLE(), msg.sender)) revert ArbiterOnly();
     }
     _;
   }
@@ -70,7 +82,7 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine, Escrow {
   function withdraw(address token, address payable receiver) public
     isAdmin
   {
-    withdrawPlatform(token, receiver);
+    withdrawPlatformFunds(token, receiver);
   }
 
   /*
@@ -78,49 +90,47 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine, Escrow {
    */
 
   modifier isLobby() {
-    require(msg.sender == address(__lobby), 'LobbyContractOnly');
+    if (msg.sender != address(__lobby)) revert LobbyContractOnly();
     _;
   }
 
   modifier hasRecord(uint gameId) {
-    require(__games[gameId].exists, 'MissingRecord');
+    if (!__games[gameId].exists) revert MissingRecord();
     _;
   }
 
   modifier isChallenge(uint gameId) {
-    require(__games[gameId].state == GameState.Pending, 'InvalidContractState');
+    if (__games[gameId].state != GameState.Pending) revert InvalidContractState();
     _;
   }
 
   modifier inProgress(uint gameId) {
-    require(__games[gameId].state == GameState.Started, 'InvalidContractState');
+    if (__games[gameId].state != GameState.Started) revert InvalidContractState();
     _;
   }
 
   modifier inDraw(uint gameId) {
-    require(__games[gameId].state == GameState.Draw, 'InvalidContractState');
+    if (__games[gameId].state != GameState.Draw) revert InvalidContractState();
     _;
   }
 
   modifier inReview(uint gameId) {
-    GameData storage gameData = __games[gameId];
-    require(gameData.state == GameState.Review, 'InvalidContractState');
+    if (__games[gameId].state != GameState.Review) revert InvalidContractState();
     _;
   }
 
   modifier isFinished(uint gameId) {
-    GameData storage gameData = __games[gameId];
-    require(gameData.state == GameState.Finished, 'InvalidContractState');
+    if (__games[gameId].state != GameState.Finished) revert InvalidContractState();
     _;
   }
 
   modifier isCurrentMove(uint gameId) {
-    require(__games[gameId].currentMove == msg.sender, 'NotCurrentMove');
+    if (__games[gameId].currentMove != msg.sender) revert NotCurrentMove();
     _;
   }
 
   modifier isOpponentsMove(uint gameId) {
-    require(__games[gameId].currentMove == opponent(gameId), 'NotOpponentsMove');
+    if (__games[gameId].currentMove != opponent(gameId)) revert NotOpponentsMove();
     _;
   }
 
@@ -149,7 +159,7 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine, Escrow {
   }
 
   modifier isPlayer(uint gameId) {
-    require(isWhitePlayer(gameId) || isBlackPlayer(gameId), 'PlayerOnly');
+    if (!isWhitePlayer(gameId) && !isBlackPlayer(gameId)) revert PlayerOnly();
     _;
   }
 
@@ -192,12 +202,12 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine, Escrow {
   }
 
   modifier timerExpired(uint gameId) {
-    require(timeDidExpire(gameId), 'TimerActive');
+    if (!timeDidExpire(gameId)) revert TimerActive();
     _;
   }
 
   modifier timerActive(uint gameId) {
-    require(!timeDidExpire(gameId), 'TimerExpired');
+    if (timeDidExpire(gameId)) revert TimerExpired();
     _;
   }
 
@@ -252,7 +262,7 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine, Escrow {
   ) public payable
     isLobby
   returns (uint) {
-    require(timePerMove >= 60, 'InvalidTimePerMove');
+    if (timePerMove < 60) revert InvalidTimePerMove();
     address white = startAsWhite ? sender : receiver;
     address black = startAsWhite ? receiver : sender;
     __games[gameId] = GameData(
@@ -269,7 +279,7 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine, Escrow {
     );
     if (wagerAmount > 0) {
       deposit(sender, gameId, wagerToken, wagerToken == address(0) ? msg.value : requiredBalance(gameId));
-      require(escrow(sender, gameId).amount >= requiredBalance(gameId), 'InvalidDepositAmount');
+      if (escrow(sender, gameId).amount < requiredBalance(gameId)) revert InvalidDepositAmount();
     }
     return gameId;
   }
@@ -283,7 +293,7 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine, Escrow {
     if (gameData.wagerAmount > 0) {
       uint required = requiredBalance(gameId);
       deposit(msg.sender, gameId, gameData.wagerToken, gameData.wagerToken == address(0) ? msg.value : required);
-      require(escrow(msg.sender, gameId).amount >= required, 'InvalidDepositAmount');
+      if (escrow(msg.sender, gameId).amount < required) revert InvalidDepositAmount();
       uint wBal = escrow(gameData.whitePlayer, gameId).amount;
       if (wBal > required) refund(gameData.whitePlayer, gameId, wBal - required);
       uint bBal = escrow(gameData.blackPlayer, gameId).amount;
@@ -312,7 +322,7 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine, Escrow {
     isChallenge(gameId)
     isPlayer(gameId)
   {
-    require(timePerMove >= 60, 'InvalidTimePerMove');
+    if (timePerMove < 60) revert InvalidTimePerMove();
     GameData storage gameData = __games[gameId];
     address receiver = opponent(gameId);
     if (startAsWhite && isBlackPlayer(gameId)
@@ -342,7 +352,7 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine, Escrow {
         uint senderBal = escrow(msg.sender, gameId).amount;
         if (senderBal < required) deposit(msg.sender, gameId, token, required - senderBal);
       }
-      require(escrow(msg.sender, gameId).amount >= required, 'InvalidDepositAmount');
+      if (escrow(msg.sender, gameId).amount < required) revert InvalidDepositAmount();
     }
     __lobby.touch(gameId, msg.sender, receiver);
   }
@@ -399,7 +409,9 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine, Escrow {
     GameData storage gameData = __games[gameId];
     gameData.state = GameState.Finished;
     gameData.outcome = outcome;
-    disburse(gameData.whitePlayer, gameData.blackPlayer, gameId, outcome);
+    if (gameData.wagerAmount > 0) {
+      disburse(gameData.whitePlayer, gameData.blackPlayer, gameId, outcome);
+    }
     emit GameOver(gameId, winner(gameId), loser(gameId));
     __lobby.finishGame(gameId, outcome);
   }

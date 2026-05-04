@@ -62,25 +62,25 @@ contract DeclineChallengeTest is ChallengeTest {
 
   function testDeclineAsSpectator() public {
     changePrank(p3);
-    vm.expectRevert('PlayerOnly');
+    vm.expectRevert(ChessEngine.PlayerOnly.selector);
     engine.declineChallenge(gameId);
   }
 
   function testAcceptFailsAfterDecline() public {
     engine.declineChallenge(gameId);
-    vm.expectRevert('InvalidContractState');
+    vm.expectRevert(ChessEngine.InvalidContractState.selector);
     engine.acceptChallenge(gameId);
   }
 
   function testDeclineFailsAfterDecline() public {
     engine.declineChallenge(gameId);
-    vm.expectRevert('InvalidContractState');
+    vm.expectRevert(ChessEngine.InvalidContractState.selector);
     engine.declineChallenge(gameId);
   }
 
   function testModifyFailsAfterDecline() public {
     engine.declineChallenge(gameId);
-    vm.expectRevert('InvalidContractState');
+    vm.expectRevert(ChessEngine.InvalidContractState.selector);
     engine.modifyChallenge(gameId, true, timePerMove, wager);
   }
 }

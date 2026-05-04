@@ -33,13 +33,13 @@ contract ResignGameTest is ChessGameTest {
 
   function testResignAsSpectator() public {
     changePrank(p3);
-    vm.expectRevert('PlayerOnly');
+    vm.expectRevert(ChessEngine.PlayerOnly.selector);
     engine.resign(gameId);
   }
 
   function testMoveFailsAfterResign() public {
     engine.resign(gameId);
-    vm.expectRevert('InvalidContractState');
+    vm.expectRevert(ChessEngine.InvalidContractState.selector);
     _move(p1, 'a2a3');
   }
 

@@ -41,12 +41,12 @@ contract ModifyChallengeTest is ChallengeTest {
 
   function testModifyFailsWithoutDeposit() public
   {
-    vm.expectRevert('InvalidDepositAmount');
+    vm.expectRevert(ChessEngine.InvalidDepositAmount.selector);
     engine.modifyChallenge(gameId, true, timePerMove, wager);
   }
 
   function testModifyFailsWithLowDeposit() public {
-    vm.expectRevert('InvalidDepositAmount');
+    vm.expectRevert(ChessEngine.InvalidDepositAmount.selector);
     engine.modifyChallenge{ value: deposit-1 }(gameId, true, timePerMove, wager);
   }
 
@@ -59,7 +59,7 @@ contract ModifyChallengeTest is ChallengeTest {
   }
 
   function testModifyInvalidTPMFails() public {
-    vm.expectRevert('InvalidTimePerMove');
+    vm.expectRevert(ChessEngine.InvalidTimePerMove.selector);
     engine.modifyChallenge{ value: deposit }(gameId, false, 59, wager);
   }
 
@@ -87,13 +87,13 @@ contract ModifyChallengeTest is ChallengeTest {
   }
 
   function testModifyWagerFailsWithoutDeposit() public {
-    vm.expectRevert('InvalidDepositAmount');
+    vm.expectRevert(ChessEngine.InvalidDepositAmount.selector);
     engine.modifyChallenge(gameId, true, timePerMove, wager*2);
   }
 
   function testModifyFailsAsSpectator() public {
     changePrank(p3);
-    vm.expectRevert('PlayerOnly');
+    vm.expectRevert(ChessEngine.PlayerOnly.selector);
     engine.modifyChallenge(gameId, false, timePerMove*2, wager/2);
   }
 }
