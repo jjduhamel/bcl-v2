@@ -40,6 +40,11 @@ contract EscrowERC20DisburseTest is EscrowTest {
     vm.expectRevert(GameIDToTokenDepositMap.NoDeposit.selector);
     disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
   }
+
+  function testDisburseUndecidedReverts() public {
+    vm.expectRevert(Escrow.EscrowLocked.selector);
+    disburse(p1, p2, gameId, IChessEngine.GameOutcome.Undecided);
+  }
 }
 
 contract EscrowETHDisburseTest is EscrowETHTest {
@@ -76,6 +81,11 @@ contract EscrowETHDisburseTest is EscrowETHTest {
     disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
     vm.expectRevert(GameIDToTokenDepositMap.NoDeposit.selector);
     disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
+  }
+
+  function testDisburseUndecidedReverts() public {
+    vm.expectRevert(Escrow.EscrowLocked.selector);
+    disburse(p1, p2, gameId, IChessEngine.GameOutcome.Undecided);
   }
 }
 

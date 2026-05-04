@@ -12,6 +12,7 @@ abstract contract Escrow {
   using GameIDToTokenDepositMap for GameIDToTokenDepositMap.Map;
 
   error InvalidToken();
+  error EscrowLocked();
   error InsufficientFunds();
   error AmountOverflow();
   error InsufficientBalance();
@@ -67,9 +68,11 @@ abstract contract Escrow {
     } else if (outcome == IChessEngine.GameOutcome.BlackWon) {
       __earnings[black].set(wBal.token, earnings(black, wBal.token) + wBal.amount);
       __earnings[black].set(bBal.token, earnings(black, bBal.token) + bBal.amount);
-    } else {
+    } else if (outcome == IChessEngine.GameOutcome.Draw) {
       __earnings[white].set(wBal.token, earnings(white, wBal.token) + wBal.amount);
       __earnings[black].set(bBal.token, earnings(black, bBal.token) + bBal.amount);
+    } else {
+      revert EscrowLocked();
     }
   }
 
@@ -117,7 +120,7 @@ abstract contract Escrow {
     uint amount = earnings(player, address(0));
     if (amount == 0) revert InsufficientBalance();
     __earnings[player].set(address(0), 0);
-    // Apparently this is more gas efficient than payable(receiver).transfer(amount);
+    // .call forwards all gas; .transfer caps at 2300 and fails for smart contract wallets
     (bool ok,) = payable(player).call{value: amount}("");
     if (!ok) revert TransferFailed();
   }
@@ -142,7 +145,7 @@ abstract contract Escrow {
     uint amount = earnings(address(0), address(0));
     __earnings[address(0)].set(address(0), 0);
     if (amount > 0) {
-      // Apparently this is more gas efficient than payable(receiver).transfer(amount);
+      // .call forwards all gas; .transfer caps at 2300 and fails for smart contract wallets
       (bool ok,) = payable(receiver).call{value: amount}("");
       if (!ok) revert TransferFailed();
     }

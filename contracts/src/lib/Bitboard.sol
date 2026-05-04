@@ -207,7 +207,7 @@ library Bitboard {
     else _vBp(b, from, to);
   }
 
-  function _vKg(Bitboard storage b, Color c, uint8 from, uint8 to) internal {
+  function _vKg(Bitboard storage b, Color c, uint8 from, uint8 to) internal view {
     int8 dr = _dr(from, to);
     int8 df = _df(from, to);
     if (df.abs() == 2 && dr == 0) {
@@ -245,7 +245,7 @@ library Bitboard {
     Piece p,
     uint8 from,
     uint8 to
-  ) internal {
+  ) internal view {
     if (p == Piece.Empty) revert InvalidPiece();
     else if (p == Piece.Pawn) _vPn(b, c, from, to);
     else if (p == Piece.Rook) _vRk(b, from, to);

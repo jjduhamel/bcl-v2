@@ -313,6 +313,7 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine, Escrow {
     __lobby.cancelChallenge(gameId, msg.sender, opponent(gameId));
   }
 
+  // TODO support changing wagerToken (requires refunding existing escrow and re-depositing)
   function modifyChallenge(
     uint gameId,
     bool startAsWhite,
