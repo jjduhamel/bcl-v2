@@ -10,19 +10,32 @@ contract EscrowERC20FeeTest is EscrowTest {
   }
 
   function testChargeFeeDeductsFromEscrow() public {
-    chargeFeeERC20(p1, gameId, address(token), fee);
-    assertEq(balanceERC20(p1, gameId, address(token)), wager);
+    chargeFee(p1, gameId, address(token), fee);
+    assertEq(escrow(p1, gameId).token, address(token));
+    assertEq(escrow(p1, gameId).amount, wager);
   }
 
   function testChargeFeeAddsToPlatformEarnings() public {
-    chargeFeeERC20(p1, gameId, address(token), fee);
-    assertEq(earningsERC20(address(0), address(token)), fee);
+    chargeFee(p1, gameId, address(token), fee);
+    assertEq(earnings(address(0), address(token)), fee);
   }
 
   function testChargeFeeBothPlayers() public {
-    chargeFeeERC20(p1, gameId, address(token), fee);
-    chargeFeeERC20(p2, gameId, address(token), fee);
-    assertEq(earningsERC20(address(0), address(token)), 2 * fee);
+    chargeFee(p1, gameId, address(token), fee);
+    chargeFee(p2, gameId, address(token), fee);
+    assertEq(earnings(address(0), address(token)), 2 * fee);
+  }
+
+  function testFeeExceedsBalanceReverts() public {
+    vm.expectRevert('InsufficientFunds');
+    chargeFee(p1, gameId, address(token), wager + fee + 1);
+  }
+
+  function testChargeFeeZeroWagerIsNoop() public {
+    uint noWagerGame = gameId + 99;
+    chargeFee(p1, noWagerGame, address(token), fee);
+    assertEq(earnings(address(0), address(token)), 0);
+    assertEq(escrow(p1, noWagerGame).amount, 0);
   }
 }
 
@@ -33,18 +46,31 @@ contract EscrowETHFeeTest is EscrowETHTest {
   }
 
   function testChargeFeeDeductsFromEscrow() public {
-    chargeFeeERC20(p1, gameId, address(0), fee);
-    assertEq(balanceERC20(p1, gameId, address(0)), wager);
+    chargeFee(p1, gameId, address(0), fee);
+    assertEq(escrow(p1, gameId).token, address(0));
+    assertEq(escrow(p1, gameId).amount, wager);
   }
 
   function testChargeFeeAddsToPlatformEarnings() public {
-    chargeFeeERC20(p1, gameId, address(0), fee);
-    assertEq(earningsERC20(address(0), address(0)), fee);
+    chargeFee(p1, gameId, address(0), fee);
+    assertEq(earnings(address(0), address(0)), fee);
   }
 
   function testChargeFeeBothPlayers() public {
-    chargeFeeERC20(p1, gameId, address(0), fee);
-    chargeFeeERC20(p2, gameId, address(0), fee);
-    assertEq(earningsERC20(address(0), address(0)), 2 * fee);
+    chargeFee(p1, gameId, address(0), fee);
+    chargeFee(p2, gameId, address(0), fee);
+    assertEq(earnings(address(0), address(0)), 2 * fee);
+  }
+
+  function testFeeExceedsBalanceReverts() public {
+    vm.expectRevert('InsufficientFunds');
+    chargeFee(p1, gameId, address(0), wager + fee + 1);
+  }
+
+  function testChargeFeeZeroWagerIsNoop() public {
+    uint noWagerGame = gameId + 99;
+    chargeFee(p1, noWagerGame, address(0), fee);
+    assertEq(earnings(address(0), address(0)), 0);
+    assertEq(escrow(p1, noWagerGame).amount, 0);
   }
 }

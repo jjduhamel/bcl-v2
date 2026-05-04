@@ -7,12 +7,12 @@ contract EscrowERC20PlatformTest is EscrowTest {
   function setUp() public {
     deposit(p1, gameId, address(token), wager + fee);
     deposit(p2, gameId, address(token), wager + fee);
-    chargeFeeERC20(p1, gameId, address(token), fee);
-    chargeFeeERC20(p2, gameId, address(token), fee);
+    chargeFee(p1, gameId, address(token), fee);
+    chargeFee(p2, gameId, address(token), fee);
   }
 
   function testPlatformEarningsAccumulate() public {
-    assertEq(earningsERC20(address(0), address(token)), 2 * fee);
+    assertEq(earnings(address(0), address(token)), 2 * fee);
   }
 
   function testWithdrawPlatformTransfersTokens() public {
@@ -24,7 +24,7 @@ contract EscrowERC20PlatformTest is EscrowTest {
   function testWithdrawPlatformClearsEarnings() public {
     address recipient = makeAddr('recipient');
     withdrawPlatform(address(token), recipient);
-    assertEq(earningsERC20(address(0), address(token)), 0);
+    assertEq(earnings(address(0), address(token)), 0);
   }
 
   function testWithdrawPlatformZeroBalanceIsNoop() public {
@@ -39,12 +39,12 @@ contract EscrowETHPlatformTest is EscrowETHTest {
   function setUp() public {
     this.depositETH{value: wager + fee}(p1, gameId, address(0), wager+fee);
     this.depositETH{value: wager + fee}(p2, gameId, address(0), wager+fee);
-    chargeFeeERC20(p1, gameId, address(0), fee);
-    chargeFeeERC20(p2, gameId, address(0), fee);
+    chargeFee(p1, gameId, address(0), fee);
+    chargeFee(p2, gameId, address(0), fee);
   }
 
   function testPlatformEarningsAccumulate() public {
-    assertEq(earningsERC20(address(0), address(0)), 2 * fee);
+    assertEq(earnings(address(0), address(0)), 2 * fee);
   }
 
   function testWithdrawPlatformTransfersETH() public {
@@ -57,7 +57,7 @@ contract EscrowETHPlatformTest is EscrowETHTest {
   function testWithdrawPlatformClearsEarnings() public {
     address recipient = makeAddr('recipient');
     withdrawPlatform(address(0), recipient);
-    assertEq(earningsERC20(address(0), address(0)), 0);
+    assertEq(earnings(address(0), address(0)), 0);
   }
 
   function testWithdrawPlatformZeroBalanceIsNoop() public {

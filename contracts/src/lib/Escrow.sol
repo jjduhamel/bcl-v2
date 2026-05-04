@@ -2,117 +2,140 @@
 pragma solidity >=0.4.22 <0.9.0;
 import '@oz/token/ERC20/IERC20.sol';
 import '@oz/token/ERC20/utils/SafeERC20.sol';
+import '@oz/utils/structs/EnumerableMap.sol';
 import '../IChessEngine.sol';
+import './GameIDToTokenDepositMap.sol';
 
 abstract contract Escrow {
   using SafeERC20 for IERC20;
+  using EnumerableMap for EnumerableMap.AddressToUintMap;
+  using GameIDToTokenDepositMap for GameIDToTokenDepositMap.Map;
 
-  // player -> gameId -> token -> deposited amount (address(0) token = ETH)
-  mapping(address => mapping(uint => mapping(address => uint))) private __escrowERC20;
+  // player -> gameId -> token deposit (address(0) token = ETH)
+  mapping(address => GameIDToTokenDepositMap.Map) private __escrow;
   // player -> token -> claimable amount (address(0) player = platform fees)
-  mapping(address => mapping(address => uint)) private __earningsERC20;
+  mapping(address => EnumerableMap.AddressToUintMap) private __earnings;
 
-  function balanceERC20(address player, uint gameId, address token) internal view returns (uint) {
-    return __escrowERC20[player][gameId][token];
+  function escrow(address player, uint gameId) internal view returns (TokenDeposit memory) {
+    (bool exists, TokenDeposit memory d) = __escrow[player].tryGet(gameId);
+    return exists ? d : TokenDeposit(address(0), 0);
   }
 
-  function refundERC20(address player, uint gameId, address token) internal {
-    uint amount = __escrowERC20[player][gameId][token];
-    delete __escrowERC20[player][gameId][token];
-    __earningsERC20[player][token] += amount;
+  function tokens(address player) internal view returns (address[] memory) {
+    return __earnings[player].keys();
   }
 
-  function chargeFeeERC20(address player, uint gameId, address token, uint fee) internal {
-    __escrowERC20[player][gameId][token] -= fee;
-    __earningsERC20[address(0)][token] += fee;
+  function earnings(address player, address token) internal view returns (uint) {
+    (bool exists, uint out) = __earnings[player].tryGet(token);
+    return exists ? out : 0;
   }
 
-  function disburseERC20(
+  function refund(address player, uint gameId) internal {
+    (bool exists, TokenDeposit memory d) = __escrow[player].tryGet(gameId);
+    if (!exists) return;
+    __earnings[player].set(d.token, earnings(player, d.token) + d.amount);
+    __escrow[player].remove(gameId);
+  }
+
+  function disburse(
     address white,
     address black,
     uint gameId,
-    address token,
     IChessEngine.GameOutcome outcome
   ) internal {
-    uint wBal = __escrowERC20[white][gameId][token];
-    uint bBal = __escrowERC20[black][gameId][token];
-    delete __escrowERC20[white][gameId][token];
-    delete __escrowERC20[black][gameId][token];
+    TokenDeposit memory wBal = __escrow[white].get(gameId);
+    TokenDeposit memory bBal = __escrow[black].get(gameId);
+    __escrow[white].remove(gameId);
+    __escrow[black].remove(gameId);
     if (outcome == IChessEngine.GameOutcome.WhiteWon) {
-      __earningsERC20[white][token] += wBal + bBal;
+      __earnings[white].set(wBal.token, earnings(white, wBal.token) + wBal.amount);
+      __earnings[white].set(bBal.token, earnings(white, bBal.token) + bBal.amount);
     } else if (outcome == IChessEngine.GameOutcome.BlackWon) {
-      __earningsERC20[black][token] += wBal + bBal;
+      __earnings[black].set(wBal.token, earnings(black, wBal.token) + wBal.amount);
+      __earnings[black].set(bBal.token, earnings(black, bBal.token) + bBal.amount);
     } else {
-      __earningsERC20[white][token] += wBal;
-      __earningsERC20[black][token] += bBal;
+      __earnings[white].set(wBal.token, earnings(white, wBal.token) + wBal.amount);
+      __earnings[black].set(bBal.token, earnings(black, bBal.token) + bBal.amount);
     }
   }
 
-  function earningsERC20(address player, address token) internal view returns (uint) {
-    return __earningsERC20[player][token];
+  function chargeFee(address player, uint gameId, address token, uint fee) internal {
+    (bool exists, TokenDeposit memory d) = __escrow[player].tryGet(gameId);
+    if (!exists) return;  // Don't charge any fee for zero-wager games
+    require(d.token == token, 'InvalidToken');
+    require(d.amount >= fee, 'InsufficientFunds');
+    d.amount -= uint96(fee);
+    __escrow[player].set(gameId, d.token, d.amount);
+    __earnings[address(0)].set(token, earnings(address(0), token) + fee);
   }
 
   /*
    * Deposit
    */
 
-  function _depositETH(address player, uint gameId, uint amount) private {
+  function _depositETH(address player, uint gameId, address token, uint amount) private {
     require(msg.value >= amount, 'InsufficientFunds');
-    __escrowERC20[player][gameId][address(0)] += amount;
+    (bool exists, TokenDeposit memory d) = __escrow[player].tryGet(gameId);
+    if (exists) require(d.token == address(0), 'InvalidToken');
+    uint total = exists ? d.amount + amount : amount;
+    __escrow[player].set(gameId, address(0), total);
   }
 
   function _depositERC20(address player, uint gameId, address token, uint amount) private {
+    (bool exists, TokenDeposit memory d) = __escrow[player].tryGet(gameId);
+    if (exists) require(d.token == token, 'InvalidToken');
+    uint total = exists ? d.amount + amount : amount;
+    require(total <= type(uint96).max, 'AmountOverflow');
     require(IERC20(token).allowance(player, address(this)) >= amount, 'InsufficientFunds');
     IERC20(token).safeTransferFrom(player, address(this), amount);
-    __escrowERC20[player][gameId][token] += amount;
+    __escrow[player].set(gameId, token, total);
   }
 
   function deposit(address player, uint gameId, address token, uint amount) internal {
-    if (token == address(0)) _depositETH(player, gameId, amount);
-    else _depositERC20(player, gameId, token, amount);
+    ((token == address(0)) ? _depositETH : _depositERC20)(player, gameId, token, amount);
   }
 
   /*
    * Withdraw
    */
 
-  function _withdrawETH(address player) private {
-    uint amount = __earningsERC20[player][address(0)];
+  function _withdrawETH(address player, address token) private {
+    require(token == address(0), 'InvalidToken');
+    uint amount = earnings(player, address(0));
     require(amount > 0, 'InsufficientBalance');
-    __earningsERC20[player][address(0)] = 0;
+    __earnings[player].set(address(0), 0);
     payable(player).transfer(amount);
   }
 
   function _withdrawERC20(address player, address token) private {
-    uint amount = __earningsERC20[player][token];
+    uint amount = earnings(player, token);
     require(amount > 0, 'InsufficientBalance');
-    __earningsERC20[player][token] = 0;
+    __earnings[player].set(token, 0);
     IERC20(token).safeTransfer(player, amount);
   }
 
   function withdraw(address player, address token) internal {
-    if (token == address(0)) _withdrawETH(player);
-    else _withdrawERC20(player, token);
+    (token == address(0) ? _withdrawETH : _withdrawERC20)(player, token);
   }
 
   /*
    * Platform withdraw
    */
 
-  function _withdrawPlatformETH(address payable receiver) private {
-    uint amount = __earningsERC20[address(0)][address(0)];
-    __earningsERC20[address(0)][address(0)] = 0;
-    if (amount > 0) receiver.transfer(amount);
+  function _withdrawPlatformETH(address token, address receiver) private {
+    require(token == address(0), 'InvalidToken');
+    uint amount = earnings(address(0), address(0));
+    __earnings[address(0)].set(address(0), 0);
+    if (amount > 0) payable(receiver).transfer(amount);
   }
 
   function _withdrawPlatformERC20(address token, address receiver) private {
-    uint amount = __earningsERC20[address(0)][token];
-    __earningsERC20[address(0)][token] = 0;
+    uint amount = earnings(address(0), token);
+    __earnings[address(0)].set(token, 0);
     if (amount > 0) IERC20(token).safeTransfer(receiver, amount);
   }
 
   function withdrawPlatform(address token, address receiver) internal {
-    if (token == address(0)) _withdrawPlatformETH(payable(receiver));
-    else _withdrawPlatformERC20(token, receiver);
+    (token == address(0) ? _withdrawPlatformETH : _withdrawPlatformERC20)(token, payable(receiver));
   }
 }

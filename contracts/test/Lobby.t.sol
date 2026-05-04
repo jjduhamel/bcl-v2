@@ -28,16 +28,20 @@ abstract contract LobbyTest is Test, ILobby, IChessEngine {
 
   function _initializeLobby() private {
     Lobby lobbyImpl = new Lobby();
-    ERC1967Proxy proxy = new ERC1967Proxy(address(lobbyImpl), '');
+    ERC1967Proxy proxy = new ERC1967Proxy(
+      address(lobbyImpl),
+      abi.encodeCall(Lobby.initialize, (arbiter))
+    );
     lobby = Lobby(address(proxy));
-    lobby.initialize(arbiter);
   }
 
   function _initializeEngine() private {
     ChessEngine engineImpl = new ChessEngine();
-    ERC1967Proxy proxy = new ERC1967Proxy(address(engineImpl), '');
+    ERC1967Proxy proxy = new ERC1967Proxy(
+      address(engineImpl),
+      abi.encodeCall(ChessEngine.initialize, (address(lobby)))
+    );
     engine = ChessEngine(address(proxy));
-    engine.initialize(address(lobby));
     lobby.setChessEngine(address(engine));
   }
 

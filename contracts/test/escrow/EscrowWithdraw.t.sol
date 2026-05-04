@@ -7,7 +7,7 @@ contract EscrowERC20WithdrawTest is EscrowTest {
   function setUp() public {
     deposit(p1, gameId, address(token), wager);
     deposit(p2, gameId, address(token), wager);
-    disburseERC20(p1, p2, gameId, address(token), IChessEngine.GameOutcome.WhiteWon);
+    disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
   }
 
   function testTransfersTokensToPlayer() public {
@@ -18,7 +18,7 @@ contract EscrowERC20WithdrawTest is EscrowTest {
 
   function testClearsEarnings() public {
     withdraw(p1, address(token));
-    assertEq(earningsERC20(p1, address(token)), 0);
+    assertEq(earnings(p1, address(token)), 0);
   }
 
   function testZeroEarningsReverts() public {
@@ -31,7 +31,7 @@ contract EscrowETHWithdrawTest is EscrowETHTest {
   function setUp() public {
     this.depositETH{value: wager}(p1, gameId, address(0), wager);
     this.depositETH{value: wager}(p2, gameId, address(0), wager);
-    disburseERC20(p1, p2, gameId, address(0), IChessEngine.GameOutcome.WhiteWon);
+    disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
   }
 
   function testTransfersETHToPlayer() public {
@@ -42,7 +42,7 @@ contract EscrowETHWithdrawTest is EscrowETHTest {
 
   function testClearsEarnings() public {
     withdraw(p1, address(0));
-    assertEq(earningsERC20(p1, address(0)), 0);
+    assertEq(earnings(p1, address(0)), 0);
   }
 
   function testZeroEarningsReverts() public {

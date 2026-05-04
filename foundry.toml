@@ -4,6 +4,7 @@ test = 'contracts/test/'
 libs = [ 'contracts/lib/' ]
 #via_ir = true
 #sparse_mode = true
+evm_version = 'cancun'
 
 [rpc_endpoints]
 localhost = '127.0.0.1:8545'
