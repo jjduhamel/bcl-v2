@@ -141,7 +141,6 @@ library Bitboard {
     Color o = Color(1 - uint(c));
     bool capture = bitboard(b, o) & _mask(to) > 0;
 
-    // FIXME Pawn can capture backwards
     if (capture) {
       if (dr.abs() != 1) revert InvalidMove();
       if (df.abs() != 1) revert InvalidMove();
