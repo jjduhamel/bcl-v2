@@ -7,7 +7,7 @@ import './Challenge.t.sol';
 contract DeclineChallengeTest is ChallengeTest {
   function setUp() public {
     changePrank(p1);
-    gameId = lobby.challenge{ value: deposit }(p2, true, timePerMove, wager);
+    gameId = lobby.challenge{ value: deposit }(p2, true, timePerMove, wager, address(0));
     changePrank(p2);
   }
 
@@ -55,32 +55,32 @@ contract DeclineChallengeTest is ChallengeTest {
   {
     engine.declineChallenge(gameId);
     changePrank(p1);
-    uint gameId2 = lobby.challenge{ value: deposit }(p2, true, timePerMove, wager);
+    uint gameId2 = lobby.challenge{ value: deposit }(p2, true, timePerMove, wager, address(0));
     changePrank(p2);
     engine.declineChallenge(gameId2);
   }
 
   function testDeclineAsSpectator() public {
     changePrank(p3);
-    vm.expectRevert('PlayerOnly');
+    vm.expectRevert(ChessEngine.PlayerOnly.selector);
     engine.declineChallenge(gameId);
   }
 
   function testAcceptFailsAfterDecline() public {
     engine.declineChallenge(gameId);
-    vm.expectRevert('InvalidContractState');
+    vm.expectRevert(ChessEngine.InvalidContractState.selector);
     engine.acceptChallenge(gameId);
   }
 
   function testDeclineFailsAfterDecline() public {
     engine.declineChallenge(gameId);
-    vm.expectRevert('InvalidContractState');
+    vm.expectRevert(ChessEngine.InvalidContractState.selector);
     engine.declineChallenge(gameId);
   }
 
   function testModifyFailsAfterDecline() public {
     engine.declineChallenge(gameId);
-    vm.expectRevert('InvalidContractState');
+    vm.expectRevert(ChessEngine.InvalidContractState.selector);
     engine.modifyChallenge(gameId, true, timePerMove, wager);
   }
 }

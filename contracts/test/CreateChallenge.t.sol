@@ -9,7 +9,7 @@ contract CreateChallengeTest is ChallengeTest {
     testChallengeSent(0, p1)
     testChallengeReceived(0, p2)
   {
-    lobby.challenge(p2, true, timePerMove, 0);
+    lobby.challenge(p2, true, timePerMove, 0, address(0));
   }
 
   function testChallengeWithWager() public
@@ -17,29 +17,29 @@ contract CreateChallengeTest is ChallengeTest {
     testChallengeReceived(0, p2)
     testEarnings(p1, 0)
   {
-    lobby.challenge{ value: deposit }(p2, true, timePerMove, wager);
+    lobby.challenge{ value: deposit }(p2, true, timePerMove, wager, address(0));
   }
 
   function testChallengeSucceedsWithMinTPM() public
     testChallengeSent(0, p1)
     testChallengeReceived(0, p2)
   {
-    lobby.challenge(p2, true, 60, 0);
+    lobby.challenge(p2, true, 60, 0, address(0));
   }
 
   function testChallengeFailsWithInvalidTPM() public {
-    vm.expectRevert('InvalidTimePerMove');
-    lobby.challenge(p2, true, 59, 0);
+    vm.expectRevert(ChessEngine.InvalidTimePerMove.selector);
+    lobby.challenge(p2, true, 59, 0, address(0));
   }
 
   function testChallengeFailsWithNoDeposit() public {
-    vm.expectRevert('InvalidDepositAmount');
-    lobby.challenge(p2, true, timePerMove, wager);
+    vm.expectRevert(ChessEngine.InvalidDepositAmount.selector);
+    lobby.challenge(p2, true, timePerMove, wager, address(0));
   }
 
   function testChallengeFailsWithLowDeposit() public {
-    vm.expectRevert('InvalidDepositAmount');
-    lobby.challenge{ value: deposit-1 }(p2, true, timePerMove, wager);
+    vm.expectRevert(ChessEngine.InvalidDepositAmount.selector);
+    lobby.challenge{ value: deposit-1 }(p2, true, timePerMove, wager, address(0));
   }
 
   function testChallengeSucceedsWithExcessDeposit() public
@@ -47,6 +47,6 @@ contract CreateChallengeTest is ChallengeTest {
     testChallengeReceived(0, p2)
     testEarnings(p1, 0)
   {
-    lobby.challenge{ value: deposit+1 }(p2, true, timePerMove, wager);
+    lobby.challenge{ value: deposit+1 }(p2, true, timePerMove, wager, address(0));
   }
 }

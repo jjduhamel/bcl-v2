@@ -19,7 +19,7 @@ abstract contract ChallengeTest is LobbyTest {
     _;
     address i = me.who();
     changePrank(player);
-    assertEq(engine.earnings(), expected);
+    assertEq(engine.earnings(address(0)), expected);
     changePrank(i);
   }
 

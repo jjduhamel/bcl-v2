@@ -28,16 +28,20 @@ abstract contract LobbyTest is Test, ILobby, IChessEngine {
 
   function _initializeLobby() private {
     Lobby lobbyImpl = new Lobby();
-    ERC1967Proxy proxy = new ERC1967Proxy(address(lobbyImpl), '');
+    ERC1967Proxy proxy = new ERC1967Proxy(
+      address(lobbyImpl),
+      abi.encodeCall(Lobby.initialize, (arbiter))
+    );
     lobby = Lobby(address(proxy));
-    lobby.initialize(arbiter);
   }
 
   function _initializeEngine() private {
     ChessEngine engineImpl = new ChessEngine();
-    ERC1967Proxy proxy = new ERC1967Proxy(address(engineImpl), '');
+    ERC1967Proxy proxy = new ERC1967Proxy(
+      address(engineImpl),
+      abi.encodeCall(ChessEngine.initialize, (address(lobby)))
+    );
     engine = ChessEngine(address(proxy));
-    engine.initialize(address(lobby));
     lobby.setChessEngine(address(engine));
   }
 
@@ -91,8 +95,8 @@ contract ChallengingDisabledTest is LobbyTest {
   }
 
   function testChallengeDisabled() public {
-    vm.expectRevert('ChallengingDisabled');
-    lobby.challenge(p2, true, 60, 10);
+    vm.expectRevert(Lobby.ChallengingDisabled.selector);
+    lobby.challenge(p2, true, 60, 10, address(0));
   }
 }
 
@@ -105,7 +109,7 @@ contract WageringDisabledTest is LobbyTest {
   function testChallengeWithoutWager() public {
     vm.expectEmit(false, true, true, true, address(lobby));
     emit NewChallenge(0, p1, p2);
-    lobby.challenge(p2, true, 60, 0);
+    lobby.challenge(p2, true, 60, 0, address(0));
   }
 
   function _testPlayerLobby(address player) private returns (uint[] memory) {
@@ -116,15 +120,15 @@ contract WageringDisabledTest is LobbyTest {
   }
 
   function testPlayersReceiveChallenge() public {
-    lobby.challenge(p2, true, 60, 0);
+    lobby.challenge(p2, true, 60, 0, address(0));
     uint[] memory c1 = _testPlayerLobby(p1);
     uint[] memory c2 = _testPlayerLobby(p2);
     assertEq(c1, c2);
   }
 
   function testWageringDisabled() public {
-    vm.expectRevert('WageringDisabled');
-    lobby.challenge{ value: wager }(p2, true, wager, 60);
+    vm.expectRevert(Lobby.WageringDisabled.selector);
+    lobby.challenge{ value: wager }(p2, true, wager, 60, address(0));
   }
 }
 
@@ -138,7 +142,7 @@ contract WageringEnabledTest is LobbyTest {
   function testChallengeWithWager() public {
     vm.expectEmit(false, false, false, false, address(lobby));
     emit NewChallenge(0, p1, p2);
-    lobby.challenge{ value: wager }(p2, true, wager, 60);
+    lobby.challenge{ value: wager }(p2, true, wager, 60, address(0));
   }
 
   function _testPlayerLobby(address player) private returns (uint[] memory) {
@@ -149,19 +153,19 @@ contract WageringEnabledTest is LobbyTest {
   }
 
   function testPlayersReceiveChallenge() public {
-    lobby.challenge{ value: wager }(p2, true, wager, 60);
+    lobby.challenge{ value: wager }(p2, true, wager, 60, address(0));
     uint[] memory c1 = _testPlayerLobby(p1);
     uint[] memory c2 = _testPlayerLobby(p2);
     assertEq(c1, c2);
   }
 
   function testInsufficientDepositAmount() public {
-    vm.expectRevert('InvalidDepositAmount');
-    lobby.challenge{ value: wager/2 }(p2, true, 60, wager);
+    vm.expectRevert(Lobby.InvalidDepositAmount.selector);
+    lobby.challenge{ value: wager/2 }(p2, true, 60, wager, address(0));
   }
 
   function testExcessDepositAmount() public {
-    lobby.challenge{ value: wager*2 }(p2, true, 60, wager);
+    lobby.challenge{ value: wager*2 }(p2, true, 60, wager, address(0));
     // TODO
   }
 }
@@ -174,8 +178,8 @@ contract BanUserTest is LobbyTest {
   }
 
   function testChallengeFails() public {
-    vm.expectRevert('UserBanned');
-    lobby.challenge(p2, true, 60, 0);
+    vm.expectRevert(Lobby.UserBanned.selector);
+    lobby.challenge(p2, true, 60, 0, address(0));
   }
 
   function testUnbanUser() public {
@@ -184,6 +188,6 @@ contract BanUserTest is LobbyTest {
     changePrank(p1);
     vm.expectEmit(false, true, true, true, address(lobby));
     emit NewChallenge(0, p1, p2);
-    lobby.challenge(p2, true, 60, 0);
+    lobby.challenge(p2, true, 60, 0, address(0));
   }
 }

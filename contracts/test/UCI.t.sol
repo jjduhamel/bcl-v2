@@ -43,32 +43,32 @@ contract UCITest is Test {
   }
 
   function testRejectsTooShort() public {
-    vm.expectRevert('InvalidMove');
+    vm.expectRevert(InvalidMove.selector);
     UCI.parse('a2a');
   }
 
   function testRejectsTooLong() public {
-    vm.expectRevert('InvalidMove');
+    vm.expectRevert(InvalidMove.selector);
     UCI.parse('a2a3bb');
   }
 
   function testRejectsEmpty() public {
-    vm.expectRevert('InvalidMove');
+    vm.expectRevert(InvalidMove.selector);
     UCI.parse('');
   }
 
   function testRejectsInvalidPromotionChar() public {
-    vm.expectRevert('InvalidPromotion');
+    vm.expectRevert(InvalidPromotion.selector);
     UCI.parse('a7a8x');
   }
 
   function testRejectsInvalidFile() public {
-    vm.expectRevert('InvalidMove');
+    vm.expectRevert(InvalidMove.selector);
     UCI.parse('i2e4');
   }
 
   function testRejectsInvalidRank() public {
-    vm.expectRevert('InvalidMove');
+    vm.expectRevert(InvalidMove.selector);
     UCI.parse('a9e4');
   }
 }

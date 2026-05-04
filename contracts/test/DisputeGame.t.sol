@@ -34,7 +34,7 @@ contract DisputeGameTest is ChessGameTest {
 
   function testDisputeAsSender() public {
     changePrank(p1);
-    vm.expectRevert('NotCurrentMove');
+    vm.expectRevert(ChessEngine.NotCurrentMove.selector);
     engine.disputeGame(gameId);
   }
 
@@ -47,13 +47,13 @@ contract DisputeGameTest is ChessGameTest {
 
   function testDisputeAsSpectator() public {
     changePrank(p3);
-    vm.expectRevert('PlayerOnly');
+    vm.expectRevert(ChessEngine.PlayerOnly.selector);
     engine.disputeGame(gameId);
   }
 
   function testMoveFailsAfterDispute() public {
     engine.disputeGame(gameId);
-    vm.expectRevert('InvalidContractState');
+    vm.expectRevert(ChessEngine.InvalidContractState.selector);
     _move(p2, 'b7b6');
   }
 }

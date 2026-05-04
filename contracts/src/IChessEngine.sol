@@ -9,16 +9,13 @@ interface IChessEngine {
     bool exists;
     GameState state;
     GameOutcome outcome;
-    // Game data
     address payable whitePlayer;
     address payable blackPlayer;
     address currentMove;
-    // Time Per Move
     uint timePerMove;
     uint timeOfLastMove;
-    // Wagering
     uint wagerAmount;
-    //address wagerToken;
+    address wagerToken;
   }
 
   event GameStarted(uint indexed gameId

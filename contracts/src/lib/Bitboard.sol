@@ -5,6 +5,13 @@ import './SignedMathI8.sol';
 enum Color { White, Black }
 enum Piece { Empty, Pawn, Rook, Knight, Bishop, Queen, King }
 
+error InvalidMove();
+error InvalidPiece();
+error PromotionRequired();
+error InvalidPromotion();
+error SquareOccupied();
+error SquareEmpty();
+
 library Bitboard {
   using SignedMathI8 for int8;
 
@@ -94,12 +101,12 @@ library Bitboard {
   }
 
   function place(Bitboard storage b, Color c, Piece p, uint8 i) internal {
-    require(bitboard(b) & _mask(i) == 0, 'SquareOccupied');
+    if (bitboard(b) & _mask(i) != 0) revert SquareOccupied();
     b.__bitboard[c][p] = bitboard(b, c, p) ^ bytes8(uint64(1)<<i);
   }
 
   function pluck(Bitboard storage b, Color c, Piece p, uint8 i) internal {
-    require(bitboard(b) & _mask(i) > 0, 'SquareEmpty');
+    if (bitboard(b) & _mask(i) == 0) revert SquareEmpty();
     b.__bitboard[c][p] = bitboard(b, c, p) ^ bytes8(uint64(1)<<i);
   }
 
@@ -135,44 +142,40 @@ library Bitboard {
     bool capture = bitboard(b, o) & _mask(to) > 0;
 
     if (capture) {
-      // Moved 1 sideways, note we recheck dr is 1 since
-      // you otherwise it would let you capture and move
-      // the pawn two squares from the homerow at once
-      require(dr.abs() == 1, 'InvalidMove');
-      require(df.abs() == 1, 'InvalidMove');
+      if (dr.abs() != 1) revert InvalidMove();
+      if (df.abs() != 1) revert InvalidMove();
     } else {
       // No sideways movements
-      require(df == 0, 'InvalidMove');
+      if (df != 0) revert InvalidMove();
     }
 
     if (c == Color.White) {
       if (_rank(from) == 1 && dr == 2) {
-        require(bitboard(b) & _mask(from+0x08) == 0, 'InvalidMove');
-      } else require(dr == 1, 'InvalidMove');
+        if (bitboard(b) & _mask(from+0x08) != 0) revert InvalidMove();
+      } else if (dr != 1) revert InvalidMove();
     } else {
       if (_rank(from) == 6 && dr == -2) {
-        require(bitboard(b) & _mask(from-0x08) == 0, 'InvalidMove');
-      } else require(dr == -1, 'InvalidMove');
+        if (bitboard(b) & _mask(from-0x08) != 0) revert InvalidMove();
+      } else if (dr != -1) revert InvalidMove();
     }
   }
 
   function _vRk(Bitboard storage b, uint8 from, uint8 to) internal view {
     int8 dr = _dr(from, to);
     int8 df = _df(from, to);
-    require(df == 0 || dr == 0, 'InvalidMove');
+    if (df != 0 && dr != 0) revert InvalidMove();
     if (dr == 0) {
-      require(df != 0, 'InvalidMove');
+      if (df == 0) revert InvalidMove();
       // Check we're not jumping over someone
       for (uint8 _df=1; _df<df.abs(); _df++) {
-        if (df < 0) require(bitboard(b) & _mask(from-_df) == 0, 'InvalidMove');
-        else require(bitboard(b) & _mask(from+_df) == 0, 'InvalidMove');
+        if (df < 0) { if (bitboard(b) & _mask(from-_df) != 0) revert InvalidMove(); }
+        else { if (bitboard(b) & _mask(from+_df) != 0) revert InvalidMove(); }
       }
-    } else if (df == 0) {
-      require(dr != 0, 'InvalidMove');
+    } else {
       // Check we're not jumping over someone
       for (uint8 _dr=1; _dr<dr.abs(); _dr++) {
-        if (dr < 0) require(bitboard(b) & _mask(from-_dr*8) == 0, 'InvalidMove');
-        else require(bitboard(b) & _mask(from+_dr*8) == 0, 'InvalidMove');
+        if (dr < 0) { if (bitboard(b) & _mask(from-_dr*8) != 0) revert InvalidMove(); }
+        else { if (bitboard(b) & _mask(from+_dr*8) != 0) revert InvalidMove(); }
       }
     }
   }
@@ -180,20 +183,20 @@ library Bitboard {
   function _vKt(uint8 from, uint8 to) internal pure {
     int8 dr = _dr(from, to);
     int8 df = _df(from, to);
-    require(dr.abs() == 1 || dr.abs() == 2, 'InvalidMove');
-    if (dr.abs() == 1) require(df.abs() == 2, 'InvalidMove');
-    else require(df.abs() == 1, 'InvalidMove');
+    if (dr.abs() != 1 && dr.abs() != 2) revert InvalidMove();
+    if (dr.abs() == 1) { if (df.abs() != 2) revert InvalidMove(); }
+    else { if (df.abs() != 1) revert InvalidMove(); }
   }
 
   function _vBp(Bitboard storage b, uint8 from, uint8 to) internal view {
     int8 dr = _dr(from, to);
     int8 df = _df(from, to);
-    require(dr.abs() == df.abs(), 'InvalidMove');
+    if (dr.abs() != df.abs()) revert InvalidMove();
     // Check bishop won't jump over other pieces
     for (int8 _dx=1; _dx<int8(df.abs()); _dx++) {
       int8 _di = df > 0 ? _dx : -_dx;
       _di += (dr > 0 ? _dx : -_dx)*8;
-      require(bitboard(b) & _mask(uint8(int8(from)+_di)) == 0, 'InvalidMove');
+      if (bitboard(b) & _mask(uint8(int8(from)+_di)) != 0) revert InvalidMove();
     }
   }
 
@@ -204,35 +207,35 @@ library Bitboard {
     else _vBp(b, from, to);
   }
 
-  function _vKg(Bitboard storage b, Color c, uint8 from, uint8 to) internal {
+  function _vKg(Bitboard storage b, Color c, uint8 from, uint8 to) internal view {
     int8 dr = _dr(from, to);
     int8 df = _df(from, to);
     if (df.abs() == 2 && dr == 0) {
       // Check the king is in starting position.  This is redundant as castling
       // gets disabled once the king moves, but still it feels like the code
       // would be incomplete without this check in place.
-      if (c == Color.White) require(_rank(from) == 0x00, 'InvalidMove');
-      else require(_rank(from) == 0x07, 'InvalidMove');
-      require(_file(from) == 0x04, 'InvalidMove');
+      if (c == Color.White) { if (_rank(from) != 0x00) revert InvalidMove(); }
+      else { if (_rank(from) != 0x07) revert InvalidMove(); }
+      if (_file(from) != 0x04) revert InvalidMove();
       if(df == 2) {
         // King side castle
-        require(b.__allowKingSideCastle[uint(c)], 'InvalidMove');
-        require(bitboard(b) & _mask(from+1) == 0, 'InvalidMove');
-        require(bitboard(b) & _mask(from+2) == 0, 'InvalidMove');
-        require(bitboard(b, c, Piece.Rook) & _mask(from+3) > 0, 'InvalidMove');
+        if (!b.__allowKingSideCastle[uint(c)]) revert InvalidMove();
+        if (bitboard(b) & _mask(from+1) != 0) revert InvalidMove();
+        if (bitboard(b) & _mask(from+2) != 0) revert InvalidMove();
+        if (bitboard(b, c, Piece.Rook) & _mask(from+3) == 0) revert InvalidMove();
       } else if(df == -2) {
         // Queen side castle
-        require(b.__allowQueenSideCastle[uint(c)], 'InvalidMove');
-        require(bitboard(b) & _mask(from-1) == 0, 'InvalidMove');
-        require(bitboard(b) & _mask(from-2) == 0, 'InvalidMove');
-        require(bitboard(b) & _mask(from-3) == 0, 'InvalidMove');
-        require(bitboard(b, c, Piece.Rook) & _mask(_rank(from)*8) > 0, 'InvalidMove');
+        if (!b.__allowQueenSideCastle[uint(c)]) revert InvalidMove();
+        if (bitboard(b) & _mask(from-1) != 0) revert InvalidMove();
+        if (bitboard(b) & _mask(from-2) != 0) revert InvalidMove();
+        if (bitboard(b) & _mask(from-3) != 0) revert InvalidMove();
+        if (bitboard(b, c, Piece.Rook) & _mask(_rank(from)*8) == 0) revert InvalidMove();
       }
       // TODO Enforce king not in check
       // TODO Enforce king doesn't move through check
     } else {
-      require(dr.abs() == 1 || df.abs() == 1, 'InvalidMove');
-      require(dr.abs() <= 1 && df.abs() <= 1 , 'InvalidMove');
+      if (dr.abs() != 1 && df.abs() != 1) revert InvalidMove();
+      if (dr.abs() > 1 || df.abs() > 1) revert InvalidMove();
     }
   }
 
@@ -242,8 +245,8 @@ library Bitboard {
     Piece p,
     uint8 from,
     uint8 to
-  ) internal {
-    if (p == Piece.Empty) revert('InvalidPiece');
+  ) internal view {
+    if (p == Piece.Empty) revert InvalidPiece();
     else if (p == Piece.Pawn) _vPn(b, c, from, to);
     else if (p == Piece.Rook) _vRk(b, from, to);
     else if (p == Piece.Knight) _vKt(from, to);
@@ -276,8 +279,8 @@ library Bitboard {
     Color o = Color(1-uint8(c));
     // Ensure the origin has the correct piece on it and we're not moving
     // to an occupied square
-    require(p != Piece.Empty, 'InvalidMove');
-    require(dest & bitboard(b, c) == 0, 'InvalidMove');
+    if (p == Piece.Empty) revert InvalidMove();
+    if (dest & bitboard(b, c) != 0) revert InvalidMove();
 
     // Check if it's a legal move.  You can assume the move is legal if
     // this doesn't revert.
@@ -287,10 +290,10 @@ library Bitboard {
     // revert with InvalidMove rather than PromotionRequired.
     if (p == Piece.Pawn) {
       if (_isPromotionSquare(c, to)) {
-        require(promotion != Piece.Empty, 'PromotionRequired');
-        require(promotion != Piece.Pawn && promotion != Piece.King, 'InvalidPromotion');
+        if (promotion == Piece.Empty) revert PromotionRequired();
+        if (promotion == Piece.Pawn || promotion == Piece.King) revert InvalidPromotion();
       } else {
-        require(promotion == Piece.Empty, 'InvalidPromotion');
+        if (promotion != Piece.Empty) revert InvalidPromotion();
       }
     }
 

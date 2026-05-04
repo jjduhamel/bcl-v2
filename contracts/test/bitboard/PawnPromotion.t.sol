@@ -51,21 +51,21 @@ abstract contract PawnPromotionTest is BitboardTest {
   function testCantPromoteToPawn(uint8 file) public {
     vm.assume(file < 8);
     b.initialize(c, Piece.Pawn, uint64(1) << _from(file));
-    vm.expectRevert('InvalidPromotion');
+    vm.expectRevert(InvalidPromotion.selector);
     b.move(c, _from(file), _to(file), Piece.Pawn);
   }
 
   function testCantPromoteToKing(uint8 file) public {
     vm.assume(file < 8);
     b.initialize(c, Piece.Pawn, uint64(1) << _from(file));
-    vm.expectRevert('InvalidPromotion');
+    vm.expectRevert(InvalidPromotion.selector);
     b.move(c, _from(file), _to(file), Piece.King);
   }
 
   function testMustPromoteOnLastRank(uint8 file) public {
     vm.assume(file < 8);
     b.initialize(c, Piece.Pawn, uint64(1) << _from(file));
-    vm.expectRevert('PromotionRequired');
+    vm.expectRevert(PromotionRequired.selector);
     b.move(c, _from(file), _to(file));
   }
 
@@ -94,7 +94,7 @@ abstract contract PawnPromotionTest is BitboardTest {
     uint8 from = c == Color.White ? 0x10+file : 0x28+file;
     uint8 to   = c == Color.White ? 0x18+file : 0x20+file;
     b.initialize(c, Piece.Pawn, uint64(1) << from);
-    vm.expectRevert('InvalidPromotion');
+    vm.expectRevert(InvalidPromotion.selector);
     b.move(c, from, to, Piece.Queen);
   }
 

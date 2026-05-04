@@ -33,13 +33,23 @@ contract ResignGameTest is ChessGameTest {
 
   function testResignAsSpectator() public {
     changePrank(p3);
-    vm.expectRevert('PlayerOnly');
+    vm.expectRevert(ChessEngine.PlayerOnly.selector);
     engine.resign(gameId);
   }
 
   function testMoveFailsAfterResign() public {
     engine.resign(gameId);
-    vm.expectRevert('InvalidContractState');
+    vm.expectRevert(ChessEngine.InvalidContractState.selector);
     _move(p1, 'a2a3');
+  }
+
+  function testWithdrawETHAfterWin() public {
+    changePrank(p1);
+    engine.resign(gameId);
+    changePrank(p2);
+    uint balBefore = p2.balance;
+    engine.withdraw(address(0));
+    assertEq(p2.balance - balBefore, 2 * wager);
+    assertEq(engine.earnings(address(0)), 0);
   }
 }

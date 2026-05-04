@@ -133,6 +133,18 @@ contract PawnTest is BitboardTest {
     }
   }
 
+  function testWhitePawnCantCaptureBackwards() public {
+    b.place(Color.White, Piece.Pawn, 0x1C);  // e4
+    b.place(Color.Black, Piece.Pawn, 0x13);  // d3 — backward diagonal
+    _testIllegalMove(Color.White, Piece.Pawn, 0x1C, 0x13);
+  }
+
+  function testBlackPawnCantCaptureBackwards() public {
+    b.place(Color.Black, Piece.Pawn, 0x24);  // e5
+    b.place(Color.White, Piece.Pawn, 0x2D);  // f6 — backward diagonal
+    _testIllegalMove(Color.Black, Piece.Pawn, 0x24, 0x2D);
+  }
+
   /*
    * Corner-cases
    */

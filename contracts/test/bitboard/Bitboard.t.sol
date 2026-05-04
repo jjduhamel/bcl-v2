@@ -174,7 +174,7 @@ abstract contract BitboardTest is Test {
   }
 
   function _testIllegalMove(Color c, Piece p, uint8 from, uint8 to) public {
-    vm.expectRevert('InvalidMove');
+    vm.expectRevert(InvalidMove.selector);
     b.move(c, from, to);
   }
 

@@ -6,11 +6,11 @@ library UCI {
   function parse(string memory uci) internal pure
   returns (uint8 from, uint8 to, Piece promotion) {
     bytes memory b = bytes(uci);
-    require(b.length == 4 || b.length == 5, 'InvalidMove');
-    require(b[0] >= 'a' && b[0] <= 'h', 'InvalidMove');
-    require(b[1] >= '1' && b[1] <= '8', 'InvalidMove');
-    require(b[2] >= 'a' && b[2] <= 'h', 'InvalidMove');
-    require(b[3] >= '1' && b[3] <= '8', 'InvalidMove');
+    if (b.length != 4 && b.length != 5) revert InvalidMove();
+    if (b[0] < 'a' || b[0] > 'h') revert InvalidMove();
+    if (b[1] < '1' || b[1] > '8') revert InvalidMove();
+    if (b[2] < 'a' || b[2] > 'h') revert InvalidMove();
+    if (b[3] < '1' || b[3] > '8') revert InvalidMove();
     from = (uint8(b[1]) - uint8(bytes1('1'))) * 8 + (uint8(b[0]) - uint8(bytes1('a')));
     to   = (uint8(b[3]) - uint8(bytes1('1'))) * 8 + (uint8(b[2]) - uint8(bytes1('a')));
     if (b.length == 5) {
@@ -18,7 +18,7 @@ library UCI {
       else if (b[4] == 'r') promotion = Piece.Rook;
       else if (b[4] == 'b') promotion = Piece.Bishop;
       else if (b[4] == 'n') promotion = Piece.Knight;
-      else revert('InvalidPromotion');
+      else revert InvalidPromotion();
     }
   }
 }

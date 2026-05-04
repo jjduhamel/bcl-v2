@@ -16,7 +16,7 @@ contract DrawGameTest is ChessGameTest {
   }
 
   function testMoveFailsDuringDraw() public {
-    vm.expectRevert('InvalidContractState');
+    vm.expectRevert(ChessEngine.InvalidContractState.selector);
     _move(p2, 'b7b6');
   }
 
@@ -47,13 +47,13 @@ contract DrawGameTest is ChessGameTest {
 
   function testRespondDrawFailsAsSender() public {
     changePrank(p1);
-    vm.expectRevert('NotCurrentMove');
+    vm.expectRevert(ChessEngine.NotCurrentMove.selector);
     engine.respondDraw(gameId, true);
   }
 
   function testRespondDrawFailsAsSpectator() public {
     changePrank(p3);
-    vm.expectRevert('PlayerOnly');
+    vm.expectRevert(ChessEngine.PlayerOnly.selector);
     engine.respondDraw(gameId, true);
   }
 }

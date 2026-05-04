@@ -35,7 +35,7 @@ contract StartGameTest is ChessGameTest {
   }
 
   function testFirstMoveAsBlackFails() public {
-    vm.expectRevert('NotCurrentMove');
+    vm.expectRevert(ChessEngine.NotCurrentMove.selector);
     _move(p2, 'b7b6');
   }
 
@@ -56,7 +56,7 @@ contract StartGameTest is ChessGameTest {
 
   function testConsecutiveMoveFails() public {
     _testMove(p1, 'a2a3');
-    vm.expectRevert('NotCurrentMove');
+    vm.expectRevert(ChessEngine.NotCurrentMove.selector);
     _move(p1, 'b2b4');
   }
 }

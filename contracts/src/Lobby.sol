@@ -4,7 +4,6 @@ import '@oz-upgradeable/access/AccessControlEnumerableUpgradeable.sol';
 import '@oz-upgradeable/proxy/utils/Initializable.sol';
 import '@oz-upgradeable/proxy/utils/UUPSUpgradeable.sol';
 import '@oz/utils/structs/EnumerableMap.sol';
-import '@oz/utils/Counters.sol';
 import './ILobby.sol';
 import './IChessEngine.sol';
 import './ChessEngine.sol';
@@ -15,25 +14,30 @@ contract Lobby is
   AccessControlEnumerableUpgradeable,
   ILobby
 {
+  error ChessEngineOnly();
+  error GameEngineOnly();
+  error ChallengingDisabled();
+  error WageringDisabled();
+  error InvalidDepositAmount();
+  error UserBanned();
   using EnumerableSet for EnumerableSet.AddressSet;
   using EnumerableSet for EnumerableSet.UintSet;
-  using Counters for Counters.Counter;
 
   struct LobbyMetadata {
-    Counters.Counter gamesCreated;
-    Counters.Counter gamesStarted;
-    Counters.Counter gamesFinished;
+    uint gamesCreated;
+    uint gamesStarted;
+    uint gamesFinished;
     uint netWagers;
     uint netEarnings;
   }
 
   struct PlayerMetadata {
-    Counters.Counter challengesSent;
-    Counters.Counter challengesReceived;
-    Counters.Counter gamesStarted;
-    Counters.Counter gamesWon;
-    Counters.Counter gamesLost;
-    Counters.Counter gamesDrawn;
+    uint challengesSent;
+    uint challengesReceived;
+    uint gamesStarted;
+    uint gamesWon;
+    uint gamesLost;
+    uint gamesDrawn;
     uint netWagers;
     uint netWinnings;
     uint netLosses;
@@ -66,9 +70,6 @@ contract Lobby is
   bytes32 public constant ROLE_8 = keccak256('ROLE_8');
 
   // Player Lobby
-  //Counters.Counter private __gamesCreated;
-  //Counters.Counter private __gamesStarted;
-  //Counters.Counter private __gamesFinished;
   // Map player -> lobby
   LobbyMetadata private __house;
   EnumerableSet.AddressSet private __users;
@@ -180,30 +181,30 @@ contract Lobby is
   }
 
   modifier isChessEngine() {
-    require(__chessEngines.contains(msg.sender), 'ChessEngineOnly');
+    if (!__chessEngines.contains(msg.sender)) revert ChessEngineOnly();
     _;
   }
 
   modifier isGameEngine(uint gameId) {
-    require(msg.sender == __gameEngine[gameId], 'GameEngineOnly');
+    if (msg.sender != __gameEngine[gameId]) revert GameEngineOnly();
     _;
   }
 
   modifier allowChallenge() {
-    require(__allowChallenges, 'ChallengingDisabled');
+    if (!__allowChallenges) revert ChallengingDisabled();
     _;
   }
 
-  modifier allowWager(uint _amount) {
+  modifier allowWager(uint _amount, address _token) {
     if (_amount > 0) {
-      require(__allowWagers, 'WageringDisabled');
-      require(msg.value >= _amount, 'InvalidDepositAmount');
+      if (!__allowWagers) revert WageringDisabled();
+      if (_token == address(0) && msg.value < _amount) revert InvalidDepositAmount();
     }
     _;
   }
 
   modifier notBanned() {
-    require(!hasRole(BANNED_ROLE, msg.sender), 'UserBanned');
+    if (hasRole(BANNED_ROLE, msg.sender)) revert UserBanned();
     _;
   }
 
@@ -224,15 +225,15 @@ contract Lobby is
   }
 
   function challengesSent(address player) public view returns (uint) {
-    return __player[player].challengesSent.current();
+    return __player[player].challengesSent;
   }
 
   function challengesReceived(address player) public view returns (uint) {
-    return __player[player].challengesReceived.current();
+    return __player[player].challengesReceived;
   }
 
   function gamesStarted(address player) public view returns (uint) {
-    return __player[player].gamesStarted.current();
+    return __player[player].gamesStarted;
   }
 
   function gamesFinished(address player) public view returns (uint) {
@@ -243,15 +244,15 @@ contract Lobby is
   }
 
   function totalWins(address player) public view returns (uint) {
-    return __player[player].gamesWon.current();
+    return __player[player].gamesWon;
   }
 
   function totalLosses(address player) public view returns (uint) {
-    return __player[player].gamesLost.current();
+    return __player[player].gamesLost;
   }
 
   function totalDraws(address player) public view returns (uint) {
-    return __player[player].gamesDrawn.current();
+    return __player[player].gamesDrawn;
   }
 
   function grossWagers() public view returns (uint) {
@@ -273,15 +274,15 @@ contract Lobby is
   }
 
   function totalChallenges() public view returns (uint) {
-    return __house.gamesCreated.current();
+    return __house.gamesCreated;
   }
 
   function totalGames() public view returns (uint) {
-    return __house.gamesStarted.current();
+    return __house.gamesStarted;
   }
 
   function totalFinishes() public view returns (uint) {
-    return __house.gamesFinished.current();
+    return __house.gamesFinished;
   }
 
   /*
@@ -310,30 +311,32 @@ contract Lobby is
     address opponent,
     bool startAsWhite,
     uint timePerMove,
-    uint wagerAmount
+    uint wagerAmount,
+    address wagerToken
   ) external payable
     notBanned
     allowChallenge
-    allowWager(wagerAmount)
+    allowWager(wagerAmount, wagerToken)
   returns (uint) {
     initPlayerLobby(msg.sender, opponent);
     // Create a new challenge on the current game engine
     uint gameId = __currentEngine.createChallenge{ value: msg.value }
-                                                 (__house.gamesCreated.current()
+                                                 (__house.gamesCreated
                                                  , msg.sender
                                                  , opponent
                                                  , startAsWhite
                                                  , timePerMove
-                                                 , wagerAmount);
-    __house.gamesCreated.increment();
+                                                 , wagerAmount
+                                                 , wagerToken);
+    __house.gamesCreated++;
     // Set the game engine
     __gameEngine[gameId] = address(__currentEngine);
     // Add to pending challenges
     __lobby[msg.sender].pendingChallenges.add(gameId);
     __lobby[opponent].pendingChallenges.add(gameId);
     // Update challenges sent/received
-    __player[msg.sender].challengesSent.increment();
-    __player[opponent].challengesReceived.increment();
+    __player[msg.sender].challengesSent++;
+    __player[opponent].challengesReceived++;
     emit NewChallenge(gameId, msg.sender, opponent);
     return gameId;
   }
@@ -355,7 +358,7 @@ contract Lobby is
     // Start the game
     engine.startGame(gameId);
     // Increment total games started
-    __house.gamesStarted.increment();
+    __house.gamesStarted++;
     __house.netWagers += 2*gameData.wagerAmount;
     __house.netEarnings += 2*engine.platformFee(gameId);
     // Remove from pending challenges
@@ -365,8 +368,8 @@ contract Lobby is
     __lobby[sender].currentGames.add(gameId);
     __lobby[receiver].currentGames.add(gameId);
     // Update games started
-    __player[sender].gamesStarted.increment();
-    __player[receiver].gamesStarted.increment();
+    __player[sender].gamesStarted++;
+    __player[receiver].gamesStarted++;
     // Update net wagers
     __player[sender].netWagers += gameData.wagerAmount;
     __player[receiver].netWagers += gameData.wagerAmount;
@@ -381,7 +384,7 @@ contract Lobby is
     address white = gameData.whitePlayer;
     address black = gameData.blackPlayer;
     // Increment total finished games
-    __house.gamesFinished.increment();
+    __house.gamesFinished++;
     // Remove from current games
     __lobby[white].currentGames.remove(gameId);
     __lobby[black].currentGames.remove(gameId);
@@ -390,8 +393,8 @@ contract Lobby is
     __lobby[black].finishedGames.add(gameId);
     // Update games won/lost/drawn
     if (outcome == IChessEngine.GameOutcome.Draw) {
-      __player[white].gamesDrawn.increment();
-      __player[black].gamesDrawn.increment();
+      __player[white].gamesDrawn++;
+      __player[black].gamesDrawn++;
     } else {
       address winner;
       address loser;
@@ -403,9 +406,9 @@ contract Lobby is
         loser = white;
       }
       // Update winner/loser
-      __player[winner].gamesWon.increment();
+      __player[winner].gamesWon++;
       __player[winner].netWinnings += gameData.wagerAmount;
-      __player[loser].gamesLost.increment();
+      __player[loser].gamesLost++;
       __player[loser].netLosses += gameData.wagerAmount;
     }
     emit GameFinished(gameId, white, black);
