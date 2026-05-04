@@ -117,7 +117,9 @@ abstract contract Escrow {
     uint amount = earnings(player, address(0));
     if (amount == 0) revert InsufficientBalance();
     __earnings[player].set(address(0), 0);
-    payable(player).transfer(amount);
+    // Apparently this is more gas efficient than payable(receiver).transfer(amount);
+    (bool ok,) = payable(player).call{value: amount}("");
+    if (!ok) revert TransferFailed();
   }
 
   function _withdrawERC20(address player, address token) private {
@@ -140,6 +142,7 @@ abstract contract Escrow {
     uint amount = earnings(address(0), address(0));
     __earnings[address(0)].set(address(0), 0);
     if (amount > 0) {
+      // Apparently this is more gas efficient than payable(receiver).transfer(amount);
       (bool ok,) = payable(receiver).call{value: amount}("");
       if (!ok) revert TransferFailed();
     }
