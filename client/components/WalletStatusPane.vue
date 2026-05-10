@@ -3,6 +3,11 @@ const { truncAddress } = useEthUtils();
 
 const emit = defineEmits([ 'disconnect', 'changeNetwork' ]);
 
+async function copyAddress() {
+  if (!props.address) return;
+  await navigator.clipboard.writeText(props.address);
+}
+
 const props = defineProps({
   connected: {
     type: Boolean,
@@ -25,7 +30,7 @@ const props = defineProps({
 
 <template lang='pug'>
 div(id='wallet-status')
-  div(id='account' class='py-0.5 flex items-center')
+  div(id='account' class='py-0.5 flex items-center cursor-pointer' @click='copyAddress')
     img(class='h-4' src='~assets/icons/bytesize/user.svg')
     div(class='flex-1')
       div(v-if='connected') {{ truncAddress(address, 4) }}

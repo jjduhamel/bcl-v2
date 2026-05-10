@@ -41,7 +41,6 @@ const displayTPM = computed(() => {
                         , { largest: 1 });
 });
 
-const wagerToken = ref('eth');
 const wagerAmount = ref(props.wagerAmount);
 const displayWager = computed({
   get() {

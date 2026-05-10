@@ -1,5 +1,6 @@
 import _ from 'lodash';
 import { Chess, SQUARES } from 'chess.js';
+import { constants } from 'ethers';
 import { fetchBlockNumber } from '@wagmi/core';
 
 export default async function(gameId) {
@@ -7,19 +8,19 @@ export default async function(gameId) {
 
   const GameState = {
     Pending: 0,
-    Started: 1,
-    Draw: 2,
-    Finished: 3,
-    Review: 4,
-    Migrated: 5
+    Declined: 1,
+    Started: 2,
+    Draw: 3,
+    Finished: 4,
+    Review: 5,
+    Migrated: 6
   };
 
   const GameOutcome = {
     Undecided: 0,
-    Declined: 1,
-    WhiteWon: 2,
-    BlackWon: 3,
-    Draw: 4
+    WhiteWon: 1,
+    BlackWon: 2,
+    Draw: 3
   };
 
   /*
@@ -58,27 +59,24 @@ export default async function(gameId) {
   if (!lobby.has(gameId)) await initGameData(gameId);
 
   const gameContract = chessEngine(gameId);
-  const { MoveSAN, GameOver } = gameContract.filters;
+  const { PlayerMoved, GameOver } = gameContract.filters;
   const moves = ref([]);
   const illegalMoves = ref([]);
 
-  function tryMoveSAN(san) {
-    console.log('Try move', san);
-    const move = chess.move(san, { sloppy: true });
+  function tryMove(uci) {
+    console.log('Try move', uci);
+    const move = chess.move(uci, { sloppy: true });
     if (!move) {
-      const m = moves.value.length;
-      illegalMoves.value = [ ...illegalMoves.value, m ];
-      console.warn(`Illegal move: ${san} [${chess.turn()}]`);
-    } else {
-      san = move.san;
+      illegalMoves.value = [ ...illegalMoves.value, moves.value.length ];
+      console.warn(`Illegal move: ${uci} [${chess.turn()}]`);
+    } else if (move.flags.includes('e')) {
+      // En passant: chess.js applies it but the contract rejects (per CLAUDE.md)
+      chess.undo();
+      illegalMoves.value = [ ...illegalMoves.value, moves.value.length ];
+      console.warn(`En passant not supported: ${uci}`);
     }
     fen.value = chess.fen();
-    return san;
-  }
-
-  // TODO Place illegal moves on board
-  function tryMoveFromTo(from, to) {
-    return tryMoveSAN(`${from}${to}`);
+    return { ...move, uci };
   }
 
   async function fetchMoves() {
@@ -86,23 +84,22 @@ export default async function(gameId) {
     moves.value = [];
     const cur = await gameContract.moves(gameId);
     console.log('Fetched', cur.length, 'moves');
-    _.forEach(cur, san => {
-      tryMoveSAN(san);
-      moves.value = [ ...moves.value, san ];
+    _.forEach(cur, uci => {
+      moves.value = [ ...moves.value, tryMove(uci) ];
     });
   }
 
 
-  const submitMove = san => new Promise(async (resolve, reject) => {
+  const submitMove = uci => new Promise(async (resolve, reject) => {
     try {
-      console.log('Submit move', san);
-      $amplitude.track('SendMove', { gameId, san });
-      await gameContract.move(gameId, san);
+      console.log('Submit move', uci);
+      $amplitude.track('SendMove', { gameId, uci });
+      await gameContract.move(gameId, uci);
       playAudioClip('other/swell1');
-      const eventFilter = MoveSAN(gameId, wallet.address);
-      gameContract.once(eventFilter, async (id, player, san)  => {
-        console.log('Move confirmed', san);
-        resolve(id, player, san);
+      const eventFilter = PlayerMoved(gameId, wallet.address);
+      gameContract.once(eventFilter, async (id, player, uci)  => {
+        console.log('Move confirmed', uci);
+        resolve(id, player, uci);
         await fetchGameData(gameId);
       });
     } catch(err) {
@@ -117,10 +114,13 @@ export default async function(gameId) {
       await gameContract.resign(gameId);
       console.log('Resigned game', gameId);
       playAudioClip('other/swell3');
-      gameContract.once(GameOver(gameId), (id, outcome, winner)  => {
+      gameContract.once(GameOver(gameId), (id, winner, loser)  => {
+        if (loser !== wallet.address) {
+          return reject(new Error(`Expected loser ${wallet.address}, got ${loser}`));
+        }
         console.log('Resignation confirmed');
         $amplitude.track('ResignedGame', { gameId });
-        resolve(id, outcome, winner);
+        resolve(id, winner, loser);
       });
     } catch(err) {
       console.error(err);
@@ -134,10 +134,13 @@ export default async function(gameId) {
       await gameContract.claimVictory(gameId);
       console.log('Claimed victory in game', gameId);
       playAudioClip('other/swell2');
-      gameContract.once(GameOver(gameId), (id, outcome, winner)  => {
+      gameContract.once(GameOver(gameId), (id, winner, loser)  => {
+        if (winner !== wallet.address) {
+          return reject(new Error(`Expected winner ${wallet.address}, got ${winner}`));
+        }
         console.log('Victory confirmed');
-        $amplitude.track('VictoryConfirmed', { gameId, outcome, winner });
-        resolve(id, outcome, winner);
+        $amplitude.track('VictoryConfirmed', { gameId, winner, loser });
+        resolve(id, winner, loser);
       });
     } catch(err) {
       reject(err);
@@ -147,6 +150,21 @@ export default async function(gameId) {
   async function offerStalemate() {
     // TODO
   }
+
+  const withdrawWinnings = () => new Promise(async (resolve, reject) => {
+    try {
+      $amplitude.track('WithdrawWinnings', { gameId });
+      const tx = await gameContract.withdraw(constants.AddressZero);
+      await tx.wait();
+      console.log('Withdrew winnings for game', gameId);
+      playAudioClip('nes/Victory');
+      await refreshBalance();
+      resolve();
+    } catch(err) {
+      console.error(err);
+      reject(err);
+    }
+  });
 
   const disputeGame = () => new Promise(async (resolve, reject) => {
     try {
@@ -305,9 +323,9 @@ export default async function(gameId) {
   async function registerListeners() {
     console.log('Register listeners for game', gameId);
     let lastEvent = await fetchBlockNumber();
-    gameContract.on(MoveSAN(gameId), async (id, player, san, ev) => {
+    gameContract.on(PlayerMoved(gameId), async (id, player, uci, ev) => {
       console.log('Received move from', player);
-      $amplitude.track('MoveConfirmed', { gameId, player, san });
+      $amplitude.track('MoveConfirmed', { gameId, player, uci });
       // Toss duplicate events
       if (ev.blockNumber <= lastEvent) return;
       lastEvent = ev.blockNumber;
@@ -315,23 +333,26 @@ export default async function(gameId) {
       // If these come from the current player, then we already tried
       // the move and it succeeded.  Trying again would throw an error.
       // In the case of spectators, both players moves get processed.
+      let move;
       if (player != wallet.address) {
-        console.log('Received move', san);
-        const move = tryMoveSAN(san);
+        console.log('Received move', uci);
+        move = tryMove(uci);
+      } else {
+        const last = _.last(chess.history({ verbose: true }));
+        move = last ? { ...last, uci } : { uci };
       }
-
-      moves.value = [ ...moves.value, san ];
+      moves.value = [ ...moves.value, move ];
       await fetchGameData(gameId);
       playAudioClip('other/Blaster');
     });
 
-    gameContract.on(GameOver(gameId), async (id, outcome, winner) => {
+    gameContract.on(GameOver(gameId), async (id, winner, loser) => {
       console.log('Game over', id);
       await Promise.all([
         refreshBalance(),
         fetchGameData(gameId)
       ]);
-      $amplitude.track('GameOver', { gameId, outcome, winner });
+      $amplitude.track('GameOver', { gameId, winner, loser });
       if (isWinner.value) playAudioClip('nes/Victory');
       else if (isLoser.value) playAudioClip('nes/Defeat');
       else playAudioClip('nes/Draw');
@@ -340,7 +361,7 @@ export default async function(gameId) {
 
   async function destroyListeners() {
     console.log('Destroy game listeners for', gameId);
-    gameContract.off(MoveSAN(gameId));
+    gameContract.off(PlayerMoved(gameId));
     gameContract.off(GameOver(gameId));
   }
 
@@ -382,12 +403,12 @@ export default async function(gameId) {
     timerExpired,
     playerTimeExpired,
     opponentTimeExpired,
-    tryMoveSAN,
-    tryMoveFromTo,
+    tryMove,
     submitMove,
     resign,
     claimVictory,
     offerStalemate,
+    withdrawWinnings,
     disputeGame,
     startMoveTimer,
     stopMoveTimer,

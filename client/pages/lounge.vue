@@ -57,9 +57,8 @@ async function doSendChallenge(args) {
   const { opponent
         , startAsWhite
         , timePerMove
-        , wagerAmount
-        , wagerToken } = args;
-  await sendChallenge(opponent, startAsWhite, timePerMove, wagerAmount, wagerToken);
+        , wagerAmount } = args;
+  await sendChallenge(opponent, startAsWhite, timePerMove, wagerAmount);
   newChallengeModal.value = false
 }
 
@@ -72,7 +71,7 @@ async function doDeclineChallenge(gameId) {
 }
 
 async function doModifyChallenge(gameId, gameData) {
-  const { startAsWhite, timePerMove, wagerAmount, wagerToken } = gameData;
+  const { startAsWhite, timePerMove, wagerAmount } = gameData;
   await modifyChallenge(gameId, startAsWhite, timePerMove, wagerAmount);
 }
 

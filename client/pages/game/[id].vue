@@ -33,11 +33,12 @@ const {
   timerExpired,
   playerTimeExpired,
   opponentTimeExpired,
-  tryMoveFromTo,
+  tryMove,
   submitMove,
   resign,
   claimVictory,
   offerStalemate,
+  withdrawWinnings,
   disputeGame,
   startMoveTimer,
   stopMoveTimer,
@@ -50,9 +51,9 @@ const disputedMove = ref(null);
 watch(illegalMoves, () => {
   if (isOpponentsTurn.value) {
     const j = _.last(illegalMoves.value);
-    const san = moves.value[j]
-    console.log('Dispute move', san);
-    disputedMove.value = san;
+    const move = moves.value[j]
+    console.log('Dispute move', move.uci);
+    disputedMove.value = move;
   }
 });
 */
@@ -75,15 +76,17 @@ watch(disputedMove, () => illegalMoveModal.value = true);
 const proposedMove = ref(null);
 const didChooseMove = ref(false);
 function chooseMove(from, to) {
-  const san = tryMoveFromTo(from, to);
-  proposedMove.value = san;
+  const piece = chess.get(from);
+  const promotion = piece?.type === 'p' && (to[1] === '8' || to[1] === '1') ? 'q' : '';
+  const move = tryMove(`${from}${to}${promotion}`);
+  proposedMove.value = move;
   didChooseMove.value = true;
   playAudioClip('nes/Move');
 }
 
 function undoMove() {
   const move = chess.undo();
-  console.log('Undo Move', move.san);
+  console.log('Undo Move', `${move.from}${move.to}${move.promotion ?? ''}`);
   fen.value = chess.fen();
   didChooseMove.value = false;
 }
@@ -92,7 +95,7 @@ const didSendMove = ref(false);
 async function doSendMove() {
   try {
     didSendMove.value = true;
-    await submitMove(proposedMove.value);
+    await submitMove(proposedMove.value.uci);
     didChooseMove.value = false;
     proposedMove.value = null;
   } catch (err) {
@@ -135,6 +138,18 @@ async function doOfferStalemate() {
     console.error(err);
   } finally {
     didOfferStalemate.value = false;
+  }
+}
+
+const didWithdrawWinnings = ref(false);
+async function doWithdrawWinnings() {
+  try {
+    didWithdrawWinnings.value = true;
+    await withdrawWinnings();
+  } catch (err) {
+    console.error(err);
+  } finally {
+    didWithdrawWinnings.value = false;
   }
 }
 
@@ -218,9 +233,9 @@ NuxtLayout(name='game')
 
     div(id='moves' class='text-sm')
       div(
-        v-for='(san, j) in moves'
+        v-for='(move, j) in moves'
         :style='isIllegalMove(j) && { color: "red" }'
-      ) {{ san }}
+      ) {{ move.san ?? move.uci }}
 
     div(id='controls' class='pb-2')
       div(id='controlbar' class='p-2 flex justify-between')
@@ -247,8 +262,14 @@ NuxtLayout(name='game')
           img(class='w-6' src='~assets/icons/bytesize/ban.svg')
 
       button(
+        title='Claim Winnings'
+        v-if='gameOver && isWinner'
+        :disabled='didWithdrawWinnings'
+        @click='doWithdrawWinnings'
+      ) Claim Winnings
+      button(
         title='Resign'
-        v-if='checkmatePending || playerTimeExpired'
+        v-else-if='checkmatePending || playerTimeExpired'
         @click='doResign'
       ) Resign
       button(
@@ -258,7 +279,7 @@ NuxtLayout(name='game')
       ) Claim Victory
       button(
         title='Submit Move'
-        v-else
+        v-else-if='!gameOver'
         :disabled='!didChooseMove || didSendMove'
         @click='doSendMove'
       ) Submit
@@ -271,7 +292,7 @@ NuxtLayout(name='game')
           .then(() => confirmResignModal = false)'
       @close='() => confirmResignModal = false'
     )
-      div Please confirm you wish to resign by clicking "Confirm".  By resigning, your fair-play deposit will be refunded.
+      div Please confirm you wish to resign by clicking "Confirm".
 
     ConfirmModal(
       title='Offer Stalemate'
@@ -288,7 +309,7 @@ NuxtLayout(name='game')
       v-if='inCheckmateModal'
       @close='() => inCheckmateModal = false'
     )
-      div(class='text-center') Oh no, you're in checkmate!  Please resign before the timer expires to be refunded your fair-play deposit.
+      div(class='text-center') Oh no, you're in checkmate!  Please resign before the timer expires.
       div(id='form-controls' class='flex items-center')
         button(
           @click='() => doResign()\
