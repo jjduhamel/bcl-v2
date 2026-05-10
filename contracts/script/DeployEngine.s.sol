@@ -8,11 +8,11 @@ import '@src/Lobby.sol';
 import '@src/ChessEngine.sol';
 
 contract DeployEngine is Script {
-  function deployEngine() private returns (ChessEngine) {
+  function deployEngine(address lobby) private returns (ChessEngine) {
     ChessEngine impl = new ChessEngine();
-    ERC1967Proxy proxy = new ERC1967Proxy(address(impl), '');
-    ChessEngine engine = ChessEngine(address(proxy));
-    return engine;
+    bytes memory initData = abi.encodeCall(ChessEngine.initialize, (lobby));
+    ERC1967Proxy proxy = new ERC1967Proxy(address(impl), initData);
+    return ChessEngine(address(proxy));
   }
 
   function run() public {
@@ -21,8 +21,7 @@ contract DeployEngine is Script {
     vm.startBroadcast(deployerKey);
     Lobby lobby = Lobby(lobbyAddr);
     console.log('Lobby', address(lobby));
-    ChessEngine engine = deployEngine();
-    engine.initialize(address(lobby));
+    ChessEngine engine = deployEngine(address(lobby));
     lobby.setChessEngine(address(engine));
     console.log('Engine', lobby.currentEngine());
     vm.stopBroadcast();

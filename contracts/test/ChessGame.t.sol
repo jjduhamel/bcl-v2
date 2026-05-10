@@ -22,7 +22,7 @@ abstract contract ChessGameTest is ChallengeTest {
 
   function _testMove(address player, string memory uci) internal {
     vm.expectEmit(true, true, true, true, address(engine));
-    emit MoveSAN(gameId, player, uci);
+    emit PlayerMoved(gameId, player, uci);
     _move(player, uci);
     string[] memory moves = engine.moves(gameId);
     if (moves.length == 0) return;

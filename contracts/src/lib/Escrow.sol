@@ -19,37 +19,37 @@ abstract contract Escrow {
   error TransferFailed();
 
   // player -> gameId -> token deposit (address(0) token = ETH)
-  mapping(address => GameIDToTokenDepositMap.Map) private __escrow;
+  mapping(address => GameIDToTokenDepositMap.Map) private __restricted;
   // player -> token -> claimable amount (address(0) player = platform fees)
-  mapping(address => EnumerableMap.AddressToUintMap) private __earnings;
+  mapping(address => EnumerableMap.AddressToUintMap) private __released;
 
-  function escrow(address player, uint gameId) internal view returns (TokenDeposit memory) {
-    (bool exists, TokenDeposit memory d) = __escrow[player].tryGet(gameId);
+  function restrictedFunds(address player, uint gameId) internal view returns (TokenDeposit memory) {
+    (bool exists, TokenDeposit memory d) = __restricted[player].tryGet(gameId);
     return exists ? d : TokenDeposit(address(0), 0);
   }
 
   function tokens(address player) internal view returns (address[] memory) {
-    return __earnings[player].keys();
+    return __released[player].keys();
   }
 
-  function earnings(address player, address token) internal view returns (uint) {
-    (bool exists, uint out) = __earnings[player].tryGet(token);
+  function releasedFunds(address player, address token) internal view returns (uint) {
+    (bool exists, uint out) = __released[player].tryGet(token);
     return exists ? out : 0;
   }
 
   function refund(address player, uint gameId) internal {
-    (bool exists, TokenDeposit memory d) = __escrow[player].tryGet(gameId);
+    (bool exists, TokenDeposit memory d) = __restricted[player].tryGet(gameId);
     if (!exists) return;
-    __earnings[player].set(d.token, earnings(player, d.token) + d.amount);
-    __escrow[player].remove(gameId);
+    __released[player].set(d.token, releasedFunds(player, d.token) + d.amount);
+    __restricted[player].remove(gameId);
   }
 
   function refund(address player, uint gameId, uint amount) internal {
-    (bool exists, TokenDeposit memory d) = __escrow[player].tryGet(gameId);
+    (bool exists, TokenDeposit memory d) = __restricted[player].tryGet(gameId);
     if (!exists || amount == 0) return;
     if (d.amount < amount) revert InsufficientFunds();
-    __earnings[player].set(d.token, earnings(player, d.token) + amount);
-    __escrow[player].set(gameId, d.token, d.amount - amount);
+    __released[player].set(d.token, releasedFunds(player, d.token) + amount);
+    __restricted[player].set(gameId, d.token, d.amount - amount);
   }
 
   function disburse(
@@ -58,32 +58,32 @@ abstract contract Escrow {
     uint gameId,
     IChessEngine.GameOutcome outcome
   ) internal {
-    TokenDeposit memory wBal = __escrow[white].get(gameId);
-    TokenDeposit memory bBal = __escrow[black].get(gameId);
-    __escrow[white].remove(gameId);
-    __escrow[black].remove(gameId);
+    TokenDeposit memory wBal = __restricted[white].get(gameId);
+    TokenDeposit memory bBal = __restricted[black].get(gameId);
+    __restricted[white].remove(gameId);
+    __restricted[black].remove(gameId);
     if (outcome == IChessEngine.GameOutcome.WhiteWon) {
-      __earnings[white].set(wBal.token, earnings(white, wBal.token) + wBal.amount);
-      __earnings[white].set(bBal.token, earnings(white, bBal.token) + bBal.amount);
+      __released[white].set(wBal.token, releasedFunds(white, wBal.token) + wBal.amount);
+      __released[white].set(bBal.token, releasedFunds(white, bBal.token) + bBal.amount);
     } else if (outcome == IChessEngine.GameOutcome.BlackWon) {
-      __earnings[black].set(wBal.token, earnings(black, wBal.token) + wBal.amount);
-      __earnings[black].set(bBal.token, earnings(black, bBal.token) + bBal.amount);
+      __released[black].set(wBal.token, releasedFunds(black, wBal.token) + wBal.amount);
+      __released[black].set(bBal.token, releasedFunds(black, bBal.token) + bBal.amount);
     } else if (outcome == IChessEngine.GameOutcome.Draw) {
-      __earnings[white].set(wBal.token, earnings(white, wBal.token) + wBal.amount);
-      __earnings[black].set(bBal.token, earnings(black, bBal.token) + bBal.amount);
+      __released[white].set(wBal.token, releasedFunds(white, wBal.token) + wBal.amount);
+      __released[black].set(bBal.token, releasedFunds(black, bBal.token) + bBal.amount);
     } else {
       revert EscrowLocked();
     }
   }
 
   function chargeFee(address player, uint gameId, address token, uint fee) internal {
-    (bool exists, TokenDeposit memory d) = __escrow[player].tryGet(gameId);
+    (bool exists, TokenDeposit memory d) = __restricted[player].tryGet(gameId);
     if (!exists) return;  // Don't charge any fee for zero-wager games
     if (d.token != token) revert InvalidToken();
     if (d.amount < fee) revert InsufficientFunds();
     d.amount -= uint96(fee);
-    __escrow[player].set(gameId, d.token, d.amount);
-    __earnings[address(0)].set(token, earnings(address(0), token) + fee);
+    __restricted[player].set(gameId, d.token, d.amount);
+    __released[address(0)].set(token, releasedFunds(address(0), token) + fee);
   }
 
   /*
@@ -92,19 +92,19 @@ abstract contract Escrow {
 
   function _depositETH(address player, uint gameId, address token, uint amount) private {
     if (msg.value < amount) revert InsufficientFunds();
-    (bool exists, TokenDeposit memory d) = __escrow[player].tryGet(gameId);
+    (bool exists, TokenDeposit memory d) = __restricted[player].tryGet(gameId);
     if (exists && d.token != address(0)) revert InvalidToken();
     uint total = exists ? d.amount + amount : amount;
-    __escrow[player].set(gameId, address(0), total);
+    __restricted[player].set(gameId, address(0), total);
   }
 
   function _depositERC20(address player, uint gameId, address token, uint amount) private {
-    (bool exists, TokenDeposit memory d) = __escrow[player].tryGet(gameId);
+    (bool exists, TokenDeposit memory d) = __restricted[player].tryGet(gameId);
     if (exists && d.token != token) revert InvalidToken();
     uint total = exists ? d.amount + amount : amount;
     if (total > type(uint96).max) revert AmountOverflow();
     IERC20(token).safeTransferFrom(player, address(this), amount);
-    __escrow[player].set(gameId, token, total);
+    __restricted[player].set(gameId, token, total);
   }
 
   function deposit(address player, uint gameId, address token, uint amount) internal {
@@ -117,18 +117,18 @@ abstract contract Escrow {
 
   function _withdrawETH(address player, address token) private {
     if (token != address(0)) revert InvalidToken();
-    uint amount = earnings(player, address(0));
+    uint amount = releasedFunds(player, address(0));
     if (amount == 0) revert InsufficientBalance();
-    __earnings[player].set(address(0), 0);
+    __released[player].set(address(0), 0);
     // .call forwards all gas; .transfer caps at 2300 and fails for smart contract wallets
     (bool ok,) = payable(player).call{value: amount}("");
     if (!ok) revert TransferFailed();
   }
 
   function _withdrawERC20(address player, address token) private {
-    uint amount = earnings(player, token);
+    uint amount = releasedFunds(player, token);
     if (amount == 0) revert InsufficientBalance();
-    __earnings[player].set(token, 0);
+    __released[player].set(token, 0);
     IERC20(token).safeTransfer(player, amount);
   }
 
@@ -142,8 +142,8 @@ abstract contract Escrow {
 
   function _withdrawPlatformETH(address token, address receiver) private {
     if (token != address(0)) revert InvalidToken();
-    uint amount = earnings(address(0), address(0));
-    __earnings[address(0)].set(address(0), 0);
+    uint amount = releasedFunds(address(0), address(0));
+    __released[address(0)].set(address(0), 0);
     if (amount > 0) {
       // .call forwards all gas; .transfer caps at 2300 and fails for smart contract wallets
       (bool ok,) = payable(receiver).call{value: amount}("");
@@ -152,8 +152,8 @@ abstract contract Escrow {
   }
 
   function _withdrawPlatformERC20(address token, address receiver) private {
-    uint amount = earnings(address(0), token);
-    __earnings[address(0)].set(token, 0);
+    uint amount = releasedFunds(address(0), token);
+    __released[address(0)].set(token, 0);
     if (amount > 0) IERC20(token).safeTransfer(receiver, amount);
   }
 

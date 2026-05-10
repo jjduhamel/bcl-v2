@@ -18,3 +18,4 @@ dist
 out/
 cache/
 broadcast/
+.playwright-mcp/

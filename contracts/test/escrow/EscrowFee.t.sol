@@ -11,19 +11,19 @@ contract EscrowERC20FeeTest is EscrowTest {
 
   function testChargeFeeDeductsFromEscrow() public {
     chargeFee(p1, gameId, address(token), fee);
-    assertEq(escrow(p1, gameId).token, address(token));
-    assertEq(escrow(p1, gameId).amount, wager);
+    assertEq(restrictedFunds(p1, gameId).token, address(token));
+    assertEq(restrictedFunds(p1, gameId).amount, wager);
   }
 
   function testChargeFeeAddsToPlatformEarnings() public {
     chargeFee(p1, gameId, address(token), fee);
-    assertEq(earnings(address(0), address(token)), fee);
+    assertEq(releasedFunds(address(0), address(token)), fee);
   }
 
   function testChargeFeeBothPlayers() public {
     chargeFee(p1, gameId, address(token), fee);
     chargeFee(p2, gameId, address(token), fee);
-    assertEq(earnings(address(0), address(token)), 2 * fee);
+    assertEq(releasedFunds(address(0), address(token)), 2 * fee);
   }
 
   function testFeeExceedsBalanceReverts() public {
@@ -34,8 +34,8 @@ contract EscrowERC20FeeTest is EscrowTest {
   function testChargeFeeZeroWagerIsNoop() public {
     uint noWagerGame = gameId + 99;
     chargeFee(p1, noWagerGame, address(token), fee);
-    assertEq(earnings(address(0), address(token)), 0);
-    assertEq(escrow(p1, noWagerGame).amount, 0);
+    assertEq(releasedFunds(address(0), address(token)), 0);
+    assertEq(restrictedFunds(p1, noWagerGame).amount, 0);
   }
 }
 
@@ -47,19 +47,19 @@ contract EscrowETHFeeTest is EscrowETHTest {
 
   function testChargeFeeDeductsFromEscrow() public {
     chargeFee(p1, gameId, address(0), fee);
-    assertEq(escrow(p1, gameId).token, address(0));
-    assertEq(escrow(p1, gameId).amount, wager);
+    assertEq(restrictedFunds(p1, gameId).token, address(0));
+    assertEq(restrictedFunds(p1, gameId).amount, wager);
   }
 
   function testChargeFeeAddsToPlatformEarnings() public {
     chargeFee(p1, gameId, address(0), fee);
-    assertEq(earnings(address(0), address(0)), fee);
+    assertEq(releasedFunds(address(0), address(0)), fee);
   }
 
   function testChargeFeeBothPlayers() public {
     chargeFee(p1, gameId, address(0), fee);
     chargeFee(p2, gameId, address(0), fee);
-    assertEq(earnings(address(0), address(0)), 2 * fee);
+    assertEq(releasedFunds(address(0), address(0)), 2 * fee);
   }
 
   function testFeeExceedsBalanceReverts() public {
@@ -70,7 +70,7 @@ contract EscrowETHFeeTest is EscrowETHTest {
   function testChargeFeeZeroWagerIsNoop() public {
     uint noWagerGame = gameId + 99;
     chargeFee(p1, noWagerGame, address(0), fee);
-    assertEq(earnings(address(0), address(0)), 0);
-    assertEq(escrow(p1, noWagerGame).amount, 0);
+    assertEq(releasedFunds(address(0), address(0)), 0);
+    assertEq(restrictedFunds(p1, noWagerGame).amount, 0);
   }
 }

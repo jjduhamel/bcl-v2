@@ -191,3 +191,40 @@ contract BanUserTest is LobbyTest {
     lobby.challenge(p2, true, 60, 0, address(0));
   }
 }
+
+contract EngineGetterPermissionsTest is LobbyTest {
+  function testPlayerCantQueryAnotherBalance() public {
+    changePrank(p1);
+    vm.expectRevert(ChessEngine.ArbiterOnly.selector);
+    engine.balance(1, p2);
+  }
+
+  function testPlayerCantQueryOwnBalanceViaTwoArgForm() public {
+    changePrank(p1);
+    vm.expectRevert(ChessEngine.ArbiterOnly.selector);
+    engine.balance(1, p1);
+  }
+
+  function testArbiterCanQueryAnyBalance() public {
+    // arbiter holds ADMIN_ROLE from initializer; isArbiter accepts admin
+    assertEq(engine.balance(1, p1), 0);
+    assertEq(engine.balance(1, p2), 0);
+  }
+
+  function testPlayerCantQueryAnotherEarnings() public {
+    changePrank(p1);
+    vm.expectRevert(ChessEngine.ArbiterOnly.selector);
+    engine.earnings(p2, address(0));
+  }
+
+  function testPlayerCantQueryOwnEarningsViaTwoArgForm() public {
+    changePrank(p1);
+    vm.expectRevert(ChessEngine.ArbiterOnly.selector);
+    engine.earnings(p1, address(0));
+  }
+
+  function testArbiterCanQueryAnyEarnings() public {
+    assertEq(engine.earnings(p1, address(0)), 0);
+    assertEq(engine.earnings(p2, address(0)), 0);
+  }
+}
