@@ -6,7 +6,7 @@ import './ChessGame.t.sol';
 
 contract StartGameTest is ChessGameTest {
   function setUp() public {
-    engine.acceptChallenge{ value: deposit }(gameId);
+    engine.acceptChallenge{ value: wager }(gameId);
     changePrank(p2);
   }
 
@@ -41,7 +41,7 @@ contract StartGameTest is ChessGameTest {
 
   function testKingCapture() public
     testEarnings(p1, 0)
-    testEarnings(p2, 2*wager)
+    testEarnings(p2, purse())
     testOutcome(GameOutcome.BlackWon)
     testWinner(p2)
     testLoser(p1)

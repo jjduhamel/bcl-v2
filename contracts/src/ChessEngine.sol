@@ -41,7 +41,7 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine, Escrow {
   function initialize(address lobby) public initializer {
     __UUPSUpgradeable_init();
     __lobby = Lobby(lobby);
-    __platformFeePerc = 1;
+    __platformFeePerc = 2;
     __platformFeeMin = 0;
   }
 
@@ -79,10 +79,10 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine, Escrow {
     return releasedFunds(address(0), token);
   }
 
-  function withdraw(address token, address payable receiver) public
+  function withdrawPlatformFunds(address token, address payable receiver) public
     isAdmin
   {
-    withdrawPlatformFunds(token, receiver);
+    releasePlatformFunds(token, receiver);
   }
 
   /*
@@ -234,7 +234,7 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine, Escrow {
   }
 
   function withdraw(address token) public {
-    withdraw(msg.sender, token);
+    release(msg.sender, token);
   }
 
   function platformFeePerc() public view returns (uint) {
@@ -250,10 +250,11 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine, Escrow {
 
   function requiredBalance(uint gameId) private view
   returns (uint) {
-    if (__games[gameId].state == GameState.Pending) {
-      return __games[gameId].wagerAmount + platformFee(gameId);
-    } else if (__games[gameId].state == GameState.Started) {
+    GameState state = __games[gameId].state;
+    if (state == GameState.Pending) {
       return __games[gameId].wagerAmount;
+    } else if (state == GameState.Started) {
+      return __games[gameId].wagerAmount - platformFee(gameId);
     } else {
       return 0;
     }

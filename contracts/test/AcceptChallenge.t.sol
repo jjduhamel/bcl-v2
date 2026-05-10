@@ -6,7 +6,7 @@ import './Challenge.t.sol';
 
 contract AcceptChallengeTest is ChallengeTest {
   function setUp() public {
-    gameId = lobby.challenge{ value: deposit }(p2, true, timePerMove, wager, address(0));
+    gameId = lobby.challenge{ value: wager }(p2, true, timePerMove, wager, address(0));
     changePrank(p2);
   }
 
@@ -33,7 +33,7 @@ contract AcceptChallengeTest is ChallengeTest {
     expectGameStarted(p1, p2)
   {
     GameData memory gameData = engine.game(gameId);
-    engine.acceptChallenge{ value: deposit }(gameId);
+    engine.acceptChallenge{ value: wager }(gameId);
   }
 
   function testAcceptFailsWithoutDeposit() public {
@@ -43,7 +43,7 @@ contract AcceptChallengeTest is ChallengeTest {
 
   function testAcceptFailsWithLowDeposit() public {
     vm.expectRevert(ChessEngine.InvalidDepositAmount.selector);
-    engine.acceptChallenge{ value: deposit-1 }(gameId);
+    engine.acceptChallenge{ value: wager-1 }(gameId);
   }
 
   function testAcceptWithExcessDeposit() public
@@ -54,19 +54,19 @@ contract AcceptChallengeTest is ChallengeTest {
     testEarnings(p2, 1)
     expectGameStarted(p1, p2)
   {
-    engine.acceptChallenge{ value: deposit+1 }(gameId);
+    engine.acceptChallenge{ value: wager+1 }(gameId);
   }
 
   function testAcceptFailsAsSender() public {
     changePrank(p1);
     vm.expectRevert(ChessEngine.NotCurrentMove.selector);
-    engine.acceptChallenge{ value: deposit }(gameId);
+    engine.acceptChallenge{ value: wager }(gameId);
   }
 
   function testAcceptAsSpectator() public {
     changePrank(p3);
     vm.expectRevert(ChessEngine.PlayerOnly.selector);
-    engine.acceptChallenge{ value: deposit }(gameId);
+    engine.acceptChallenge{ value: wager }(gameId);
   }
 
   function testAcceptDisbursesExcessFunds() public
@@ -77,9 +77,9 @@ contract AcceptChallengeTest is ChallengeTest {
     // NOTE: Modifying the challenge will also change the platform fee
     //       that the contract computes, so the earnings will be in 
     //       excess of wager amount.
-    testEarnings(p1, deposit/2)
+    testEarnings(p1, wager/2)
   {
-    engine.modifyChallenge{ value: wager/2+fee }
+    engine.modifyChallenge{ value: wager/2 }
                           (gameId, true, timePerMove, wager/2);
     changePrank(p1);
     // We need to do this here because otherwise modifyChallenge throws a touch event 
@@ -89,19 +89,19 @@ contract AcceptChallengeTest is ChallengeTest {
   }
 
   function testAcceptFailsAfterAccept() public {
-    engine.acceptChallenge{ value: deposit }(gameId);
+    engine.acceptChallenge{ value: wager }(gameId);
     vm.expectRevert(ChessEngine.InvalidContractState.selector);
     engine.acceptChallenge(gameId);
   }
 
   function testDeclineFailsAfterAccept() public {
-    engine.acceptChallenge{ value: deposit }(gameId);
+    engine.acceptChallenge{ value: wager }(gameId);
     vm.expectRevert(ChessEngine.InvalidContractState.selector);
     engine.declineChallenge(gameId);
   }
 
   function testModifyFailsAfterAccept() public {
-    engine.acceptChallenge{ value: deposit }(gameId);
+    engine.acceptChallenge{ value: wager }(gameId);
     vm.expectRevert(ChessEngine.InvalidContractState.selector);
     engine.modifyChallenge(gameId, true, timePerMove, wager);
   }

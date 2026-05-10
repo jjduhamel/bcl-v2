@@ -6,12 +6,12 @@ import './ChessGame.t.sol';
 
 contract ResignGameTest is ChessGameTest {
   function setUp() public {
-    engine.acceptChallenge{ value: deposit }(gameId);
+    engine.acceptChallenge{ value: wager }(gameId);
   }
 
   function testResignAsWhite() public
     testEarnings(p1, 0)
-    testEarnings(p2, 2*wager)
+    testEarnings(p2, purse())
     testOutcome(GameOutcome.BlackWon)
     testWinner(p2)
     testLoser(p1)
@@ -21,7 +21,7 @@ contract ResignGameTest is ChessGameTest {
   }
 
   function testResignAsBlack() public
-    testEarnings(p1, 2*wager)
+    testEarnings(p1, purse())
     testEarnings(p2, 0)
     testOutcome(GameOutcome.WhiteWon)
     testWinner(p1)
@@ -49,7 +49,7 @@ contract ResignGameTest is ChessGameTest {
     changePrank(p2);
     uint balBefore = p2.balance;
     engine.withdraw(address(0));
-    assertEq(p2.balance - balBefore, 2 * wager);
+    assertEq(p2.balance - balBefore, purse());
     assertEq(engine.earnings(address(0)), 0);
   }
 }

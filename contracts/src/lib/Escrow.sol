@@ -112,10 +112,10 @@ abstract contract Escrow {
   }
 
   /*
-   * Withdraw
+   * Release
    */
 
-  function _withdrawETH(address player, address token) private {
+  function _releaseETH(address player, address token) private {
     if (token != address(0)) revert InvalidToken();
     uint amount = releasedFunds(player, address(0));
     if (amount == 0) revert InsufficientBalance();
@@ -125,22 +125,22 @@ abstract contract Escrow {
     if (!ok) revert TransferFailed();
   }
 
-  function _withdrawERC20(address player, address token) private {
+  function _releaseERC20(address player, address token) private {
     uint amount = releasedFunds(player, token);
     if (amount == 0) revert InsufficientBalance();
     __released[player].set(token, 0);
     IERC20(token).safeTransfer(player, amount);
   }
 
-  function withdraw(address player, address token) internal {
-    (token == address(0) ? _withdrawETH : _withdrawERC20)(player, token);
+  function release(address player, address token) internal {
+    (token == address(0) ? _releaseETH : _releaseERC20)(player, token);
   }
 
   /*
-   * Platform withdraw
+   * Platform release
    */
 
-  function _withdrawPlatformETH(address token, address receiver) private {
+  function _releasePlatformETH(address token, address receiver) private {
     if (token != address(0)) revert InvalidToken();
     uint amount = releasedFunds(address(0), address(0));
     __released[address(0)].set(address(0), 0);
@@ -151,13 +151,13 @@ abstract contract Escrow {
     }
   }
 
-  function _withdrawPlatformERC20(address token, address receiver) private {
+  function _releasePlatformERC20(address token, address receiver) private {
     uint amount = releasedFunds(address(0), token);
     __released[address(0)].set(token, 0);
     if (amount > 0) IERC20(token).safeTransfer(receiver, amount);
   }
 
-  function withdrawPlatformFunds(address token, address receiver) internal {
-    (token == address(0) ? _withdrawPlatformETH : _withdrawPlatformERC20)(token, payable(receiver));
+  function releasePlatformFunds(address token, address receiver) internal {
+    (token == address(0) ? _releasePlatformETH : _releasePlatformERC20)(token, payable(receiver));
   }
 }

@@ -216,25 +216,31 @@ contract Lobby is
     return __lobby[player].pendingChallenges.values();
   }
 
+  /*
   function challenges() public view returns (uint[] memory) {
     return challenges(msg.sender);
   }
+  */
 
   function games(address player) public view returns (uint[] memory) {
     return __lobby[player].currentGames.values();
   }
 
+  /*
   function games() public view returns (uint[] memory) {
     return games(msg.sender);
   }
+  */
 
   function history(address player) public view returns (uint[] memory) {
     return __lobby[player].finishedGames.values();
   }
 
+  /*
   function history() public view returns (uint[] memory) {
     return history(msg.sender);
   }
+  */
 
   function challengesSent(address player) public view returns (uint) {
     return __player[player].challengesSent;

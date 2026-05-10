@@ -6,7 +6,7 @@ import './ChessGame.t.sol';
 
 contract MoveTimerTest is ChessGameTest {
   function setUp() public {
-    engine.acceptChallenge{ value: deposit }(gameId);
+    engine.acceptChallenge{ value: wager }(gameId);
     _testMove(p1, 'a2a3');
     GameData memory gameData = engine.game(gameId);
     assertTrue(gameData.timeOfLastMove > 0);
@@ -33,7 +33,7 @@ contract MoveTimerTest is ChessGameTest {
 
 contract ClaimVictoryTest is ChessGameTest {
   function setUp() public {
-    engine.acceptChallenge{ value: deposit }(gameId);
+    engine.acceptChallenge{ value: wager }(gameId);
     _testMove(p1, 'a2a3');
     changePrank(p1);
   }
@@ -45,7 +45,7 @@ contract ClaimVictoryTest is ChessGameTest {
   }
 
   function testClaimVictoryAsWinner() public
-    testEarnings(p1, 2*wager)
+    testEarnings(p1, purse())
     testEarnings(p2, 0)
     testOutcome(GameOutcome.WhiteWon)
     testWinner(p1)

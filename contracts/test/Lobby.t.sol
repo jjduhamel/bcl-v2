@@ -23,8 +23,6 @@ abstract contract LobbyTest is Test, ILobby, IChessEngine {
   address p3;
   uint timePerMove = 300;
   uint wager = 1 ether;
-  uint fee = wager / 100;
-  uint deposit = wager + fee;
 
   function _initializeLobby() private {
     Lobby lobbyImpl = new Lobby();
@@ -57,6 +55,14 @@ abstract contract LobbyTest is Test, ILobby, IChessEngine {
     vm.startPrank(arbiter);
     _initializeLobby();
     _initializeEngine();
+  }
+
+  function fee() internal view returns (uint) {
+    return wager * engine.platformFeePerc() / 100;
+  }
+
+  function purse() internal view returns (uint) {
+    return 2 * (wager - fee());
   }
 
   function totalWagers(address player) internal returns (uint) {
