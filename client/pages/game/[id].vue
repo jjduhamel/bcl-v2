@@ -75,9 +75,16 @@ watch(disputedMove, () => illegalMoveModal.value = true);
 
 const proposedMove = ref(null);
 const didChooseMove = ref(false);
+// FEN before the current choice. We snapshot uniformly (not just for castling)
+// because tryMove can take three different paths — chess.move (history pushed),
+// applyManually's pseudo-legal branch (history pushed via _makeMove), and
+// applyCastleManually (history wiped by chess.load). Restoring via chess.load
+// always works; chess.undo() would silently fail on the castle path.
+const fenBeforeChoose = ref(null);
 function chooseMove(from, to) {
   const piece = chess.get(from);
   const promotion = piece?.type === 'p' && (to[1] === '8' || to[1] === '1') ? 'q' : '';
+  fenBeforeChoose.value = fen.value;
   const move = tryMove(`${from}${to}${promotion}`);
   proposedMove.value = move;
   didChooseMove.value = true;
@@ -85,10 +92,17 @@ function chooseMove(from, to) {
 }
 
 function undoMove() {
-  const move = chess.undo();
-  console.log('Undo Move', `${move.from}${move.to}${move.promotion ?? ''}`);
-  fen.value = chess.fen();
+  console.log('Undo Move', proposedMove.value?.uci);
+  chess.load(fenBeforeChoose.value);
+  fen.value = fenBeforeChoose.value;
+  // tryMove flags illegal/rejected moves by appending moves.value.length to
+  // illegalMoves. Since the move was never confirmed (moves[] hasn't grown),
+  // pop that trailing index so the list stays aligned with moves[].
+  if (_.last(illegalMoves.value) === moves.value.length) {
+    illegalMoves.value.pop();
+  }
   didChooseMove.value = false;
+  proposedMove.value = null;
 }
 
 const didSendMove = ref(false);
