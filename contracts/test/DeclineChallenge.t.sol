@@ -7,7 +7,7 @@ import './Challenge.t.sol';
 contract DeclineChallengeTest is ChallengeTest {
   function setUp() public {
     changePrank(p1);
-    gameId = lobby.challenge{ value: deposit }(p2, true, timePerMove, wager, address(0));
+    gameId = lobby.challenge{ value: wager }(p2, true, timePerMove, wager, address(0));
     changePrank(p2);
   }
 
@@ -34,7 +34,7 @@ contract DeclineChallengeTest is ChallengeTest {
     testChallengeDeclined(gameId, p1)
     testChallengeDeclined(gameId, p2)
     expectDeclinedEvent(p1, p2)
-    testEarnings(p1, deposit)
+    testEarnings(p1, wager)
   {
     changePrank(p1);
     engine.declineChallenge(gameId);
@@ -44,18 +44,18 @@ contract DeclineChallengeTest is ChallengeTest {
     testChallengeDeclined(gameId, p1)
     testChallengeDeclined(gameId, p2)
     expectDeclinedEvent(p2, p1)
-    testEarnings(p1, deposit)
+    testEarnings(p1, wager)
   {
     changePrank(p2);
     engine.declineChallenge(gameId);
   }
 
   function testRefundAccumulatesEarnings() public
-    testEarnings(p1, 2*deposit)
+    testEarnings(p1, 2*wager)
   {
     engine.declineChallenge(gameId);
     changePrank(p1);
-    uint gameId2 = lobby.challenge{ value: deposit }(p2, true, timePerMove, wager, address(0));
+    uint gameId2 = lobby.challenge{ value: wager }(p2, true, timePerMove, wager, address(0));
     changePrank(p2);
     engine.declineChallenge(gameId2);
   }

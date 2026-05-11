@@ -9,7 +9,7 @@ import './Challenge.t.sol';
 abstract contract ChessGameTest is ChallengeTest {
   constructor() {
     changePrank(p1);
-    lobby.challenge{ value: deposit }(p2, true, timePerMove, wager, address(0));
+    lobby.challenge{ value: wager }(p2, true, timePerMove, wager, address(0));
     uint[] memory challenges = lobby.challenges(p1);
     gameId = challenges[0];
     changePrank(p2);
@@ -22,7 +22,7 @@ abstract contract ChessGameTest is ChallengeTest {
 
   function _testMove(address player, string memory uci) internal {
     vm.expectEmit(true, true, true, true, address(engine));
-    emit MoveSAN(gameId, player, uci);
+    emit PlayerMoved(gameId, player, uci);
     _move(player, uci);
     string[] memory moves = engine.moves(gameId);
     if (moves.length == 0) return;

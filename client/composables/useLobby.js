@@ -1,5 +1,5 @@
 import _ from 'lodash';
-import { BigNumber as BN } from 'ethers';
+import { BigNumber as BN, constants } from 'ethers';
 import { fetchSigner, getContract } from '@wagmi/core';
 import LobbyContract from '../contracts/Lobby.sol/Lobby.json';
 import EngineContract from '../contracts/ChessEngine.sol/ChessEngine.json';
@@ -31,9 +31,9 @@ export default async function() {
     console.log('Initialize player lobby', lobby.address);
 
     const [ challenges, games, history ] = await Promise.all([
-      lobbyContract.challenges(),
-      lobbyContract.games(),
-      lobbyContract.history()
+      lobbyContract.challenges(wallet.address),
+      lobbyContract.games(wallet.address),
+      lobbyContract.history(wallet.address)
     ]);
 
     await Promise.all(_.map([
@@ -106,8 +106,7 @@ export default async function() {
   const sendChallenge = (opponent
                        , startAsWhite
                        , timePerMove
-                       , wagerAmount
-                       , wagerToken) =>
+                       , wagerAmount) =>
   new Promise(async (resolve, reject) => {
     try {
       didSendChallenge.value = true;
@@ -121,6 +120,7 @@ export default async function() {
                                   , startAsWhite
                                   , timePerMove
                                   , wagerAmount
+                                  , constants.AddressZero
                                 , { value: wagerAmount });
       console.log('Sent challenge to', opponent);
     } catch(err) {

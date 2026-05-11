@@ -6,7 +6,7 @@ import './ChessGame.t.sol';
 
 contract DrawGameTest is ChessGameTest {
   function setUp() public {
-    engine.acceptChallenge{ value: deposit }(gameId);
+    engine.acceptChallenge{ value: wager }(gameId);
     changePrank(p1);
     engine.offerDraw(gameId);
     GameData memory gameData = engine.game(gameId);
@@ -24,8 +24,8 @@ contract DrawGameTest is ChessGameTest {
     testOutcome(GameOutcome.Draw)
     testDraw(p1)
     testDraw(p2)
-    testEarnings(p1, wager)
-    testEarnings(p2, wager)
+    testEarnings(p1, purse() / 2)
+    testEarnings(p2, purse() / 2)
   {
     engine.respondDraw(gameId, true);
     GameData memory gameData = engine.game(gameId);

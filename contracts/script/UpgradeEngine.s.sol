@@ -3,12 +3,10 @@ pragma solidity ^0.8.13;
 
 import '@forge/Script.sol';
 import '@forge/console2.sol';
-import '@oz/proxy/ERC1967/ERC1967Proxy.sol';
 import '@src/Lobby.sol';
-import '@src/ChessEngine_0_2_0.sol';
-import '@src/ChessEngine_0_2_1.sol';
+import '@src/ChessEngine.sol';
 
-contract DeployEngine is Script {
+contract UpgradeEngine is Script {
   function run() public {
     uint256 deployerKey = vm.envUint('PRIVATE_KEY');
     address lobbyAddr = vm.envAddress('LOCAL_LOBBY_ADDR');
@@ -18,12 +16,12 @@ contract DeployEngine is Script {
     console.log('Lobby', address(lobby));
 
     address engineAddr = lobby.currentEngine();
-    ChessEngine_0_2_0 engineProxy = ChessEngine_0_2_0(engineAddr);
+    ChessEngine engineProxy = ChessEngine(engineAddr);
     console.log('Proxy', address(engineProxy));
 
-    ChessEngine_0_2_1 newEngineImpl = new ChessEngine_0_2_1();
-    console.log('Impl', address(newEngineImpl));
-    engineProxy.upgradeTo(address(newEngineImpl));
+    ChessEngine newImpl = new ChessEngine();
+    console.log('Impl', address(newImpl));
+    engineProxy.upgradeTo(address(newImpl));
     vm.stopBroadcast();
   }
 }

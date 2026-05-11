@@ -13,26 +13,26 @@ contract EscrowERC20DisburseTest is EscrowTest {
 
   function testWhiteWins() public {
     disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
-    assertEq(earnings(p1, address(token)), 2 * wager);
-    assertEq(earnings(p2, address(token)), 0);
+    assertEq(releasedFunds(p1, address(token)), 2 * wager);
+    assertEq(releasedFunds(p2, address(token)), 0);
   }
 
   function testBlackWins() public {
     disburse(p1, p2, gameId, IChessEngine.GameOutcome.BlackWon);
-    assertEq(earnings(p1, address(token)), 0);
-    assertEq(earnings(p2, address(token)), 2 * wager);
+    assertEq(releasedFunds(p1, address(token)), 0);
+    assertEq(releasedFunds(p2, address(token)), 2 * wager);
   }
 
   function testDraw() public {
     disburse(p1, p2, gameId, IChessEngine.GameOutcome.Draw);
-    assertEq(earnings(p1, address(token)), wager);
-    assertEq(earnings(p2, address(token)), wager);
+    assertEq(releasedFunds(p1, address(token)), wager);
+    assertEq(releasedFunds(p2, address(token)), wager);
   }
 
   function testDisburseClearsEscrow() public {
     disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
-    assertEq(escrow(p1, gameId).amount, 0);
-    assertEq(escrow(p2, gameId).amount, 0);
+    assertEq(restrictedFunds(p1, gameId).amount, 0);
+    assertEq(restrictedFunds(p2, gameId).amount, 0);
   }
 
   function testDisburseSameGameTwiceReverts() public {
@@ -55,26 +55,26 @@ contract EscrowETHDisburseTest is EscrowETHTest {
 
   function testWhiteWins() public {
     disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
-    assertEq(earnings(p1, address(0)), 2 * wager);
-    assertEq(earnings(p2, address(0)), 0);
+    assertEq(releasedFunds(p1, address(0)), 2 * wager);
+    assertEq(releasedFunds(p2, address(0)), 0);
   }
 
   function testBlackWins() public {
     disburse(p1, p2, gameId, IChessEngine.GameOutcome.BlackWon);
-    assertEq(earnings(p1, address(0)), 0);
-    assertEq(earnings(p2, address(0)), 2 * wager);
+    assertEq(releasedFunds(p1, address(0)), 0);
+    assertEq(releasedFunds(p2, address(0)), 2 * wager);
   }
 
   function testDraw() public {
     disburse(p1, p2, gameId, IChessEngine.GameOutcome.Draw);
-    assertEq(earnings(p1, address(0)), wager);
-    assertEq(earnings(p2, address(0)), wager);
+    assertEq(releasedFunds(p1, address(0)), wager);
+    assertEq(releasedFunds(p2, address(0)), wager);
   }
 
   function testDisburseClearsEscrow() public {
     disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
-    assertEq(escrow(p1, gameId).amount, 0);
-    assertEq(escrow(p2, gameId).amount, 0);
+    assertEq(restrictedFunds(p1, gameId).amount, 0);
+    assertEq(restrictedFunds(p2, gameId).amount, 0);
   }
 
   function testDisburseSameGameTwiceReverts() public {
@@ -106,25 +106,25 @@ contract EscrowMixedTokenDisburseTest is EscrowETHTest {
 
   function testWhiteWinsGetsBothTokens() public {
     disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
-    assertEq(earnings(p1, address(0)), wager);
-    assertEq(earnings(p1, address(token2)), wager);
-    assertEq(earnings(p2, address(0)), 0);
-    assertEq(earnings(p2, address(token2)), 0);
+    assertEq(releasedFunds(p1, address(0)), wager);
+    assertEq(releasedFunds(p1, address(token2)), wager);
+    assertEq(releasedFunds(p2, address(0)), 0);
+    assertEq(releasedFunds(p2, address(token2)), 0);
   }
 
   function testBlackWinsGetsBothTokens() public {
     disburse(p1, p2, gameId, IChessEngine.GameOutcome.BlackWon);
-    assertEq(earnings(p2, address(0)), wager);
-    assertEq(earnings(p2, address(token2)), wager);
-    assertEq(earnings(p1, address(0)), 0);
-    assertEq(earnings(p1, address(token2)), 0);
+    assertEq(releasedFunds(p2, address(0)), wager);
+    assertEq(releasedFunds(p2, address(token2)), wager);
+    assertEq(releasedFunds(p1, address(0)), 0);
+    assertEq(releasedFunds(p1, address(token2)), 0);
   }
 
   function testDrawEachKeepsOwnToken() public {
     disburse(p1, p2, gameId, IChessEngine.GameOutcome.Draw);
-    assertEq(earnings(p1, address(0)), wager);
-    assertEq(earnings(p1, address(token2)), 0);
-    assertEq(earnings(p2, address(token2)), wager);
-    assertEq(earnings(p2, address(0)), 0);
+    assertEq(releasedFunds(p1, address(0)), wager);
+    assertEq(releasedFunds(p1, address(token2)), 0);
+    assertEq(releasedFunds(p2, address(token2)), wager);
+    assertEq(releasedFunds(p2, address(0)), 0);
   }
 }

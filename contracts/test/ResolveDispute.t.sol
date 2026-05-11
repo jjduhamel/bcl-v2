@@ -6,7 +6,7 @@ import './ChessGame.t.sol';
 
 contract ResolveDisputeTest is ChessGameTest {
   function setUp() public {
-    engine.acceptChallenge{ value: deposit }(gameId);
+    engine.acceptChallenge{ value: wager }(gameId);
     // This has to be a legal move now because of bitboard logic
     _testMove(p1, 'a2a3');
     changePrank(p2);
@@ -33,7 +33,7 @@ contract ResolveDisputeTest is ChessGameTest {
 
   function testResolveDisputeForWhite() public
     testOutcome(GameOutcome.WhiteWon)
-    testEarnings(p1, 2*wager)
+    testEarnings(p1, purse())
     testEarnings(p2, 0)
     testWinner(p1)
     testLoser(p2)
@@ -46,7 +46,7 @@ contract ResolveDisputeTest is ChessGameTest {
   function testResolveDisputeForBlack() public
     testOutcome(GameOutcome.BlackWon)
     testEarnings(p1, 0)
-    testEarnings(p2, 2*wager)
+    testEarnings(p2, purse())
     testLoser(p1)
     testWinner(p2)
     testResolved
@@ -57,8 +57,8 @@ contract ResolveDisputeTest is ChessGameTest {
 
   function testResolveDisputeAsDraw() public
     testOutcome(GameOutcome.Draw)
-    testEarnings(p1, wager)
-    testEarnings(p2, wager)
+    testEarnings(p1, purse() / 2)
+    testEarnings(p2, purse() / 2)
     testDraw(p1)
     testDraw(p2)
     testResolved

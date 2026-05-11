@@ -1,5 +1,6 @@
 import _ from 'lodash';
-import { Chess, SQUARES } from 'chess.js';
+import { Chess } from 'chess.js';
+import { constants } from 'ethers';
 import { fetchBlockNumber } from '@wagmi/core';
 
 export default async function(gameId) {
@@ -7,19 +8,19 @@ export default async function(gameId) {
 
   const GameState = {
     Pending: 0,
-    Started: 1,
-    Draw: 2,
-    Finished: 3,
-    Review: 4,
-    Migrated: 5
+    Declined: 1,
+    Started: 2,
+    Draw: 3,
+    Finished: 4,
+    Review: 5,
+    Migrated: 6
   };
 
   const GameOutcome = {
     Undecided: 0,
-    Declined: 1,
-    WhiteWon: 2,
-    BlackWon: 3,
-    Draw: 4
+    WhiteWon: 1,
+    BlackWon: 2,
+    Draw: 3
   };
 
   /*
@@ -29,13 +30,53 @@ export default async function(gameId) {
 
   const fen = ref(chess.fen());
 
+  // Dev flag (NUXT_PUBLIC env). When true the UI lets the player pick
+  // pseudo-legal moves (e.g. leaving their own king in check) and castle-
+  // through-check. Off by default; opponents' chess-illegal moves are still
+  // applied via tryMove regardless of this flag. Destructured once at setup
+  // so downstream computeds capture a plain boolean (no reactivity thrash).
+  const { allowPseudoLegalMoves } = useRuntimeConfig().public;
+
+  // Castle destinations chess.js filters at generation when the king or path
+  // is attacked (chess.ts:1045,1051). Contract validates the rest, so we just
+  // check rights + empty path + rook at corner. Only surfaced when the dev
+  // flag is on; otherwise chess.js's own (legal) castle generation is enough.
+  const castleMoves = computed(() => {
+    if (!allowPseudoLegalMoves) return [];
+    fen.value;
+    const [, turn, castling] = chess.fen().split(' ');
+    if (castling === '-') return [];
+    const rank = turn === 'w' ? '1' : '8';
+    if (chess.get('e' + rank)?.type !== 'k') return [];
+    const dests = [];
+    const kFlag = turn === 'w' ? 'K' : 'k';
+    const qFlag = turn === 'w' ? 'Q' : 'q';
+    if (castling.includes(kFlag)
+        && !chess.get('f' + rank) && !chess.get('g' + rank)
+        && chess.get('h' + rank)?.type === 'r') dests.push('g' + rank);
+    if (castling.includes(qFlag)
+        && !chess.get('b' + rank) && !chess.get('c' + rank) && !chess.get('d' + rank)
+        && chess.get('a' + rank)?.type === 'r') dests.push('c' + rank);
+    return dests;
+  });
+
   const legalMoves = computed(() => {
     fen.value;            // Make reactive to FEN updates
     const out = new Map();
-    _.forEach(SQUARES, sq => {
-      const ms = chess.moves({ square: sq, verbose: true });
-      if (ms.length > 0) out.set(sq, _.map(ms, 'to'));
-    });
+    // One pseudo-/legal generation pass for all squares, grouped by from.
+    // When the dev flag is on, legal:false lets the player pick moves that
+    // leave their own king in check.
+    for (const m of chess._moves({ legal: !allowPseudoLegalMoves })) {
+      const p = chess._makePretty(m);
+      if (!out.has(p.from)) out.set(p.from, []);
+      out.get(p.from).push(p.to);
+    }
+    // Inject castle destinations chess.js filters at generation time.
+    if (castleMoves.value.length > 0) {
+      const kingSq = 'e' + (chess.turn() === 'w' ? '1' : '8');
+      const existing = out.get(kingSq) || [];
+      out.set(kingSq, [...new Set([...existing, ...castleMoves.value])]);
+    }
     return out;
   });
 
@@ -58,27 +99,136 @@ export default async function(gameId) {
   if (!lobby.has(gameId)) await initGameData(gameId);
 
   const gameContract = chessEngine(gameId);
-  const { MoveSAN, GameOver } = gameContract.filters;
+  const { PlayerMoved, GameOver } = gameContract.filters;
   const moves = ref([]);
   const illegalMoves = ref([]);
 
-  function tryMoveSAN(san) {
-    console.log('Try move', san);
-    const move = chess.move(san, { sloppy: true });
-    if (!move) {
-      const m = moves.value.length;
-      illegalMoves.value = [ ...illegalMoves.value, m ];
-      console.warn(`Illegal move: ${san} [${chess.turn()}]`);
-    } else {
-      san = move.san;
+  // Apply a castle (the king-jumps-2-files case) by hand. We need this only
+  // because chess.js filters castle-through-check at pseudo-legal generation
+  // (chess.ts:1045 calls _attacked on the path squares), and the contract's
+  // _vKg has a TODO leaving castle-through-check legal on-chain — so the
+  // opponent can produce one we still have to render.
+  function applyCastleManually(king, from, to) {
+    // The rook hops to the square the king passes over.
+    //   Kingside (king e->g): rook h -> f
+    //   Queenside (king e->c): rook a -> d
+    const rank = king.color === 'w' ? '1' : '8';
+    const corner = to[0] === 'g' ? 'h' + rank : 'a' + rank;
+    const dest   = to[0] === 'g' ? 'f' + rank : 'd' + rank;
+
+    // Snapshot the pre-move aux fields. chess.put / chess.remove only touch
+    // the placement field; turn / castling / counters stay frozen at the
+    // pre-move values until we rewrite them via chess.load below.
+    const [, prevTurn, prevCastling, , prevHalfmove, prevFullmove] = chess.fen().split(' ');
+
+    // Move the king. chess.put doesn't validate, so this works even when
+    // chess.js's move() would have refused (e.g. castling out of check).
+    chess.remove(from);
+    chess.put(king, to);
+
+    // Hop the rook — but only if a same-color rook is actually at the corner.
+    // Defends against pathological positions or a "king moved 2 files but
+    // wasn't really castling" UCI that the contract will end up rejecting.
+    const rook = chess.get(corner);
+    if (rook && rook.type === 'r' && rook.color === king.color) {
+      chess.remove(corner);
+      chess.put(rook, dest);
     }
-    fen.value = chess.fen();
-    return san;
+
+    // Side to move flips after every ply.
+    const newTurn = prevTurn === 'w' ? 'b' : 'w';
+
+    // King moved => this color forfeits both castling rights.
+    let newCastling = king.color === 'w'
+      ? prevCastling.replace(/[KQ]/g, '')
+      : prevCastling.replace(/[kq]/g, '');
+    if (newCastling === '') newCastling = '-';
+
+    // Halfmove clock increments (no pawn move, no capture in a castle).
+    // Fullmove number bumps after Black moves.
+    const newHalfmove = parseInt(prevHalfmove) + 1;
+    const newFullmove = king.color === 'b' ? parseInt(prevFullmove) + 1 : parseInt(prevFullmove);
+
+    // Splice the new aux fields back onto the (already updated) placement.
+    // EP target is always cleared after a castle.
+    const [placement] = chess.fen().split(' ');
+    chess.load(`${placement} ${newTurn} ${newCastling} - ${newHalfmove} ${newFullmove}`);
   }
 
-  // TODO Place illegal moves on board
-  function tryMoveFromTo(from, to) {
-    return tryMoveSAN(`${from}${to}`);
+  // Update chess.js state to the post-move position WITHOUT chess-rule validation.
+  //
+  // The contract's bitboard validates piece movement but not chess rules like
+  // "you may not leave your own king in check" (per CLAUDE.md). Those moves
+  // are rejected by chess.js's public move() but accepted by the contract, so
+  // when we receive (or are about to send) such a move we still need the local
+  // board to advance.
+  //
+  // Approach: ask chess.js for pseudo-legal moves — i.e. _moves({legal:false}),
+  // which includes moves that leave the king in check (chess.ts:1067-1071) —
+  // find the one matching our UCI, and feed it to chess.js's internal _makeMove.
+  // _makeMove reuses chess.js's own bookkeeping for capture, promotion, castling
+  // rights, halfmove/fullmove counters, and EP target — so we don't have to
+  // reimplement any of that.
+  //
+  // The exception is castling: chess.js filters castle moves at *generation*
+  // time when the path is attacked, so castle-through-check never appears in
+  // pseudo-legal output. Those fall through to applyCastleManually.
+  function applyManually(uci) {
+    // Decompose the UCI string. uci[4], when present, is the promotion piece.
+    const from = uci.slice(0, 2);
+    const to = uci.slice(2, 4);
+    const promotion = uci[4] || undefined;
+
+    // Bail if the source square is empty — the contract will reject this too.
+    const piece = chess.get(from);
+    if (!piece) return;
+
+    // King jumps 2 files => castling. Hand off to the manual castle path.
+    if (piece.type === 'k' && Math.abs(from.charCodeAt(0) - to.charCodeAt(0)) === 2) {
+      return applyCastleManually(piece, from, to);
+    }
+
+    // Find the pseudo-legal move that matches our UCI. _makePretty converts
+    // chess.js's internal move object (0x88 indices) into algebraic strings
+    // we can compare against. If no match, the move was bitboard-illegal too;
+    // we leave the board untouched and let submitMove's tx revert handle it.
+    const match = chess._moves({ legal: false }).find(m => {
+      const p = chess._makePretty(m);
+      return p.from === from && p.to === to && (p.promotion || undefined) === promotion;
+    });
+    if (match) chess._makeMove(match);
+  }
+
+  function tryMove(uci) {
+    console.log('Try move', uci);
+    const move = chess.move(uci, { sloppy: true });
+    if (!move) {
+      // chess.js refused the move. Two sub-cases:
+      //   (a) Move is bitboard-legal but chess-illegal (e.g. leaves king in
+      //       check, castles through check). Contract will accept it.
+      //   (b) Move is bitboard-illegal too. Contract will reject; submitMove's
+      //       FEN-snapshot rollback restores the board.
+      // In both cases we flag the move and try to apply it locally — for (a)
+      // applyManually advances the board; for (b) it's a no-op (no matching
+      // pseudo-legal move) and we just leave the board as-is.
+      illegalMoves.value = [ ...illegalMoves.value, moves.value.length ];
+      console.warn(`Illegal move: ${uci} [${chess.turn()}]`);
+      applyManually(uci);
+      fen.value = chess.fen();
+      return { uci, illegal: true };
+    } else if (move.flags.includes('e')) {
+      // En passant: chess.js happily applied it, but the contract rejects EP
+      // outright (per CLAUDE.md). Undo on chess.js side and mark rejected so
+      // the caller can show the red flag and refuse to submit.
+      chess.undo();
+      illegalMoves.value = [ ...illegalMoves.value, moves.value.length ];
+      console.warn(`En passant not supported: ${uci}`);
+      fen.value = chess.fen();
+      return { ...move, uci, rejected: true };
+    }
+    // Ordinary legal move — chess.js already updated the board.
+    fen.value = chess.fen();
+    return { ...move, uci };
   }
 
   async function fetchMoves() {
@@ -86,23 +236,25 @@ export default async function(gameId) {
     moves.value = [];
     const cur = await gameContract.moves(gameId);
     console.log('Fetched', cur.length, 'moves');
-    _.forEach(cur, san => {
-      tryMoveSAN(san);
-      moves.value = [ ...moves.value, san ];
+    _.forEach(cur, uci => {
+      moves.value = [ ...moves.value, tryMove(uci) ];
     });
   }
 
 
-  const submitMove = san => new Promise(async (resolve, reject) => {
+  const submitMove = uci => new Promise(async (resolve, reject) => {
+    // Rollback on tx revert is the caller's responsibility — by the time we
+    // get here the board has already advanced via chooseMove, so we don't have
+    // the pre-choose FEN. The page's undoMove() restores from fenBeforeChoose.
     try {
-      console.log('Submit move', san);
-      $amplitude.track('SendMove', { gameId, san });
-      await gameContract.move(gameId, san);
+      console.log('Submit move', uci);
+      $amplitude.track('SendMove', { gameId, uci });
+      await gameContract.move(gameId, uci);
       playAudioClip('other/swell1');
-      const eventFilter = MoveSAN(gameId, wallet.address);
-      gameContract.once(eventFilter, async (id, player, san)  => {
-        console.log('Move confirmed', san);
-        resolve(id, player, san);
+      const eventFilter = PlayerMoved(gameId, wallet.address);
+      gameContract.once(eventFilter, async (id, player, uci)  => {
+        console.log('Move confirmed', uci);
+        resolve(id, player, uci);
         await fetchGameData(gameId);
       });
     } catch(err) {
@@ -117,10 +269,13 @@ export default async function(gameId) {
       await gameContract.resign(gameId);
       console.log('Resigned game', gameId);
       playAudioClip('other/swell3');
-      gameContract.once(GameOver(gameId), (id, outcome, winner)  => {
+      gameContract.once(GameOver(gameId), (id, winner, loser)  => {
+        if (loser !== wallet.address) {
+          return reject(new Error(`Expected loser ${wallet.address}, got ${loser}`));
+        }
         console.log('Resignation confirmed');
         $amplitude.track('ResignedGame', { gameId });
-        resolve(id, outcome, winner);
+        resolve(id, winner, loser);
       });
     } catch(err) {
       console.error(err);
@@ -134,10 +289,13 @@ export default async function(gameId) {
       await gameContract.claimVictory(gameId);
       console.log('Claimed victory in game', gameId);
       playAudioClip('other/swell2');
-      gameContract.once(GameOver(gameId), (id, outcome, winner)  => {
+      gameContract.once(GameOver(gameId), (id, winner, loser)  => {
+        if (winner !== wallet.address) {
+          return reject(new Error(`Expected winner ${wallet.address}, got ${winner}`));
+        }
         console.log('Victory confirmed');
-        $amplitude.track('VictoryConfirmed', { gameId, outcome, winner });
-        resolve(id, outcome, winner);
+        $amplitude.track('VictoryConfirmed', { gameId, winner, loser });
+        resolve(id, winner, loser);
       });
     } catch(err) {
       reject(err);
@@ -147,6 +305,21 @@ export default async function(gameId) {
   async function offerStalemate() {
     // TODO
   }
+
+  const withdrawWinnings = () => new Promise(async (resolve, reject) => {
+    try {
+      $amplitude.track('WithdrawWinnings', { gameId });
+      const tx = await gameContract.withdraw(constants.AddressZero);
+      await tx.wait();
+      console.log('Withdrew winnings for game', gameId);
+      playAudioClip('nes/Victory');
+      await refreshBalance();
+      resolve();
+    } catch(err) {
+      console.error(err);
+      reject(err);
+    }
+  });
 
   const disputeGame = () => new Promise(async (resolve, reject) => {
     try {
@@ -210,16 +383,23 @@ export default async function(gameId) {
   const timeOfLastMove = computed(() => lobby.gameData(gameId).timeOfLastMove);
 
   const outcome = computed(() => lobby.gameData(gameId).outcome);
+  const wagerAmount = computed(() => lobby.gameData(gameId).wagerAmount);
   const gameOver = computed(() => lobby.gameData(gameId).state == GameState.Finished);
+  const isDisputed = computed(() => lobby.gameData(gameId).state == GameState.Review);
   const isStalemate = computed(() => outcome.value == GameOutcome.Draw);
 
   const inCheck = computed(() => {
     fen.value;
+    // After a king capture chess.js's _kings[them] still points at the
+    // captured square, so isCheck() can report stale truth. Short-circuit
+    // once the contract has confirmed game-over.
+    if (gameOver.value) return false;
     return (chess.turn() == playerColor.value) && chess.isCheck();
   });
 
   const opponentInCheck = computed(() => {
     fen.value;
+    if (gameOver.value) return false;
     return (chess.turn() == opponentColor.value) && chess.isCheck();
   });
 
@@ -305,9 +485,9 @@ export default async function(gameId) {
   async function registerListeners() {
     console.log('Register listeners for game', gameId);
     let lastEvent = await fetchBlockNumber();
-    gameContract.on(MoveSAN(gameId), async (id, player, san, ev) => {
+    gameContract.on(PlayerMoved(gameId), async (id, player, uci, ev) => {
       console.log('Received move from', player);
-      $amplitude.track('MoveConfirmed', { gameId, player, san });
+      $amplitude.track('MoveConfirmed', { gameId, player, uci });
       // Toss duplicate events
       if (ev.blockNumber <= lastEvent) return;
       lastEvent = ev.blockNumber;
@@ -315,23 +495,26 @@ export default async function(gameId) {
       // If these come from the current player, then we already tried
       // the move and it succeeded.  Trying again would throw an error.
       // In the case of spectators, both players moves get processed.
+      let move;
       if (player != wallet.address) {
-        console.log('Received move', san);
-        const move = tryMoveSAN(san);
+        console.log('Received move', uci);
+        move = tryMove(uci);
+      } else {
+        const last = _.last(chess.history({ verbose: true }));
+        move = last ? { ...last, uci } : { uci };
       }
-
-      moves.value = [ ...moves.value, san ];
+      moves.value = [ ...moves.value, move ];
       await fetchGameData(gameId);
       playAudioClip('other/Blaster');
     });
 
-    gameContract.on(GameOver(gameId), async (id, outcome, winner) => {
+    gameContract.on(GameOver(gameId), async (id, winner, loser) => {
       console.log('Game over', id);
       await Promise.all([
         refreshBalance(),
         fetchGameData(gameId)
       ]);
-      $amplitude.track('GameOver', { gameId, outcome, winner });
+      $amplitude.track('GameOver', { gameId, winner, loser });
       if (isWinner.value) playAudioClip('nes/Victory');
       else if (isLoser.value) playAudioClip('nes/Defeat');
       else playAudioClip('nes/Draw');
@@ -340,7 +523,7 @@ export default async function(gameId) {
 
   async function destroyListeners() {
     console.log('Destroy game listeners for', gameId);
-    gameContract.off(MoveSAN(gameId));
+    gameContract.off(PlayerMoved(gameId));
     gameContract.off(GameOver(gameId));
   }
 
@@ -357,6 +540,7 @@ export default async function(gameId) {
     GameOutcome,
     opponent,
     outcome,
+    wagerAmount,
     //playerColor,
     //opponentColor,
     isPlayer,
@@ -374,6 +558,7 @@ export default async function(gameId) {
     opponentCheckmatePending,
     inStalemate,
     gameOver,
+    isDisputed,
     isStalemate,
     isWinner,
     isLoser,
@@ -382,12 +567,12 @@ export default async function(gameId) {
     timerExpired,
     playerTimeExpired,
     opponentTimeExpired,
-    tryMoveSAN,
-    tryMoveFromTo,
+    tryMove,
     submitMove,
     resign,
     claimVictory,
     offerStalemate,
+    withdrawWinnings,
     disputeGame,
     startMoveTimer,
     stopMoveTimer,

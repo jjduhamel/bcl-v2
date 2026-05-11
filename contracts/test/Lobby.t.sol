@@ -23,8 +23,6 @@ abstract contract LobbyTest is Test, ILobby, IChessEngine {
   address p3;
   uint timePerMove = 300;
   uint wager = 1 ether;
-  uint fee = wager / 100;
-  uint deposit = wager + fee;
 
   function _initializeLobby() private {
     Lobby lobbyImpl = new Lobby();
@@ -57,6 +55,14 @@ abstract contract LobbyTest is Test, ILobby, IChessEngine {
     vm.startPrank(arbiter);
     _initializeLobby();
     _initializeEngine();
+  }
+
+  function fee() internal view returns (uint) {
+    return wager * engine.platformFeePerc() / 100;
+  }
+
+  function purse() internal view returns (uint) {
+    return 2 * (wager - fee());
   }
 
   function totalWagers(address player) internal returns (uint) {
@@ -189,5 +195,42 @@ contract BanUserTest is LobbyTest {
     vm.expectEmit(false, true, true, true, address(lobby));
     emit NewChallenge(0, p1, p2);
     lobby.challenge(p2, true, 60, 0, address(0));
+  }
+}
+
+contract EngineGetterPermissionsTest is LobbyTest {
+  function testPlayerCantQueryAnotherBalance() public {
+    changePrank(p1);
+    vm.expectRevert(ChessEngine.ArbiterOnly.selector);
+    engine.balance(1, p2);
+  }
+
+  function testPlayerCantQueryOwnBalanceViaTwoArgForm() public {
+    changePrank(p1);
+    vm.expectRevert(ChessEngine.ArbiterOnly.selector);
+    engine.balance(1, p1);
+  }
+
+  function testArbiterCanQueryAnyBalance() public {
+    // arbiter holds ADMIN_ROLE from initializer; isArbiter accepts admin
+    assertEq(engine.balance(1, p1), 0);
+    assertEq(engine.balance(1, p2), 0);
+  }
+
+  function testPlayerCantQueryAnotherEarnings() public {
+    changePrank(p1);
+    vm.expectRevert(ChessEngine.ArbiterOnly.selector);
+    engine.earnings(p2, address(0));
+  }
+
+  function testPlayerCantQueryOwnEarningsViaTwoArgForm() public {
+    changePrank(p1);
+    vm.expectRevert(ChessEngine.ArbiterOnly.selector);
+    engine.earnings(p1, address(0));
+  }
+
+  function testArbiterCanQueryAnyEarnings() public {
+    assertEq(engine.earnings(p1, address(0)), 0);
+    assertEq(engine.earnings(p2, address(0)), 0);
   }
 }

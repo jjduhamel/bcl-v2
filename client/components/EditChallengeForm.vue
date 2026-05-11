@@ -65,7 +65,6 @@ const displayTPM = computed({
   }
 });
 
-const wagerToken = ref('eth');
 const wagerAmount = ref(props.wagerAmount);
 const displayWager = computed({
   get() {
@@ -79,8 +78,7 @@ const displayWager = computed({
 const submit = () => emit('submit', _.mapValues({ opponent
                                                 , startAsWhite
                                                 , timePerMove
-                                                , wagerAmount
-                                                , wagerToken }
+                                                , wagerAmount }
                                               , unref));
 </script>
 
@@ -123,11 +121,7 @@ form(@submit.prevent='submit')
     div(class='flex-1') Wager:
     div(class='flex-1 flex justify-end')
       input(class='w-16' v-model='displayWager')
-      select(class='w-20' v-model='wagerToken')
-        option(value='eth') ETH
-        option(value='dai') DAI
-        option(value='usdt') USDT
-        option(value='usdc') USDC
+      div(class='w-20 flex items-center justify-center') ETH
   div(id='form-controls')
     button(
       type='submit'

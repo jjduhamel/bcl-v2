@@ -25,11 +25,8 @@ interface IChessEngine {
                , address indexed winner
                , address indexed loser);
   event PlayerMoved(uint indexed gameId
-                  , address indexed sender
-                  , address indexed receiver);
-  event MoveSAN(uint indexed gameId
-              , address indexed player
-              , string san);
+                  , address indexed player
+                  , string uci);
   event OfferedDraw(uint indexed gameId
                   , address indexed sender
                   , address indexed receiver);

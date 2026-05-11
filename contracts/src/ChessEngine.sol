@@ -41,7 +41,7 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine, Escrow {
   function initialize(address lobby) public initializer {
     __UUPSUpgradeable_init();
     __lobby = Lobby(lobby);
-    __platformFeePerc = 1;
+    __platformFeePerc = 2;
     __platformFeeMin = 0;
   }
 
@@ -76,13 +76,13 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine, Escrow {
   function profit(address token) public view
     isArbiter
   returns (uint) {
-    return earnings(address(0), token);
+    return releasedFunds(address(0), token);
   }
 
-  function withdraw(address token, address payable receiver) public
+  function withdrawPlatformFunds(address token, address payable receiver) public
     isAdmin
   {
-    withdrawPlatformFunds(token, receiver);
+    releasePlatformFunds(token, receiver);
   }
 
   /*
@@ -211,18 +211,30 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine, Escrow {
     _;
   }
 
-  function balance(uint gameId, address player) public view
+  function balance(uint gameId) public view
   returns (uint) {
-    return escrow(player, gameId).amount;
+    return restrictedFunds(msg.sender, gameId).amount;
+  }
+
+  function balance(uint gameId, address player) public view
+    isArbiter
+  returns (uint) {
+    return restrictedFunds(player, gameId).amount;
   }
 
   function earnings(address token) public view
   returns (uint) {
-    return earnings(msg.sender, token);
+    return releasedFunds(msg.sender, token);
+  }
+
+  function earnings(address player, address token) public view
+    isArbiter
+  returns (uint) {
+    return releasedFunds(player, token);
   }
 
   function withdraw(address token) public {
-    withdraw(msg.sender, token);
+    release(msg.sender, token);
   }
 
   function platformFeePerc() public view returns (uint) {
@@ -238,10 +250,11 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine, Escrow {
 
   function requiredBalance(uint gameId) private view
   returns (uint) {
-    if (__games[gameId].state == GameState.Pending) {
-      return __games[gameId].wagerAmount + platformFee(gameId);
-    } else if (__games[gameId].state == GameState.Started) {
+    GameState state = __games[gameId].state;
+    if (state == GameState.Pending) {
       return __games[gameId].wagerAmount;
+    } else if (state == GameState.Started) {
+      return __games[gameId].wagerAmount - platformFee(gameId);
     } else {
       return 0;
     }
@@ -279,7 +292,7 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine, Escrow {
     );
     if (wagerAmount > 0) {
       deposit(sender, gameId, wagerToken, wagerToken == address(0) ? msg.value : requiredBalance(gameId));
-      if (escrow(sender, gameId).amount < requiredBalance(gameId)) revert InvalidDepositAmount();
+      if (restrictedFunds(sender, gameId).amount < requiredBalance(gameId)) revert InvalidDepositAmount();
     }
     return gameId;
   }
@@ -293,10 +306,10 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine, Escrow {
     if (gameData.wagerAmount > 0) {
       uint required = requiredBalance(gameId);
       deposit(msg.sender, gameId, gameData.wagerToken, gameData.wagerToken == address(0) ? msg.value : required);
-      if (escrow(msg.sender, gameId).amount < required) revert InvalidDepositAmount();
-      uint wBal = escrow(gameData.whitePlayer, gameId).amount;
+      if (restrictedFunds(msg.sender, gameId).amount < required) revert InvalidDepositAmount();
+      uint wBal = restrictedFunds(gameData.whitePlayer, gameId).amount;
       if (wBal > required) refund(gameData.whitePlayer, gameId, wBal - required);
-      uint bBal = escrow(gameData.blackPlayer, gameId).amount;
+      uint bBal = restrictedFunds(gameData.blackPlayer, gameId).amount;
       if (bBal > required) refund(gameData.blackPlayer, gameId, bBal - required);
     }
     __lobby.acceptChallenge(gameId, msg.sender, opponent(gameId));
@@ -341,7 +354,7 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine, Escrow {
       gameData.wagerAmount = wagerAmount;
       // Trim receiver's escrow if new wager is lower
       uint required = requiredBalance(gameId);
-      uint recvBal = escrow(receiver, gameId).amount;
+      uint recvBal = restrictedFunds(receiver, gameId).amount;
       if (recvBal > required) refund(receiver, gameId, recvBal - required);
     }
     if (gameData.wagerAmount > 0) {
@@ -350,10 +363,10 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine, Escrow {
       if (token == address(0)) {
         deposit(msg.sender, gameId, address(0), msg.value);
       } else {
-        uint senderBal = escrow(msg.sender, gameId).amount;
+        uint senderBal = restrictedFunds(msg.sender, gameId).amount;
         if (senderBal < required) deposit(msg.sender, gameId, token, required - senderBal);
       }
-      if (escrow(msg.sender, gameId).amount < required) revert InvalidDepositAmount();
+      if (restrictedFunds(msg.sender, gameId).amount < required) revert InvalidDepositAmount();
     }
     __lobby.touch(gameId, msg.sender, receiver);
   }
@@ -395,7 +408,7 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine, Escrow {
   {
     GameOutcome outcome = _applyMove(gameId, uci);
     __moves[gameId].push(uci);
-    emit MoveSAN(gameId, msg.sender, uci);
+    emit PlayerMoved(gameId, msg.sender, uci);
     GameData storage gameData = __games[gameId];
     gameData.currentMove = opponent(gameId);
     gameData.timeOfLastMove = block.timestamp;

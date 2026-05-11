@@ -19,7 +19,7 @@ abstract contract ERC20ChallengeTest is ChallengeTest {
     token.mint(p2, 100 ether);
 
     changePrank(p1);
-    token.approve(address(engine), deposit);
+    token.approve(address(engine), wager);
     gameId = lobby.challenge(p2, true, timePerMove, wager, address(token));
     changePrank(p2);
   }
@@ -34,7 +34,7 @@ contract ERC20DeclineChallengeTest is ERC20ChallengeTest {
   function testDeclineRefundsToEarnings() public {
     engine.declineChallenge(gameId);
     changePrank(p1);
-    assertEq(engine.earnings(address(token)), deposit);
+    assertEq(engine.earnings(address(token)), wager);
   }
 
   function testWithdrawERC20AfterDecline() public {
@@ -42,7 +42,7 @@ contract ERC20DeclineChallengeTest is ERC20ChallengeTest {
     changePrank(p1);
     uint balBefore = token.balanceOf(p1);
     engine.withdraw(address(token));
-    assertEq(token.balanceOf(p1) - balBefore, deposit);
+    assertEq(token.balanceOf(p1) - balBefore, wager);
     assertEq(engine.earnings(address(token)), 0);
   }
 }
@@ -50,7 +50,7 @@ contract ERC20DeclineChallengeTest is ERC20ChallengeTest {
 contract ERC20GameTest is ERC20ChallengeTest {
   function setUp() public override {
     super.setUp();
-    token.approve(address(engine), deposit);
+    token.approve(address(engine), wager);
     engine.acceptChallenge(gameId);
     changePrank(p2);
   }
@@ -67,7 +67,7 @@ contract ERC20GameTest is ERC20ChallengeTest {
     changePrank(p2);
     uint balBefore = token.balanceOf(p2);
     engine.withdraw(address(token));
-    assertEq(token.balanceOf(p2) - balBefore, 2 * wager);
+    assertEq(token.balanceOf(p2) - balBefore, purse());
     assertEq(engine.earnings(address(token)), 0);
   }
 
@@ -79,11 +79,11 @@ contract ERC20GameTest is ERC20ChallengeTest {
     _move(p1, 'a2a3');
     _move(p2, 'h4e1');
     changePrank(arbiter);
-    assertEq(engine.profit(address(token)), 2 * fee);
+    assertEq(engine.profit(address(token)), 2 * fee());
     address receiver = makeAddr('feeReceiver');
     uint balBefore = token.balanceOf(receiver);
-    engine.withdraw(address(token), payable(receiver));
-    assertEq(token.balanceOf(receiver) - balBefore, 2 * fee);
+    engine.withdrawPlatformFunds(address(token), payable(receiver));
+    assertEq(token.balanceOf(receiver) - balBefore, 2 * fee());
     assertEq(engine.profit(address(token)), 0);
   }
 }

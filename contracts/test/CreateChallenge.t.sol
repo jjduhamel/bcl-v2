@@ -17,7 +17,7 @@ contract CreateChallengeTest is ChallengeTest {
     testChallengeReceived(0, p2)
     testEarnings(p1, 0)
   {
-    lobby.challenge{ value: deposit }(p2, true, timePerMove, wager, address(0));
+    lobby.challenge{ value: wager }(p2, true, timePerMove, wager, address(0));
   }
 
   function testChallengeSucceedsWithMinTPM() public
@@ -39,7 +39,7 @@ contract CreateChallengeTest is ChallengeTest {
 
   function testChallengeFailsWithLowDeposit() public {
     vm.expectRevert(ChessEngine.InvalidDepositAmount.selector);
-    lobby.challenge{ value: deposit-1 }(p2, true, timePerMove, wager, address(0));
+    lobby.challenge{ value: wager-1 }(p2, true, timePerMove, wager, address(0));
   }
 
   function testChallengeSucceedsWithExcessDeposit() public
@@ -47,6 +47,6 @@ contract CreateChallengeTest is ChallengeTest {
     testChallengeReceived(0, p2)
     testEarnings(p1, 0)
   {
-    lobby.challenge{ value: deposit+1 }(p2, true, timePerMove, wager, address(0));
+    lobby.challenge{ value: wager+1 }(p2, true, timePerMove, wager, address(0));
   }
 }
