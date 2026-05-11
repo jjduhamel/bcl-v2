@@ -33,7 +33,8 @@ export default async function(gameId) {
   // Dev flag (NUXT_PUBLIC env). When true the UI lets the player pick
   // pseudo-legal moves (e.g. leaving their own king in check) and castle-
   // through-check. Off by default; opponents' chess-illegal moves are still
-  // applied via tryMove regardless of this flag.
+  // applied via tryMove regardless of this flag. Destructured once at setup
+  // so downstream computeds capture a plain boolean (no reactivity thrash).
   const { allowPseudoLegalMoves } = useRuntimeConfig().public;
 
   // Castle destinations chess.js filters at generation when the king or path
