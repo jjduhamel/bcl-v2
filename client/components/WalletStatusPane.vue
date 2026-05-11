@@ -38,7 +38,7 @@ div(id='wallet-status' class='py-0.5')
     button(
       title='Disconnect'
       v-if='connected'
-      @click='emit("disconnect")'
+      @click.stop='emit("disconnect")'
     )
       img(class='h-4' src='~assets/icons/bytesize/lock.svg')
   div(id='network' class='py-0.5 flex items-center')

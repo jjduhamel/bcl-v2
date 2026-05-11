@@ -63,13 +63,14 @@ export default async function(gameId) {
   const legalMoves = computed(() => {
     fen.value;            // Make reactive to FEN updates
     const out = new Map();
-    _.forEach(SQUARES, sq => {
-      // When the dev flag is on, use pseudo-legal generation so the UI permits
-      // moves that leave the king in check. Otherwise fall back to chess.js's
-      // standard legal-move set.
-      const ms = chess._moves({ legal: !allowPseudoLegalMoves, square: sq });
-      if (ms.length > 0) out.set(sq, _.map(ms, m => chess._makePretty(m).to));
-    });
+    // One pseudo-/legal generation pass for all squares, grouped by from.
+    // When the dev flag is on, legal:false lets the player pick moves that
+    // leave their own king in check.
+    for (const m of chess._moves({ legal: !allowPseudoLegalMoves })) {
+      const p = chess._makePretty(m);
+      if (!out.has(p.from)) out.set(p.from, []);
+      out.get(p.from).push(p.to);
+    }
     // Inject castle destinations chess.js filters at generation time.
     if (castleMoves.value.length > 0) {
       const kingSq = 'e' + (chess.turn() === 'w' ? '1' : '8');
@@ -389,11 +390,16 @@ export default async function(gameId) {
 
   const inCheck = computed(() => {
     fen.value;
+    // After a king capture chess.js's _kings[them] still points at the
+    // captured square, so isCheck() can report stale truth. Short-circuit
+    // once the contract has confirmed game-over.
+    if (gameOver.value) return false;
     return (chess.turn() == playerColor.value) && chess.isCheck();
   });
 
   const opponentInCheck = computed(() => {
     fen.value;
+    if (gameOver.value) return false;
     return (chess.turn() == opponentColor.value) && chess.isCheck();
   });
 

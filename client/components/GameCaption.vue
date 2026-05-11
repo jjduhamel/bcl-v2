@@ -22,22 +22,25 @@ const props = defineProps({
 
 const { timeUntilExpiry } = toRefs(props);
 
+// Built once at module-eval time; the computed below just calls it.
+const humanize = humanizeDuration.humanizer({
+  language: 'shortEn',
+  languages: {
+    shortEn: {
+      y: () => 'year',
+      mo: () => 'months',
+      w: () => 'weeks',
+      d: () => 'days',
+      h: () => 'hours',
+      m: () => 'mins',
+      s: () => 'secs'
+    }
+  }
+});
+
 const displayTimer = computed(() => {
   if (timeUntilExpiry.value > 3600) {         // > 1 hour
-    return humanizeDuration.humanizer({
-      language: 'shortEn',
-      languages: {
-        shortEn: {
-          y: () => 'year',
-          mo: () => 'months',
-          w: () => 'weeks',
-          d: () => 'days',
-          h: () => 'hours',
-          m: () => 'mins',
-          s: () => 'secs'
-        }
-      }
-    })(timeUntilExpiry.value*1000, { largest: 2, delimiter: ' ' });
+    return humanize(timeUntilExpiry.value*1000, { largest: 2, delimiter: ' ' });
   } else {                                    // < 1 hour
     const mins = Math.floor(timeUntilExpiry.value / 60);
     const secs = timeUntilExpiry.value % 60;
