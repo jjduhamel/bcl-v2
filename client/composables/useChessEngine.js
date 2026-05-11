@@ -30,18 +30,41 @@ export default async function(gameId) {
 
   const fen = ref(chess.fen());
 
+  // Castle destinations chess.js filters at generation when the king or path
+  // is attacked (chess.ts:1045,1051). Contract validates the rest, so we just
+  // check rights + empty path + rook at corner.
+  const castleMoves = computed(() => {
+    fen.value;
+    const [, turn, castling] = chess.fen().split(' ');
+    if (castling === '-') return [];
+    const rank = turn === 'w' ? '1' : '8';
+    if (chess.get('e' + rank)?.type !== 'k') return [];
+    const dests = [];
+    const kFlag = turn === 'w' ? 'K' : 'k';
+    const qFlag = turn === 'w' ? 'Q' : 'q';
+    if (castling.includes(kFlag)
+        && !chess.get('f' + rank) && !chess.get('g' + rank)
+        && chess.get('h' + rank)?.type === 'r') dests.push('g' + rank);
+    if (castling.includes(qFlag)
+        && !chess.get('b' + rank) && !chess.get('c' + rank) && !chess.get('d' + rank)
+        && chess.get('a' + rank)?.type === 'r') dests.push('c' + rank);
+    return dests;
+  });
+
   const legalMoves = computed(() => {
     fen.value;            // Make reactive to FEN updates
     const out = new Map();
     _.forEach(SQUARES, sq => {
-      // Use pseudo-legal generation so the board UI lets the player choose
-      // moves that leave their king in check. The contract accepts them; if
-      // they're genuinely illegal the tx will revert and submitMove rolls back.
-      // (Castle-through-check is still filtered out at generation — chess.ts:1045 —
-      // so the king's castle square won't appear in the legal-target list.)
+      // Pseudo-legal so the UI permits moves that leave the king in check.
       const ms = chess._moves({ legal: false, square: sq });
       if (ms.length > 0) out.set(sq, _.map(ms, m => chess._makePretty(m).to));
     });
+    // Inject castle destinations chess.js filters at generation time.
+    if (castleMoves.value.length > 0) {
+      const kingSq = 'e' + (chess.turn() === 'w' ? '1' : '8');
+      const existing = out.get(kingSq) || [];
+      out.set(kingSq, [...new Set([...existing, ...castleMoves.value])]);
+    }
     return out;
   });
 
@@ -353,7 +376,9 @@ export default async function(gameId) {
   const timeOfLastMove = computed(() => lobby.gameData(gameId).timeOfLastMove);
 
   const outcome = computed(() => lobby.gameData(gameId).outcome);
+  const wagerAmount = computed(() => lobby.gameData(gameId).wagerAmount);
   const gameOver = computed(() => lobby.gameData(gameId).state == GameState.Finished);
+  const isDisputed = computed(() => lobby.gameData(gameId).state == GameState.Review);
   const isStalemate = computed(() => outcome.value == GameOutcome.Draw);
 
   const inCheck = computed(() => {
@@ -503,6 +528,7 @@ export default async function(gameId) {
     GameOutcome,
     opponent,
     outcome,
+    wagerAmount,
     //playerColor,
     //opponentColor,
     isPlayer,
@@ -520,6 +546,7 @@ export default async function(gameId) {
     opponentCheckmatePending,
     inStalemate,
     gameOver,
+    isDisputed,
     isStalemate,
     isWinner,
     isLoser,
