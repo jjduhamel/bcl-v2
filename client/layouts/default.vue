@@ -31,12 +31,12 @@ div(id='app')
           NuxtLink(to='/lounge')
             img(src='@/assets/icons/bytesize/star.svg')
             div Lounge
-          NuxtLink(to='/marketplace')
-            img(src='@/assets/icons/bytesize/tag.svg')
-            div Market
           NuxtLink(to='/about')
             img(src='@/assets/icons/bytesize/info.svg')
             div About
+          NuxtLink(to='/marketplace')
+            img(src='@/assets/icons/bytesize/tag.svg')
+            div Market
 
     div(id='content')
       slot
@@ -100,7 +100,7 @@ html, body, #__nuxt, #app
         @apply mx-1 mt-2 text-center text-2xl font-bold
 
       #wallet
-        @apply px-2 py-1 mx-1 my-2
+        @apply px-2 py-1 mx-1 my-4
         @extend .bordered
 
       #navigation

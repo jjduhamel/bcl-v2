@@ -94,12 +94,16 @@ export default defineStore('lobby', {
       const { currentMove } = this.metadata[gameId];
       return wallet.address == currentMove;
     },
+    isInReview(gameId: number) {
+      return this.metadata[gameId]?.state === 5;  // GameState.Review
+    },
     gameData(gameId: number) {
       return {
         ...this.metadata[gameId],
         opponent: this.opponent(gameId),
         isWhitePlayer: this.isWhitePlayer(gameId),
-        isCurrentMove: this.isCurrentMove(gameId)
+        isCurrentMove: this.isCurrentMove(gameId),
+        isInReview: this.isInReview(gameId)
       };
     }
   }
@@ -107,6 +111,7 @@ export default defineStore('lobby', {
 
 interface GameInfo {
   id: number,
+  state: number,
   outcome: number,
   whitePlayer: string,
   blackPlayer: string,

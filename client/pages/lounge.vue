@@ -97,7 +97,7 @@ section
     button(ref='submit', @click='newChallenge') Lookup
 
   div(id='player-lobby')
-    div Challenges
+    div Pending Challenges
     div(class='my-2 flex')
       div(v-for='challenge in lobby.challenges')
         ChallengeCard(
@@ -105,18 +105,18 @@ section
           @click='() => showPendingChallenge(challenge.id)'
         )
 
-    div Games
+    div(class='mt-6') Active Games
     div(class='my-2 flex')
       div(v-for='game in lobby.games')
-        GameCard(
+        ActiveGameCard(
           v-bind='game'
           @click='() => navigateTo("/game/"+game.id)'
         )
 
-    div History
+    div(class='mt-6') Game History
     div(class='my-2 flex')
       div(v-for='game in lobby.history')
-        GameCard(
+        GameOverCard(
           v-bind='game'
           @click='() => navigateTo("/game/"+game.id)'
         )
