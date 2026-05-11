@@ -1,5 +1,5 @@
 import _ from 'lodash';
-import { Chess, SQUARES } from 'chess.js';
+import { Chess } from 'chess.js';
 import { constants } from 'ethers';
 import { fetchBlockNumber } from '@wagmi/core';
 
