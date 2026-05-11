@@ -30,10 +30,18 @@ export default async function(gameId) {
 
   const fen = ref(chess.fen());
 
+  // Dev flag (NUXT_PUBLIC env). When true the UI lets the player pick
+  // pseudo-legal moves (e.g. leaving their own king in check) and castle-
+  // through-check. Off by default; opponents' chess-illegal moves are still
+  // applied via tryMove regardless of this flag.
+  const { allowPseudoLegalMoves } = useRuntimeConfig().public;
+
   // Castle destinations chess.js filters at generation when the king or path
   // is attacked (chess.ts:1045,1051). Contract validates the rest, so we just
-  // check rights + empty path + rook at corner.
+  // check rights + empty path + rook at corner. Only surfaced when the dev
+  // flag is on; otherwise chess.js's own (legal) castle generation is enough.
   const castleMoves = computed(() => {
+    if (!allowPseudoLegalMoves) return [];
     fen.value;
     const [, turn, castling] = chess.fen().split(' ');
     if (castling === '-') return [];
@@ -55,8 +63,10 @@ export default async function(gameId) {
     fen.value;            // Make reactive to FEN updates
     const out = new Map();
     _.forEach(SQUARES, sq => {
-      // Pseudo-legal so the UI permits moves that leave the king in check.
-      const ms = chess._moves({ legal: false, square: sq });
+      // When the dev flag is on, use pseudo-legal generation so the UI permits
+      // moves that leave the king in check. Otherwise fall back to chess.js's
+      // standard legal-move set.
+      const ms = chess._moves({ legal: !allowPseudoLegalMoves, square: sq });
       if (ms.length > 0) out.set(sq, _.map(ms, m => chess._makePretty(m).to));
     });
     // Inject castle destinations chess.js filters at generation time.
@@ -231,11 +241,9 @@ export default async function(gameId) {
 
 
   const submitMove = uci => new Promise(async (resolve, reject) => {
-    // Snapshot the pre-submit FEN so we can roll the board back if the tx
-    // reverts. Since applyManually can advance the board for chess-illegal
-    // moves, chess.history() / chess.undo() can't reach our previous state —
-    // we have to restore via chess.load.
-    const fenSnapshot = fen.value;
+    // Rollback on tx revert is the caller's responsibility — by the time we
+    // get here the board has already advanced via chooseMove, so we don't have
+    // the pre-choose FEN. The page's undoMove() restores from fenBeforeChoose.
     try {
       console.log('Submit move', uci);
       $amplitude.track('SendMove', { gameId, uci });
@@ -249,9 +257,6 @@ export default async function(gameId) {
       });
     } catch(err) {
       console.error(err);
-      // Tx reverted — restore the board to its pre-submit state.
-      chess.load(fenSnapshot);
-      fen.value = fenSnapshot;
       reject(err);
     }
   });

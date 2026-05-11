@@ -29,7 +29,7 @@ const props = defineProps({
 </script>
 
 <template lang='pug'>
-div(id='wallet-status')
+div(id='wallet-status' class='py-0.5')
   div(id='account' class='py-0.5 flex items-center cursor-pointer' @click='copyAddress')
     img(class='h-4' src='~assets/icons/bytesize/user.svg')
     div(class='flex-1')

@@ -1,12 +1,10 @@
 <script setup>
 import _ from 'lodash';
-import humanizeDuration from 'humanize-duration';
 
 const { params } = useRoute();
 const gameId = params.id;
 const { wallet } = await useWallet();
 const { lobby } = await useLobby();
-const { truncAddress } = useEthUtils();
 const { playAudioClip } = useAudioUtils();
 const {
   chess,
@@ -16,6 +14,7 @@ const {
   illegalMoves,
   fetchMoves,
   opponent,
+  wagerAmount,
   isCurrentMove,
   isOpponentsTurn,
   isWhitePlayer,
@@ -25,6 +24,7 @@ const {
   checkmatePending,
   opponentCheckmatePending,
   gameOver,
+  isDisputed,
   isStalemate,
   isWinner,
   isLoser,
@@ -47,16 +47,19 @@ const {
 } = await useChessEngine(gameId);
 
 const disputedMove = ref(null);
-/*
 watch(illegalMoves, () => {
-  if (isOpponentsTurn.value) {
-    const j = _.last(illegalMoves.value);
-    const move = moves.value[j]
-    console.log('Dispute move', move.uci);
-    disputedMove.value = move;
-  }
+  // After tryMove advances the board, the turn flips to whoever moves next.
+  // If it's now our turn, the opponent just played an illegal-but-accepted
+  // move — that's the dispute case. (Own illegal moves leave isOpponentsTurn
+  // true here; EP rejections never reach the contract so checking !rejected
+  // is defensive.)
+  if (isOpponentsTurn.value) return;
+  const j = _.last(illegalMoves.value);
+  const move = moves.value[j];
+  if (!move?.illegal || move.rejected) return;
+  console.log('Dispute move', move.uci);
+  disputedMove.value = move;
 });
-*/
 
 const playerTimeExpiredModal = ref(playerTimeExpired.value);
 const opponentTimeExpiredModal = ref(opponentTimeExpired.value);
@@ -114,6 +117,10 @@ async function doSendMove() {
     proposedMove.value = null;
   } catch (err) {
     console.error(err);
+    // Tx reverted (or some other failure) — roll the board back to the
+    // pre-choose state. undoMove restores from fenBeforeChoose, pops the
+    // trailing illegalMoves entry, and resets proposedMove / didChooseMove.
+    undoMove();
   } finally {
     didSendMove.value = false;
   }
@@ -183,28 +190,12 @@ function isIllegalMove(j) {
   return illegalMoves.value.includes(j);
 }
 
-const displayTimer = computed(() => {
-  if (timeUntilExpiry.value > 3600) {         // > 1 hour
-    return humanizeDuration.humanizer({
-      language: 'shortEn',
-      languages: {
-        shortEn: {
-          y: () => 'year',
-          mo: () => 'months',
-          w: () => 'weeks',
-          d: () => 'days',
-          h: () => 'hours',
-          m: () => 'mins',
-          s: () => 'secs'
-        }
-      }
-    })(timeUntilExpiry.value*1000, { largest: 2, delimiter: ' ' });
-  } else {                                    // < 1 hour
-    const mins = Math.floor(timeUntilExpiry.value / 60);
-    const secs = timeUntilExpiry.value % 60;
-    return `${mins}`.padStart(2, 0) + ':' + `${secs}`.padStart(2, 0);
-  }
-});
+// White moves at even indices, black at odd. Position by player so the
+// active player's moves are always on the left.
+function isPlayerMove(j) {
+  return (j % 2 === 0) === isWhitePlayer.value;
+}
+
 
 console.log('Initialize game', gameId, 'against', opponent.value);
 await fetchMoves();
@@ -227,76 +218,25 @@ NuxtLayout(name='game')
     )
 
   template(v-slot:info)
-    div(id='caption')
-      div(v-if='gameOver' class='text-lg font-bold') Game Over
-      div(v-else class='text-lg font-bold') In Progress
-      div(id='timer')
-        div(v-if='gameOver') -- : --
-        div(v-else-if='!timerExpired') {{ displayTimer }}
-        div(v-else) Timer Expired
-      div(id='opponent' class='text-xs') {{ truncAddress(opponent) }}
-      div(id='action-indicator')
-        div(v-if='isWinner') You Won!
-        div(v-else-if='isLoser') You Lost
-        div(v-else-if='inCheckmate || opponentInCheckmate') Checkmate!
-        div(v-else-if='inCheck') Check!
-        div(v-else-if='didSendMove') Pending...
-        div(v-else-if='didChooseMove') Submit Move
-        div(v-else-if='isCurrentMove') Your Move
-        div(v-else) Opponent's Move
+    GameCaption(v-bind='{ gameOver, isWinner, isLoser, isDisputed, inCheck, inCheckmate, opponentInCheckmate, isCurrentMove, didChooseMove, didSendMove, timerExpired, timeUntilExpiry, wagerAmount, opponent }')
 
     div(id='moves' class='text-sm')
       div(
         v-for='(move, j) in moves'
+        :class='[isPlayerMove(j) ? "player" : "opponent", j % 2 === 0 ? "white" : "black"]'
         :style='isIllegalMove(j) && { color: "red" }'
       ) {{ move.san ?? move.uci }}
 
-    div(id='controls' class='pb-2')
-      div(id='controlbar' class='p-2 flex justify-between')
-        button(
-          title='Undo Move'
-          class='unbordered'
-          :disabled='!didChooseMove || didSendMove'
-          @click='undoMove'
-        )
-          img(class='w-6' src='~assets/icons/bytesize/trash.svg')
-        button(
-          title='Offer Draw'
-          class='unbordered'
-          @click='() => offerStalemateModal = true'
-          disabled
-        )
-          img(class='w-6' src='~assets/icons/bytesize/flag.svg')
-        button(
-          title='Resign'
-          class='unbordered'
-          @click='() => confirmResignModal = true'
-          :disabled='gameOver'
-        )
-          img(class='w-6' src='~assets/icons/bytesize/ban.svg')
-
-      button(
-        title='Claim Winnings'
-        v-if='gameOver && isWinner'
-        :disabled='didWithdrawWinnings'
-        @click='doWithdrawWinnings'
-      ) Claim Winnings
-      button(
-        title='Resign'
-        v-else-if='checkmatePending || playerTimeExpired'
-        @click='doResign'
-      ) Resign
-      button(
-        title='Claim Victory'
-        v-else-if='opponentTimeExpired'
-        @click='doClaimVictory'
-      ) Claim Victory
-      button(
-        title='Submit Move'
-        v-else-if='!gameOver'
-        :disabled='!didChooseMove || didSendMove'
-        @click='doSendMove'
-      ) Submit
+    GameControls(
+      v-bind='{ didChooseMove, didSendMove, didWithdrawWinnings, gameOver, isDisputed, isWinner, checkmatePending, playerTimeExpired, opponentTimeExpired }'
+      @undo='undoMove'
+      @offer-draw='() => offerStalemateModal = true'
+      @resign='() => confirmResignModal = true'
+      @resign-now='doResign'
+      @submit='doSendMove'
+      @claim-victory='doClaimVictory'
+      @claim-winnings='doWithdrawWinnings'
+    )
 
     ConfirmModal(
       title='Resign?'
@@ -359,7 +299,7 @@ NuxtLayout(name='game')
 
     Modal(
       title='Illegal Move'
-      v-if='!gameOver && illegalMoveModal'
+      v-if='!gameOver && !isDisputed && illegalMoveModal'
       @close='() => illegalMoveModal = false'
     )
       div(class='text-center') Your opponent submitted an illegal move.  Please send a dispute before your move expires and an arbiter will review the game.
@@ -378,8 +318,12 @@ NuxtLayout(name='game')
 
     div
       @apply flex px-4
-    div:nth-child(odd)
+    div.player
       @apply justify-start
-    div:nth-child(even)
-      @apply justify-end bg-gray-200
+    div.opponent
+      @apply justify-end
+    div.white
+      @apply bg-white
+    div.black
+      @apply bg-gray-200
 </style>

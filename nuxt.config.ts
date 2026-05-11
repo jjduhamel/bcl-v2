@@ -32,6 +32,10 @@ export default defineNuxtConfig({
       amplitudeId: process.env.AMPLITUDE_API_KEY,
       bugsnagId: process.env.BUGSNAG_API_KEY,
       infuraId: process.env.INFURA_API_KEY,
+      // Dev flag: when true, the board lets the player choose pseudo-legal
+      // moves (e.g. leaving their own king in check). Off by default; the
+      // engine still accepts opponent illegal moves regardless.
+      allowPseudoLegalMoves: process.env.ALLOW_PSEUDO_LEGAL === 'true',
       lobbyAddress: {
         local: process.env.LOCAL_LOBBY_ADDR,
         ethereum: process.env.HOMESTEAD_LOBBY_ADDR,

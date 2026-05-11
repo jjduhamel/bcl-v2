@@ -65,10 +65,10 @@ div(id='caption')
     div(v-else-if='!timerExpired') {{ displayTimer }}
     div(v-else) Timer Expired
   div(class='mx-2')
-    div(id='opponent' class='flex justify-between items-center')
+    div(id='opponent' class='py-0.5 flex justify-between items-center')
       img(class='h-4' src='~assets/icons/bytesize/user.svg')
       div {{ truncAddress(opponent, 4) }}
-    div(id='wager' class='flex justify-between items-center')
+    div(id='wager' class='py-0.5 flex justify-between items-center')
       img(class='h-4' src='~assets/icons/trophy.svg')
       div {{ formatEther(wagerAmount) }} ETH
 </template>
