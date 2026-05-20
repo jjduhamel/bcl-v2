@@ -51,5 +51,5 @@ div(id='shadow')
           @apply mt-4 mb-2 flex justify-center
 
           button
-            @apply w-20
+            @apply min-w-[5rem] px-4
 </style>

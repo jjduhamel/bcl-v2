@@ -1,7 +1,7 @@
 <template lang='pug'>
 section(class='max-w-3xl mx-auto px-4 py-6 flex flex-col gap-2')
   h1(class='text-2xl font-bold mb-1') Welcome
-  div Thanks for checking out The Blockchain Chess Lounge!  This was originally developed as a project for Buildspace Nights & Weekends.  The idea was to develop a peer-to-peer game of chess which enabled trustless wagering.  Below, you'll find a description of the rules and a few caveats.
+  div Thanks for visiting The Blockchain Chess Lounge!  This was originally developed as a project for Buildspace Nights & Weekends.  The idea was to develop a peer-to-peer game of chess which enabled trustless wagering.  Below, you'll find a description of the rules and a few caveats.
   div(class='mt-2')
     h1(class='text-xl font-bold mb-1') Rules
     div(class='mb-2') The standard of chess apply, with a few notes specific to this contract:

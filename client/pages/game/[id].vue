@@ -23,9 +23,14 @@ const {
   opponentInCheckmate,
   checkmatePending,
   opponentCheckmatePending,
+  kingCaptureUci,
+  canCaptureKing,
   gameOver,
   isDisputed,
   isStalemate,
+  inDrawOffer,
+  drawOfferReceived,
+  drawOfferSent,
   isWinner,
   isLoser,
   timeOfExpiry,
@@ -38,6 +43,7 @@ const {
   resign,
   claimVictory,
   offerStalemate,
+  respondDraw,
   withdrawWinnings,
   disputeGame,
   startMoveTimer,
@@ -70,11 +76,19 @@ const opponentResignedModal = ref(false);
 //const checkmateModal = ref(false);
 const inCheckmateModal = ref(false);
 const illegalMoveModal = ref(false);
+// Auto-opens when the opponent's OfferedDraw event flips drawOfferReceived true.
+// Seeded from the current ref so a page refresh while a draw is pending also
+// surfaces the prompt. Same pattern for drawOfferSentModal so the sender gets a
+// one-time "waiting on opponent" acknowledgement they can dismiss.
+const respondDrawModal = ref(drawOfferReceived.value);
+const drawOfferSentModal = ref(drawOfferSent.value);
 
 watch(playerTimeExpired, () => playerTimeExpiredModal.value = true);
 watch(opponentTimeExpired, () => opponentTimeExpiredModal.value = true);
-watch(inCheckmate, () => inCheckmateModal.value = true);
-watch(disputedMove, () => illegalMoveModal.value = true);
+watch(inCheckmate, () => inCheckmateModal.value = !didChooseMove && !!inCheckmate.value);
+watch(disputedMove, () => illegalMoveModal.value = !didChooseMove);
+watch(drawOfferReceived, v => { if (v) respondDrawModal.value = true; });
+watch(drawOfferSent, v => { if (v) drawOfferSentModal.value = true; });
 
 const proposedMove = ref(null);
 const didChooseMove = ref(false);
@@ -162,6 +176,18 @@ async function doOfferStalemate() {
   }
 }
 
+const didRespondDraw = ref(false);
+async function doRespondDraw(accept) {
+  try {
+    didRespondDraw.value = true;
+    await respondDraw(accept);
+  } catch (err) {
+    console.error(err);
+  } finally {
+    didRespondDraw.value = false;
+  }
+}
+
 const didWithdrawWinnings = ref(false);
 async function doWithdrawWinnings() {
   try {
@@ -184,6 +210,14 @@ async function doDisputeGame() {
   } finally {
     didDisputeGame.value = false;
   }
+}
+
+async function doClaimKingCapture() {
+  const uci = kingCaptureUci.value;
+  // Route through chooseMove so the board visually advances first; then the
+  // existing send-move pipeline submits the UCI and handles tx-revert rollback.
+  chooseMove(uci.slice(0, 2), uci.slice(2, 4));
+  await doSendMove();
 }
 
 function isIllegalMove(j) {
@@ -220,7 +254,7 @@ NuxtLayout(name='game')
   template(v-slot:info)
     GameCaption(v-bind='{ gameOver, isWinner, isLoser, isDisputed, inCheck, inCheckmate, opponentInCheckmate, isCurrentMove, didChooseMove, didSendMove, timerExpired, timeUntilExpiry, wagerAmount, opponent }')
 
-    div(id='moves' class='text-sm')
+    div(id='moves' class='my-4 text-sm')
       div(
         v-for='(move, j) in moves'
         :class='[isPlayerMove(j) ? "player" : "opponent", j % 2 === 0 ? "white" : "black"]'
@@ -228,13 +262,14 @@ NuxtLayout(name='game')
       ) {{ move.san ?? move.uci }}
 
     GameControls(
-      v-bind='{ didChooseMove, didSendMove, didWithdrawWinnings, gameOver, isDisputed, isWinner, checkmatePending, playerTimeExpired, opponentTimeExpired }'
+      v-bind='{ didChooseMove, didSendMove, didWithdrawWinnings, gameOver, isDisputed, isWinner, isCurrentMove, inDrawOffer, checkmatePending, playerTimeExpired, opponentTimeExpired, canCaptureKing }'
       @undo='undoMove'
       @offer-draw='() => offerStalemateModal = true'
       @resign='() => confirmResignModal = true'
       @resign-now='doResign'
       @submit='doSendMove'
       @claim-victory='doClaimVictory'
+      @claim-king-capture='doClaimKingCapture'
       @claim-winnings='doWithdrawWinnings'
     )
 
@@ -256,14 +291,14 @@ NuxtLayout(name='game')
           .then(() => offerStalemateModal = false)'
       @close='() => offerStalemateModal = false'
     )
-      div By clicking "Confirm", you'll offer your opponent the opportunity to end the game as a draw.  Both players will receive their wagers back.
+      div By clicking "Confirm", you'll offer your opponent the opportunity to end in a draw.  Both players will receive their wagers back.
 
     Modal(
       title='Checkmate!'
       v-if='inCheckmateModal'
       @close='() => inCheckmateModal = false'
     )
-      div(class='text-center') Oh no, you're in checkmate!  Please resign before the timer expires.
+      div(class='text-center') Oh no!  You're in checkmate.  Please resign before the timer expires.
       div(id='form-controls' class='flex items-center')
         button(
           @click='() => doResign()\
@@ -276,7 +311,7 @@ NuxtLayout(name='game')
       v-if='!gameOver && playerTimeExpiredModal'
       @close='() => playerTimeExpiredModal = false'
     )
-      div(class='text-center') Oh no, you ran out of time!  Please resign now.  We hope you play again!
+      div(class='text-center') You ran out of time to make a move!  Please resign now.
       div(id='form-controls' class='flex items-center')
         button(
           @click='() => doResign()\
@@ -299,7 +334,7 @@ NuxtLayout(name='game')
 
     Modal(
       title='Illegal Move'
-      v-if='!gameOver && !isDisputed && illegalMoveModal'
+      v-if='!gameOver && !isDisputed && !opponentInCheckmate && illegalMoveModal'
       @close='() => illegalMoveModal = false'
     )
       div(class='text-center') Your opponent submitted an illegal move.  Please send a dispute before your move expires and an arbiter will review the game.
@@ -309,13 +344,36 @@ NuxtLayout(name='game')
             .then(() => illegalMoveModal = false)'
           :disabled='didDisputeGame'
         ) Dispute
+
+    Modal(
+      title='Draw Offer'
+      v-if='drawOfferReceived && respondDrawModal'
+      @close='() => respondDrawModal = false'
+    )
+      div(class='text-center') Your opponent has offered a draw.  If you accept, both players will receive their wagers back.
+      div(id='form-controls' class='flex items-center')
+        button(
+          @click='() => doRespondDraw(true)\
+            .then(() => respondDrawModal = false)'
+          :disabled='didRespondDraw'
+        ) Accept
+        button(
+          @click='() => doRespondDraw(false)\
+            .then(() => respondDrawModal = false)'
+          :disabled='didRespondDraw'
+        ) Decline
+
+    Modal(
+      title='Draw Offered'
+      v-if='drawOfferSent && drawOfferSentModal'
+      @close='() => drawOfferSentModal = false'
+    )
+      div(class='text-center') Waiting for your opponent to respond to your draw offer.
 </template>
 
 <style lang='sass'>
 #info
   #moves
-    @apply my-4
-
     div
       @apply flex px-4
     div.player

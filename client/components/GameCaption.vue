@@ -52,12 +52,13 @@ const displayTimer = computed(() => {
 <template lang='pug'>
 div(id='caption')
   div(v-if='gameOver' class='text-lg font-bold')
-    div(v-if='isWinner') Victory!
-    div(v-else-if='isLoser') Defeat
+    div(v-if='isWinner' class='text-green-600') You Won!
+    div(v-else-if='isLoser' class='text-red-600') You Lost
     div(v-else) Draw
   div(v-else-if='isDisputed' class='text-lg font-bold') Under Review
   div(v-else class='text-lg font-bold')
-    div(v-if='inCheckmate || opponentInCheckmate') Checkmate!
+    div(v-if='inCheckmate' class='text-red-600') Checkmate!
+    div(v-if='opponentInCheckmate' class='text-green-600') Checkmate!
     div(v-else-if='inCheck') Check!
     div(v-else-if='didSendMove') Pending...
     div(v-else-if='didChooseMove') Submit Move
@@ -66,7 +67,7 @@ div(id='caption')
   div(class='text-lg')
     div(v-if='gameOver || isDisputed') -- : --
     div(v-else-if='!timerExpired') {{ displayTimer }}
-    div(v-else) Timer Expired
+    div(v-else class='text-red-600') Timer Expired
   div(class='mx-2')
     div(id='opponent' class='py-0.5 flex justify-between items-center')
       img(class='h-4' src='~assets/icons/bytesize/user.svg')

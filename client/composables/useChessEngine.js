@@ -99,7 +99,12 @@ export default async function(gameId) {
   if (!lobby.has(gameId)) await initGameData(gameId);
 
   const gameContract = chessEngine(gameId);
-  const { PlayerMoved, GameOver } = gameContract.filters;
+  const {
+    PlayerMoved,
+    GameOver,
+    OfferedDraw,
+    DeclinedDraw
+  } = gameContract.filters;
   const moves = ref([]);
   const illegalMoves = ref([]);
 
@@ -302,9 +307,58 @@ export default async function(gameId) {
     }
   });
 
-  async function offerStalemate() {
-    // TODO
-  }
+  // Send a draw offer. Contract flips state -> Draw and currentMove -> opponent,
+  // so after this resolves the receiver gets the OfferedDraw event (handled in
+  // the broadcast listener) and our UI shows "waiting on opponent" via the
+  // drawOfferSent computed below. Mirror of resign(): wait for the event keyed
+  // on our address before resolving so callers can chain on it.
+  const offerStalemate = () => new Promise(async (resolve, reject) => {
+    try {
+      $amplitude.track('OfferDraw', { gameId });
+      await gameContract.offerDraw(gameId);
+      console.log('Offered draw on game', gameId);
+      playAudioClip('other/swell3');
+      gameContract.once(OfferedDraw(gameId, wallet.address), async (id, sender, receiver) => {
+        console.log('Draw offer confirmed');
+        $amplitude.track('DrawOffered', { gameId, receiver });
+        await fetchGameData(gameId);
+        resolve(id, sender, receiver);
+      });
+    } catch(err) {
+      console.error(err);
+      reject(err);
+    }
+  });
+
+  // Respond to an incoming draw offer. On accept the contract calls
+  // finishGame(Draw) which emits GameOver — we wait on that. On decline the
+  // contract reverts state to Started and flips currentMove back to the
+  // original sender, then emits DeclinedDraw.
+  const respondDraw = accept => new Promise(async (resolve, reject) => {
+    try {
+      $amplitude.track('RespondDraw', { gameId, accept });
+      await gameContract.respondDraw(gameId, accept);
+      console.log(accept ? 'Accepted draw' : 'Declined draw', 'on game', gameId);
+      if (accept) {
+        // GameOver handler in registerListeners refetches data and plays the
+        // draw audio clip; here we just resolve once it fires.
+        gameContract.once(GameOver(gameId), (id, winner, loser) => {
+          $amplitude.track('DrawAccepted', { gameId });
+          resolve(id, winner, loser);
+        });
+      } else {
+        playAudioClip('nes/Explosion');
+        gameContract.once(DeclinedDraw(gameId, wallet.address), async (id, sender, receiver) => {
+          $amplitude.track('DrawDeclined', { gameId });
+          await fetchGameData(gameId);
+          resolve(id, sender, receiver);
+        });
+      }
+    } catch(err) {
+      console.error(err);
+      reject(err);
+    }
+  });
 
   const withdrawWinnings = () => new Promise(async (resolve, reject) => {
     try {
@@ -388,6 +442,13 @@ export default async function(gameId) {
   const isDisputed = computed(() => lobby.gameData(gameId).state == GameState.Review);
   const isStalemate = computed(() => outcome.value == GameOutcome.Draw);
 
+  // Draw-offer state. While a draw is pending the contract sets state == Draw
+  // and currentMove == receiver (the player who must accept or decline). So
+  // isCurrentMove distinguishes the two roles for us.
+  const inDrawOffer = computed(() => lobby.gameData(gameId).state == GameState.Draw);
+  const drawOfferReceived = computed(() => inDrawOffer.value && isCurrentMove.value);
+  const drawOfferSent = computed(() => inDrawOffer.value && !isCurrentMove.value);
+
   const inCheck = computed(() => {
     fen.value;
     // After a king capture chess.js's _kings[them] still points at the
@@ -403,14 +464,40 @@ export default async function(gameId) {
     return (chess.turn() == opponentColor.value) && chess.isCheck();
   });
 
+  // Symmetric to opponentKingAttacked, for the loser's view: our king is
+  // currently under attack from one of their pieces, regardless of turn.
+  const playerKingAttacked = computed(() => {
+    fen.value;
+    if (gameOver.value) return false;
+    return chess._attacked(opponentColor.value, chess._kings[playerColor.value]);
+  });
+
   const inCheckmate = computed(() => {
     fen.value;
-    return (chess.turn() == playerColor.value) && chess.isCheckmate();
+    if (gameOver.value) return false;
+    if (chess.turn() == playerColor.value) {
+      if (chess.isCheckmate()) return true;
+    } else {
+      // After we've made an illegal move that didn't escape check, the turn
+      // flips to the opponent and chess.js no longer reports mate — but our
+      // king is still under their attack with no way out.
+      return playerKingAttacked.value;
+    }
   });
 
   const opponentInCheckmate = computed(() => {
     fen.value;
-    return (chess.turn() == opponentColor.value) && chess.isCheckmate();
+    if (gameOver.value) return false;
+    // Standard mate detection: chess.js sees it when the side to move (the
+    // opponent) has no legal escape.
+    if (chess.turn() == opponentColor.value) {
+      if (chess.isCheckmate()) return true;
+    } else {
+      // Turn-independent check: their king is under attack from one of our
+      // pieces. Survives the local turn-flip when the player chooses a non-
+      // king-capture move; only false when *our* king is the exposed one.
+      return opponentKingAttacked.value;
+    }
   });
 
   const inStalemate = computed(() => {
@@ -426,6 +513,29 @@ export default async function(gameId) {
   const opponentCheckmatePending = computed(() => {
     return !gameOver.value && opponentInCheckmate.value;
   });
+
+  // Is the opponent's king currently attacked by one of our pieces? Uses
+  // chess._attacked so it works regardless of whose turn it is — survives
+  // the turn-flip when the player chooses a non-king-capture move locally.
+  const opponentKingAttacked = computed(() => {
+    fen.value;
+    if (gameOver.value) return false;
+    return chess._attacked(playerColor.value, chess._kings[opponentColor.value]);
+  });
+
+  // If we can capture the opponent's king on our turn, return the UCI for it.
+  // Returns null when it's not our turn — gates the Claim Victory button.
+  const kingCaptureUci = computed(() => {
+    fen.value;
+    if (gameOver.value || !isPlayersTurn.value || !opponentKingAttacked.value) return null;
+    for (const m of chess._moves({ legal: false })) {
+      const p = chess._makePretty(m);
+      if (p.captured === 'k') return p.from + p.to + (p.promotion || '');
+    }
+    return null;
+  });
+
+  const canCaptureKing = computed(() => kingCaptureUci.value !== null);
 
   const isWinner = computed(() => {
     return isPlayer.value && gameOver.value &&
@@ -519,12 +629,31 @@ export default async function(gameId) {
       else if (isLoser.value) playAudioClip('nes/Defeat');
       else playAudioClip('nes/Draw');
     });
+
+    // Draw lifecycle. AcceptedDraw is always followed by GameOver, so we let
+    // the GameOver handler above own the final state refresh + draw audio.
+    // Here we only handle the two intermediate transitions (offer raised, offer
+    // declined), and we skip the audio when we're the originator since the
+    // action function (offerStalemate / respondDraw) already played a cue.
+    gameContract.on(OfferedDraw(gameId), async (id, sender) => {
+      console.log('Draw offered by', sender);
+      await fetchGameData(gameId);
+      if (sender !== wallet.address) playAudioClip('nes/GenericNotify');
+    });
+
+    gameContract.on(DeclinedDraw(gameId), async (id, sender) => {
+      console.log('Draw declined by', sender);
+      await fetchGameData(gameId);
+      if (sender !== wallet.address) playAudioClip('nes/Explosion');
+    });
   }
 
   async function destroyListeners() {
     console.log('Destroy game listeners for', gameId);
     gameContract.off(PlayerMoved(gameId));
     gameContract.off(GameOver(gameId));
+    gameContract.off(OfferedDraw(gameId));
+    gameContract.off(DeclinedDraw(gameId));
   }
 
   return {
@@ -556,10 +685,15 @@ export default async function(gameId) {
     opponentInCheckmate,
     checkmatePending,
     opponentCheckmatePending,
+    kingCaptureUci,
+    canCaptureKing,
     inStalemate,
     gameOver,
     isDisputed,
     isStalemate,
+    inDrawOffer,
+    drawOfferReceived,
+    drawOfferSent,
     isWinner,
     isLoser,
     timeOfExpiry,
@@ -572,6 +706,7 @@ export default async function(gameId) {
     resign,
     claimVictory,
     offerStalemate,
+    respondDraw,
     withdrawWinnings,
     disputeGame,
     startMoveTimer,
