@@ -150,7 +150,7 @@ export default async function() {
   const acceptChallenge = gameId => new Promise(async (resolve, reject) => {
     const gameContract = chessEngine(gameId);
     const { wagerAmount } = await gameContract.game(gameId);
-    const deposited = await gameContract['balance(uint256)'](gameId);
+    const deposited = await lobbyContract.currentDeposit(gameId);
     let deposit = BN.from(wagerAmount).sub(deposited);
     if (deposit.lt(0)) deposit = BN.from(0);
     console.log('Accept', gameId, deposit);
@@ -158,7 +158,7 @@ export default async function() {
     try {
       didAcceptChallenge.value = true;
       $amplitude.track('AcceptChallenge', { gameId, deposit });
-      await gameContract.acceptChallenge(gameId, { value: deposit });
+      await lobbyContract.acceptChallenge(gameId, { value: deposit });
       console.log('Accepted challenge for game', gameId);
     } catch(err) {
       didAcceptChallenge.value = false;
@@ -182,12 +182,10 @@ export default async function() {
 
   const didDeclineChallenge = ref(false);
   const declineChallenge = gameId => new Promise(async (resolve, reject) => {
-    const gameContract = chessEngine(gameId);
-
     try {
       didDeclineChallenge.value = true;
       $amplitude.track('DeclineChallenge', { gameId });
-      await gameContract.declineChallenge(gameId);
+      await lobbyContract.declineChallenge(gameId);
       console.log('Declined challenge', gameId);
     } catch(err) {
       didDeclineChallenge.value = false;
@@ -211,8 +209,7 @@ export default async function() {
 
   const didModifyChallenge = ref(false);
   const modifyChallenge = (gameId, startAsWhite, timePerMove, wagerAmount) => new Promise(async (resolve, reject) => {
-    const gameContract = chessEngine(gameId);
-    const deposited = await gameContract['balance(uint256)'](gameId);
+    const deposited = await lobbyContract.currentDeposit(gameId);
     let deposit = BN.from(wagerAmount).sub(deposited);
     if (deposit.lt(0)) deposit = BN.from(0);
 
@@ -225,11 +222,11 @@ export default async function() {
         wager: wagerAmount,
         deposit
       });
-      await gameContract.modifyChallenge(gameId
-                                       , startAsWhite
-                                       , timePerMove
-                                       , wagerAmount
-                                       , { value: deposit });
+      await lobbyContract.modifyChallenge(gameId
+                                        , startAsWhite
+                                        , timePerMove
+                                        , wagerAmount
+                                        , { value: deposit });
       console.log('Modified challenge', gameId);
     } catch(err) {
       didModifyChallenge.value = false;

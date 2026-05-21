@@ -58,6 +58,30 @@ contract EscrowERC20DepositTest is EscrowTest {
     assertEq(releasedFunds(p2, address(token)), 0);
     assertEq(tokens(p2).length, 0);
   }
+
+  function testRefundExcessTrimsOverage() public {
+    uint expected = wager / 2;
+    refundExcess(p1, gameId, expected);
+    assertEq(currentDeposit(p1, gameId).amount, expected);
+    assertEq(releasedFunds(p1, address(token)), wager - expected);
+  }
+
+  function testRefundExcessNoopWhenAtExpected() public {
+    refundExcess(p1, gameId, wager);
+    assertEq(currentDeposit(p1, gameId).amount, wager);
+    assertEq(releasedFunds(p1, address(token)), 0);
+  }
+
+  function testRefundExcessNoopWhenUnderExpected() public {
+    refundExcess(p1, gameId, wager + 1);
+    assertEq(currentDeposit(p1, gameId).amount, wager);
+    assertEq(releasedFunds(p1, address(token)), 0);
+  }
+
+  function testRefundExcessNoopWhenNoDeposit() public {
+    refundExcess(p2, gameId, wager);
+    assertEq(releasedFunds(p2, address(token)), 0);
+  }
 }
 
 contract EscrowETHDepositTest is EscrowETHTest {

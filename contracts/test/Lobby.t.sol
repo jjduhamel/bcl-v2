@@ -194,6 +194,23 @@ contract BanUserTest is LobbyTest {
   }
 }
 
+contract PlatformFeeTest is LobbyTest {
+  function testInitialFeeIsTwoPercent() public {
+    assertEq(lobby.platformFeePerc(), 2);
+  }
+
+  function testAdminCanSetFee() public {
+    lobby.setPlatformFee(5);
+    assertEq(lobby.platformFeePerc(), 5);
+  }
+
+  function testNonAdminCannotSetFee() public {
+    changePrank(p1);
+    vm.expectRevert(AdminOnly.selector);
+    lobby.setPlatformFee(5);
+  }
+}
+
 contract EngineGetterPermissionsTest is LobbyTest {
   function testPlayerCantQueryAnotherDeposit() public {
     changePrank(p1);
