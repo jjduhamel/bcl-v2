@@ -16,14 +16,6 @@ contract Lobby is
   Escrow,
   ILobby
 {
-  error ChessEngineOnly();
-  error GameEngineOnly();
-  error ChallengingDisabled();
-  error WageringDisabled();
-  error InvalidDepositAmount();
-  error UserBanned();
-  error PlayerOnly();
-  error NotCurrentMove();
   using EnumerableSet for EnumerableSet.AddressSet;
   using EnumerableSet for EnumerableSet.UintSet;
 
@@ -109,19 +101,13 @@ contract Lobby is
    */
 
   modifier isAdmin() {
-    _checkRole(ADMIN_ROLE);
+    if (!hasRole(ADMIN_ROLE, msg.sender)) revert AdminOnly();
     _;
   }
 
   modifier isArbiter() {
-    _checkRole(ARBITER_ROLE);
+    if (!hasRole(ARBITER_ROLE, msg.sender)) revert IChessEngine.ArbiterOnly();
     _;
-  }
-
-  function disputes() public view
-    isArbiter
-  returns (uint[] memory) {
-    return __disputes.values();
   }
 
   function allowChallenges(bool allow) external
@@ -183,7 +169,7 @@ contract Lobby is
   }
 
   function profit(address token) public view
-    isArbiter
+    isAdmin
   returns (uint) {
     return releasedFunds(address(0), token);
   }
@@ -214,16 +200,21 @@ contract Lobby is
     _;
   }
 
+  modifier isGameState(uint gameId, IChessEngine.GameState state) {
+    if (chessEngine(gameId).game(gameId).state != state) revert IChessEngine.InvalidContractState();
+    _;
+  }
+
   modifier isPlayer(uint gameId) {
     IChessEngine.GameData memory game = chessEngine(gameId).game(gameId);
-    if (msg.sender != game.whitePlayer && msg.sender != game.blackPlayer) revert PlayerOnly();
+    if (msg.sender != game.whitePlayer && msg.sender != game.blackPlayer) revert IChessEngine.PlayerOnly();
     _;
   }
 
   modifier isCurrentMove(uint gameId) {
     IChessEngine.GameData memory game = chessEngine(gameId).game(gameId);
-    if (msg.sender != game.whitePlayer && msg.sender != game.blackPlayer) revert PlayerOnly();
-    if (msg.sender != game.currentMove) revert NotCurrentMove();
+    if (msg.sender != game.whitePlayer && msg.sender != game.blackPlayer) revert IChessEngine.PlayerOnly();
+    if (msg.sender != game.currentMove) revert IChessEngine.NotCurrentMove();
     _;
   }
 
@@ -267,7 +258,7 @@ contract Lobby is
   }
 
   function checkPlayerEarnings(address player, address token) public view
-    isArbiter
+    isAdmin
   returns (uint) {
     return releasedFunds(player, token);
   }
@@ -419,6 +410,7 @@ contract Lobby is
 
   function acceptChallenge(uint gameId) external payable
     notBanned
+    isGameState(gameId, IChessEngine.GameState.Pending)
     isCurrentMove(gameId)
   {
     ChessEngine engine = chessEngine(gameId);
@@ -497,7 +489,7 @@ contract Lobby is
     emit TouchRecord(gameId, msg.sender, opponent);
   }
 
-  function cancelChallenge(uint gameId) external
+  function declineChallenge(uint gameId) external
     notBanned
     isPlayer(gameId)
   {
@@ -572,6 +564,12 @@ contract Lobby is
   /*
    * Disputes
    */
+
+  function disputes() public view
+    isArbiter
+  returns (uint[] memory) {
+    return __disputes.values();
+  }
 
   function disputeGame(uint gameId, address sender, address receiver) external
     isGameEngine(gameId)

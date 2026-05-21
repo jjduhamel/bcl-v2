@@ -6,7 +6,7 @@ import './ChessGame.t.sol';
 
 contract DrawGameTest is ChessGameTest {
   function setUp() public {
-    engine.acceptChallenge{ value: wager }(gameId);
+    lobby.acceptChallenge{ value: wager }(gameId);
     changePrank(p1);
     engine.offerDraw(gameId);
     GameData memory gameData = engine.game(gameId);
@@ -16,7 +16,7 @@ contract DrawGameTest is ChessGameTest {
   }
 
   function testMoveFailsDuringDraw() public {
-    vm.expectRevert(ChessEngine.InvalidContractState.selector);
+    vm.expectRevert(InvalidContractState.selector);
     _move(p2, 'b7b6');
   }
 
@@ -47,13 +47,13 @@ contract DrawGameTest is ChessGameTest {
 
   function testRespondDrawFailsAsSender() public {
     changePrank(p1);
-    vm.expectRevert(ChessEngine.NotCurrentMove.selector);
+    vm.expectRevert(NotCurrentMove.selector);
     engine.respondDraw(gameId, true);
   }
 
   function testRespondDrawFailsAsSpectator() public {
     changePrank(p3);
-    vm.expectRevert(ChessEngine.PlayerOnly.selector);
+    vm.expectRevert(PlayerOnly.selector);
     engine.respondDraw(gameId, true);
   }
 }

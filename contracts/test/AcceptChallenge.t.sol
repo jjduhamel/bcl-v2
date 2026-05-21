@@ -33,40 +33,34 @@ contract AcceptChallengeTest is ChallengeTest {
     expectGameStarted(p1, p2)
   {
     GameData memory gameData = engine.game(gameId);
-    engine.acceptChallenge{ value: wager }(gameId);
+    lobby.acceptChallenge{ value: wager }(gameId);
   }
 
   function testAcceptFailsWithoutDeposit() public {
-    vm.expectRevert(ChessEngine.InvalidDepositAmount.selector);
-    engine.acceptChallenge(gameId);
+    vm.expectRevert(Escrow.InvalidDeposit.selector);
+    lobby.acceptChallenge(gameId);
   }
 
   function testAcceptFailsWithLowDeposit() public {
-    vm.expectRevert(ChessEngine.InvalidDepositAmount.selector);
-    engine.acceptChallenge{ value: wager-1 }(gameId);
+    vm.expectRevert(Escrow.InvalidDeposit.selector);
+    lobby.acceptChallenge{ value: wager-1 }(gameId);
   }
 
-  function testAcceptWithExcessDeposit() public
-    testChallengeAccepted(gameId, p1)
-    testChallengeAccepted(gameId, p2)
-    testGameStarted(gameId, p1)
-    testGameStarted(gameId, p2)
-    testEarnings(p2, 1)
-    expectGameStarted(p1, p2)
-  {
-    engine.acceptChallenge{ value: wager+1 }(gameId);
+  function testAcceptRevertsOnExcessDeposit() public {
+    vm.expectRevert(Escrow.InvalidDeposit.selector);
+    lobby.acceptChallenge{ value: wager+1 }(gameId);
   }
 
   function testAcceptFailsAsSender() public {
     changePrank(p1);
-    vm.expectRevert(ChessEngine.NotCurrentMove.selector);
-    engine.acceptChallenge{ value: wager }(gameId);
+    vm.expectRevert(NotCurrentMove.selector);
+    lobby.acceptChallenge{ value: wager }(gameId);
   }
 
   function testAcceptAsSpectator() public {
     changePrank(p3);
-    vm.expectRevert(ChessEngine.PlayerOnly.selector);
-    engine.acceptChallenge{ value: wager }(gameId);
+    vm.expectRevert(PlayerOnly.selector);
+    lobby.acceptChallenge{ value: wager }(gameId);
   }
 
   function testAcceptDisbursesExcessFunds() public
@@ -79,30 +73,30 @@ contract AcceptChallengeTest is ChallengeTest {
     //       excess of wager amount.
     testEarnings(p1, wager/2)
   {
-    engine.modifyChallenge{ value: wager/2 }
+    lobby.modifyChallenge{ value: wager/2 }
                           (gameId, true, timePerMove, wager/2);
     changePrank(p1);
     // We need to do this here because otherwise modifyChallenge throws a touch event 
     vm.expectEmit(true, true, true, true, address(engine));
     emit GameStarted(gameId, p2, p1);
-    engine.acceptChallenge(gameId);
+    lobby.acceptChallenge(gameId);
   }
 
   function testAcceptFailsAfterAccept() public {
-    engine.acceptChallenge{ value: wager }(gameId);
-    vm.expectRevert(ChessEngine.InvalidContractState.selector);
-    engine.acceptChallenge(gameId);
+    lobby.acceptChallenge{ value: wager }(gameId);
+    vm.expectRevert(InvalidContractState.selector);
+    lobby.acceptChallenge(gameId);
   }
 
   function testDeclineFailsAfterAccept() public {
-    engine.acceptChallenge{ value: wager }(gameId);
-    vm.expectRevert(ChessEngine.InvalidContractState.selector);
-    engine.declineChallenge(gameId);
+    lobby.acceptChallenge{ value: wager }(gameId);
+    vm.expectRevert(InvalidContractState.selector);
+    lobby.declineChallenge(gameId);
   }
 
   function testModifyFailsAfterAccept() public {
-    engine.acceptChallenge{ value: wager }(gameId);
-    vm.expectRevert(ChessEngine.InvalidContractState.selector);
-    engine.modifyChallenge(gameId, true, timePerMove, wager);
+    lobby.acceptChallenge{ value: wager }(gameId);
+    vm.expectRevert(InvalidContractState.selector);
+    lobby.modifyChallenge(gameId, true, timePerMove, wager);
   }
 }

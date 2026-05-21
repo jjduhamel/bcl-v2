@@ -58,7 +58,7 @@ abstract contract LobbyTest is Test, ILobby, IChessEngine {
   }
 
   function fee() internal view returns (uint) {
-    return wager * engine.platformFeePerc() / 100;
+    return wager * lobby.platformFeePerc() / 100;
   }
 
   function purse() internal view returns (uint) {
@@ -101,7 +101,7 @@ contract ChallengingDisabledTest is LobbyTest {
   }
 
   function testChallengeDisabled() public {
-    vm.expectRevert(Lobby.ChallengingDisabled.selector);
+    vm.expectRevert(ChallengingDisabled.selector);
     lobby.challenge(p2, true, 60, 10, address(0));
   }
 }
@@ -133,8 +133,8 @@ contract WageringDisabledTest is LobbyTest {
   }
 
   function testWageringDisabled() public {
-    vm.expectRevert(Lobby.WageringDisabled.selector);
-    lobby.challenge{ value: wager }(p2, true, wager, 60, address(0));
+    vm.expectRevert(WageringDisabled.selector);
+    lobby.challenge{ value: wager }(p2, true, 60, wager, address(0));
   }
 }
 
@@ -148,7 +148,7 @@ contract WageringEnabledTest is LobbyTest {
   function testChallengeWithWager() public {
     vm.expectEmit(false, false, false, false, address(lobby));
     emit NewChallenge(0, p1, p2);
-    lobby.challenge{ value: wager }(p2, true, wager, 60, address(0));
+    lobby.challenge{ value: wager }(p2, true, 60, wager, address(0));
   }
 
   function _testPlayerLobby(address player) private returns (uint[] memory) {
@@ -159,21 +159,17 @@ contract WageringEnabledTest is LobbyTest {
   }
 
   function testPlayersReceiveChallenge() public {
-    lobby.challenge{ value: wager }(p2, true, wager, 60, address(0));
+    lobby.challenge{ value: wager }(p2, true, 60, wager, address(0));
     uint[] memory c1 = _testPlayerLobby(p1);
     uint[] memory c2 = _testPlayerLobby(p2);
     assertEq(c1, c2);
   }
 
   function testInsufficientDepositAmount() public {
-    vm.expectRevert(Lobby.InvalidDepositAmount.selector);
+    vm.expectRevert(InvalidDepositAmount.selector);
     lobby.challenge{ value: wager/2 }(p2, true, 60, wager, address(0));
   }
 
-  function testExcessDepositAmount() public {
-    lobby.challenge{ value: wager*2 }(p2, true, 60, wager, address(0));
-    // TODO
-  }
 }
 
 contract BanUserTest is LobbyTest {
@@ -184,7 +180,7 @@ contract BanUserTest is LobbyTest {
   }
 
   function testChallengeFails() public {
-    vm.expectRevert(Lobby.UserBanned.selector);
+    vm.expectRevert(UserBanned.selector);
     lobby.challenge(p2, true, 60, 0, address(0));
   }
 
@@ -199,38 +195,38 @@ contract BanUserTest is LobbyTest {
 }
 
 contract EngineGetterPermissionsTest is LobbyTest {
-  function testPlayerCantQueryAnotherBalance() public {
+  function testPlayerCantQueryAnotherDeposit() public {
     changePrank(p1);
-    vm.expectRevert(ChessEngine.ArbiterOnly.selector);
-    engine.balance(1, p2);
+    vm.expectRevert(ArbiterOnly.selector);
+    lobby.checkPlayerDeposit(1, p2);
   }
 
-  function testPlayerCantQueryOwnBalanceViaTwoArgForm() public {
+  function testPlayerCantQueryOwnDepositViaTwoArgForm() public {
     changePrank(p1);
-    vm.expectRevert(ChessEngine.ArbiterOnly.selector);
-    engine.balance(1, p1);
+    vm.expectRevert(ArbiterOnly.selector);
+    lobby.checkPlayerDeposit(1, p1);
   }
 
   function testArbiterCanQueryAnyBalance() public {
     // arbiter holds ADMIN_ROLE from initializer; isArbiter accepts admin
-    assertEq(engine.balance(1, p1), 0);
-    assertEq(engine.balance(1, p2), 0);
+    assertEq(lobby.checkPlayerDeposit(1, p1), 0);
+    assertEq(lobby.checkPlayerDeposit(1, p2), 0);
   }
 
   function testPlayerCantQueryAnotherEarnings() public {
     changePrank(p1);
-    vm.expectRevert(ChessEngine.ArbiterOnly.selector);
-    engine.earnings(p2, address(0));
+    vm.expectRevert(AdminOnly.selector);
+    lobby.checkPlayerEarnings(p2, address(0));
   }
 
   function testPlayerCantQueryOwnEarningsViaTwoArgForm() public {
     changePrank(p1);
-    vm.expectRevert(ChessEngine.ArbiterOnly.selector);
-    engine.earnings(p1, address(0));
+    vm.expectRevert(AdminOnly.selector);
+    lobby.checkPlayerEarnings(p1, address(0));
   }
 
   function testArbiterCanQueryAnyEarnings() public {
-    assertEq(engine.earnings(p1, address(0)), 0);
-    assertEq(engine.earnings(p2, address(0)), 0);
+    assertEq(lobby.checkPlayerEarnings(p1, address(0)), 0);
+    assertEq(lobby.checkPlayerEarnings(p2, address(0)), 0);
   }
 }

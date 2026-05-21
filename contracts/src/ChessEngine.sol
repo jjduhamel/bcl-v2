@@ -5,20 +5,10 @@ import '@oz-upgradeable/proxy/utils/UUPSUpgradeable.sol';
 import '@lib/Bitboard.sol';
 import '@lib/UCI.sol';
 import './IChessEngine.sol';
+import './ILobby.sol';
 import './Lobby.sol';
 
 contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
-  error InvalidTimePerMove();
-  error InvalidContractState();
-  error NotCurrentMove();
-  error NotOpponentsMove();
-  error TimerActive();
-  error TimerExpired();
-  error PlayerOnly();
-  error LobbyContractOnly();
-  error MissingRecord();
-  error AdminOnly();
-  error ArbiterOnly();
   using Bitboard for Bitboard.Bitboard;
   Lobby private __lobby;
 
@@ -46,7 +36,7 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
    */
 
   modifier isAdmin() {
-    if (!__lobby.hasRole(__lobby.ADMIN_ROLE(), msg.sender)) revert AdminOnly();
+    if (!__lobby.hasRole(__lobby.ADMIN_ROLE(), msg.sender)) revert ILobby.AdminOnly();
     _;
   }
 

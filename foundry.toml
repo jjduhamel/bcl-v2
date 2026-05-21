@@ -2,11 +2,11 @@
 src = 'contracts/src/'
 test = 'contracts/test/'
 libs = [ 'contracts/lib/' ]
-via_ir = true
+#via_ir = true
 #sparse_mode = true
 evm_version = 'cancun'
-optimizer = true
-optimizer_runs = 200
+#optimizer = true
+#optimizer_runs = 200
 
 [rpc_endpoints]
 localhost = '127.0.0.1:8545'

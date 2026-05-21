@@ -138,9 +138,9 @@ abstract contract Escrow {
   function _depositERC20(address player, uint gameId, address token, uint amount) private {
     if (token == address(0)) revert InvalidToken();
     TokenDeposit memory d = currentDeposit(player, gameId);
-    // The comparison to address(0) is necessary because on the first deposit, this is what
-    // gets returned by default.  On subsequent deposits, it will contain the token address
-    if (d.token != address(0) && d.token != token) revert InvalidToken();
+    // d.amount > 0 distinguishes an existing deposit from "no entry yet".
+    // Any prior deposit must match the requested token, even if the prior was ETH (d.token == 0).
+    if (d.amount > 0 && d.token != token) revert InvalidToken();
     uint total = d.amount + amount;
     if (total > type(uint96).max) revert AmountOverflow();
     IERC20(token).safeTransferFrom(player, address(this), amount);
