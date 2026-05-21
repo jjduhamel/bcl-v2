@@ -30,6 +30,11 @@ abstract contract Escrow {
   // Platform fee percentage (0-100) applied to each player's wager at game start
   uint private __platformFeePerc;
 
+  // Reserved slots for future Escrow state additions. Adding a new state variable
+  // above the gap means decrementing the gap size by the same amount, preserving
+  // the storage layout of any inheriting contract across upgrades.
+  uint256[47] private __gap;
+
   function currentDeposit(address player, uint gameId) internal view returns (TokenDeposit memory) {
     (bool exists, TokenDeposit memory d) = __restricted[player].tryGet(gameId);
     return exists ? d : TokenDeposit(address(0), 0);

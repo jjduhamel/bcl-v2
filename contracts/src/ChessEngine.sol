@@ -13,10 +13,13 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
   Lobby private __lobby;
 
   mapping(uint => GameData) private __games;
-  // map gameId -> moves (uci)
   mapping(uint => string[]) __moves;
-  // map gameId -> bitboards
   mapping(uint => Bitboard.Bitboard) __bitboards;
+
+  // Reserved slots for future ChessEngine state additions. Adding a new state
+  // variable above the gap means decrementing the gap size by the same amount,
+  // preserving the storage layout across upgrades.
+  uint256[46] private __gap;
 
   constructor() {
     _disableInitializers();
