@@ -4,28 +4,40 @@ import '@oz/token/ERC20/IERC20.sol';
 import '@oz/token/ERC20/utils/SafeERC20.sol';
 import '@oz/utils/structs/EnumerableMap.sol';
 import '../IChessEngine.sol';
-import './GameIDToTokenDepositMap.sol';
+
+// token (160 bits) | amount (96 bits) packed into bytes32
+struct TokenDeposit {
+  address token;
+  uint96 amount;
+}
 
 abstract contract Escrow {
   using SafeERC20 for IERC20;
   using EnumerableMap for EnumerableMap.AddressToUintMap;
-  using GameIDToTokenDepositMap for GameIDToTokenDepositMap.Map;
+  using TokenDepositMap for TokenDepositMap.GameIDTokenDepositMap;
 
-  error InvalidToken();
   error EscrowLocked();
-  error InsufficientFunds();
   error AmountOverflow();
+  error InvalidToken();
+  error InvalidDeposit();
   error InsufficientBalance();
   error TransferFailed();
 
   // player -> gameId -> token deposit (address(0) token = ETH)
-  mapping(address => GameIDToTokenDepositMap.Map) private __restricted;
+  mapping(address => TokenDepositMap.GameIDTokenDepositMap) private __restricted;
   // player -> token -> claimable amount (address(0) player = platform fees)
   mapping(address => EnumerableMap.AddressToUintMap) private __released;
+  // Platform fee percentage (0-100) applied to each player's wager at game start
+  uint private __platformFeePerc;
 
-  function restrictedFunds(address player, uint gameId) internal view returns (TokenDeposit memory) {
+  function currentDeposit(address player, uint gameId) internal view returns (TokenDeposit memory) {
     (bool exists, TokenDeposit memory d) = __restricted[player].tryGet(gameId);
     return exists ? d : TokenDeposit(address(0), 0);
+  }
+
+  // TODO: Remove this
+  function restrictedFunds(address player, uint gameId) internal view returns (TokenDeposit memory) {
+    return currentDeposit(player, gameId);
   }
 
   function tokens(address player) internal view returns (address[] memory) {
@@ -47,9 +59,16 @@ abstract contract Escrow {
   function refund(address player, uint gameId, uint amount) internal {
     (bool exists, TokenDeposit memory d) = __restricted[player].tryGet(gameId);
     if (!exists || amount == 0) return;
-    if (d.amount < amount) revert InsufficientFunds();
+    if (d.amount < amount) revert InsufficientBalance();
     __released[player].set(d.token, releasedFunds(player, d.token) + amount);
     __restricted[player].set(gameId, d.token, d.amount - amount);
+  }
+
+  // Refund any deposit amount above `expected` to the player's released funds.
+  // Used at game start to clean up over-deposits accumulated through challenge modifications.
+  function refundExcess(address player, uint gameId, uint expected) internal {
+    uint bal = currentDeposit(player, gameId).amount;
+    if (bal > expected) refund(player, gameId, bal - expected);
   }
 
   function disburse(
@@ -76,13 +95,29 @@ abstract contract Escrow {
     }
   }
 
-  function chargeFee(address player, uint gameId, address token, uint fee) internal {
-    (bool exists, TokenDeposit memory d) = __restricted[player].tryGet(gameId);
-    if (!exists) return;  // Don't charge any fee for zero-wager games
-    if (d.token != token) revert InvalidToken();
-    if (d.amount < fee) revert InsufficientFunds();
-    d.amount -= uint96(fee);
-    __restricted[player].set(gameId, d.token, d.amount);
+  /*
+   * Platform Fee
+   */
+
+  function platformFeePerc() public view returns (uint) {
+    return __platformFeePerc;
+  }
+
+  function _setPlatformFee(uint perc) internal {
+    __platformFeePerc = perc;
+  }
+
+  function _platformFee(uint wager) internal view returns (uint96) {
+    return uint96(wager * __platformFeePerc / 100);
+  }
+
+  function chargeFee(address player, uint gameId, address token) internal {
+    TokenDeposit memory d = currentDeposit(player, gameId);
+    if (d.amount == 0) return;
+    uint96 fee = _platformFee(d.amount);
+    // Debit fee from player escrow account
+    __restricted[player].set(gameId, d.token, d.amount-fee);
+    // Credit fee to platform account (address(0))
     __released[address(0)].set(token, releasedFunds(address(0), token) + fee);
   }
 
@@ -91,17 +126,22 @@ abstract contract Escrow {
    */
 
   function _depositETH(address player, uint gameId, address token, uint amount) private {
-    if (msg.value < amount) revert InsufficientFunds();
-    (bool exists, TokenDeposit memory d) = __restricted[player].tryGet(gameId);
-    if (exists && d.token != address(0)) revert InvalidToken();
-    uint total = exists ? d.amount + amount : amount;
+    if (token != address(0)) revert InvalidToken();
+    if (msg.value != amount) revert InvalidDeposit();
+    TokenDeposit memory d = currentDeposit(player, gameId);
+    if (d.token != address(0)) revert InvalidToken();
+    uint total = d.amount + amount;
+    if (total > type(uint96).max) revert AmountOverflow();
     __restricted[player].set(gameId, address(0), total);
   }
 
   function _depositERC20(address player, uint gameId, address token, uint amount) private {
-    (bool exists, TokenDeposit memory d) = __restricted[player].tryGet(gameId);
-    if (exists && d.token != token) revert InvalidToken();
-    uint total = exists ? d.amount + amount : amount;
+    if (token == address(0)) revert InvalidToken();
+    TokenDeposit memory d = currentDeposit(player, gameId);
+    // The comparison to address(0) is necessary because on the first deposit, this is what
+    // gets returned by default.  On subsequent deposits, it will contain the token address
+    if (d.token != address(0) && d.token != token) revert InvalidToken();
+    uint total = d.amount + amount;
     if (total > type(uint96).max) revert AmountOverflow();
     IERC20(token).safeTransferFrom(player, address(this), amount);
     __restricted[player].set(gameId, token, total);
@@ -159,5 +199,56 @@ abstract contract Escrow {
 
   function releasePlatformFunds(address token, address receiver) internal {
     (token == address(0) ? _releasePlatformETH : _releasePlatformERC20)(token, payable(receiver));
+  }
+}
+
+library TokenDepositMap {
+  using EnumerableMap for EnumerableMap.UintToBytes32Map;
+
+  struct GameIDTokenDepositMap {
+    EnumerableMap.UintToBytes32Map _inner;
+  }
+
+  error NoDeposit();
+  error AmountOverflow();
+
+  function _encode(address token, uint96 amount) private pure returns (bytes32) {
+    return bytes32((uint256(uint160(token)) << 96) | uint256(amount));
+  }
+
+  function _decode(bytes32 val) private pure returns (TokenDeposit memory) {
+    return TokenDeposit(
+      address(uint160(uint256(val) >> 96)),
+      uint96(uint256(val))
+    );
+  }
+
+  function set(GameIDTokenDepositMap storage map, uint gameId, address token, uint amount) internal {
+    if (amount > type(uint96).max) revert AmountOverflow();
+    map._inner.set(gameId, _encode(token, uint96(amount)));
+  }
+
+  function get(GameIDTokenDepositMap storage map, uint gameId) internal view returns (TokenDeposit memory) {
+    (bool exists, bytes32 val) = map._inner.tryGet(gameId);
+    if (!exists) revert NoDeposit();
+    return _decode(val);
+  }
+
+  function tryGet(GameIDTokenDepositMap storage map, uint gameId) internal view returns (bool, TokenDeposit memory) {
+    (bool exists, bytes32 val) = map._inner.tryGet(gameId);
+    return (exists, exists ? _decode(val) : TokenDeposit(address(0), 0));
+  }
+
+  function remove(GameIDTokenDepositMap storage map, uint gameId) internal returns (bool) {
+    return map._inner.remove(gameId);
+  }
+
+  function length(GameIDTokenDepositMap storage map) internal view returns (uint) {
+    return map._inner.length();
+  }
+
+  function at(GameIDTokenDepositMap storage map, uint index) internal view returns (uint, TokenDeposit memory) {
+    (uint gameId, bytes32 val) = map._inner.at(index);
+    return (gameId, _decode(val));
   }
 }
