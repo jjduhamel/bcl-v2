@@ -23,4 +23,12 @@ interface ILobby {
   event DisputeResolved(uint indexed gameId
                       , address indexed sender
                       , address indexed receiver);
+
+  error ChessEngineOnly();
+  error GameEngineOnly();
+  error ChallengingDisabled();
+  error WageringDisabled();
+  error InvalidDepositAmount();
+  error UserBanned();
+  error AdminOnly();
 }

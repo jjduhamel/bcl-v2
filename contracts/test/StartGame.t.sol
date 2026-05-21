@@ -6,7 +6,7 @@ import './ChessGame.t.sol';
 
 contract StartGameTest is ChessGameTest {
   function setUp() public {
-    engine.acceptChallenge{ value: wager }(gameId);
+    lobby.acceptChallenge{ value: wager }(gameId);
     changePrank(p2);
   }
 
@@ -35,7 +35,7 @@ contract StartGameTest is ChessGameTest {
   }
 
   function testFirstMoveAsBlackFails() public {
-    vm.expectRevert(ChessEngine.NotCurrentMove.selector);
+    vm.expectRevert(NotCurrentMove.selector);
     _move(p2, 'b7b6');
   }
 
@@ -56,7 +56,7 @@ contract StartGameTest is ChessGameTest {
 
   function testConsecutiveMoveFails() public {
     _testMove(p1, 'a2a3');
-    vm.expectRevert(ChessEngine.NotCurrentMove.selector);
+    vm.expectRevert(NotCurrentMove.selector);
     _move(p1, 'b2b4');
   }
 }

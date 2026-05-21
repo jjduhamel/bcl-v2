@@ -39,4 +39,15 @@ interface IChessEngine {
   event ArbiterAction(uint indexed gameId
                     , address indexed arbiter
                     , GameOutcome indexed outcome);
+
+  error InvalidTimePerMove();
+  error InvalidContractState();
+  error NotCurrentMove();
+  error NotOpponentsMove();
+  error TimerActive();
+  error TimerExpired();
+  error PlayerOnly();
+  error LobbyContractOnly();
+  error MissingRecord();
+  error ArbiterOnly();
 }

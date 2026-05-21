@@ -6,7 +6,7 @@ import './ChessGame.t.sol';
 
 contract ResignGameTest is ChessGameTest {
   function setUp() public {
-    engine.acceptChallenge{ value: wager }(gameId);
+    lobby.acceptChallenge{ value: wager }(gameId);
   }
 
   function testResignAsWhite() public
@@ -33,13 +33,13 @@ contract ResignGameTest is ChessGameTest {
 
   function testResignAsSpectator() public {
     changePrank(p3);
-    vm.expectRevert(ChessEngine.PlayerOnly.selector);
+    vm.expectRevert(PlayerOnly.selector);
     engine.resign(gameId);
   }
 
   function testMoveFailsAfterResign() public {
     engine.resign(gameId);
-    vm.expectRevert(ChessEngine.InvalidContractState.selector);
+    vm.expectRevert(InvalidContractState.selector);
     _move(p1, 'a2a3');
   }
 
@@ -48,8 +48,8 @@ contract ResignGameTest is ChessGameTest {
     engine.resign(gameId);
     changePrank(p2);
     uint balBefore = p2.balance;
-    engine.withdraw(address(0));
+    lobby.withdraw(address(0));
     assertEq(p2.balance - balBefore, purse());
-    assertEq(engine.earnings(address(0)), 0);
+    assertEq(lobby.earnings(address(0)), 0);
   }
 }
