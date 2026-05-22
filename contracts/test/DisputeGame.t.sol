@@ -6,7 +6,7 @@ import './ChessGame.t.sol';
 
 contract DisputeGameTest is ChessGameTest {
   function setUp() public {
-    engine.acceptChallenge{ value: wager }(gameId);
+    lobby.acceptChallenge{ value: wager }(gameId);
     // This has to be a legal move now because of bitboard logic
     _testMove(p1, 'a2a3');
     changePrank(p2);
@@ -34,7 +34,7 @@ contract DisputeGameTest is ChessGameTest {
 
   function testDisputeAsSender() public {
     changePrank(p1);
-    vm.expectRevert(ChessEngine.NotCurrentMove.selector);
+    vm.expectRevert(NotCurrentMove.selector);
     engine.disputeGame(gameId);
   }
 
@@ -47,13 +47,13 @@ contract DisputeGameTest is ChessGameTest {
 
   function testDisputeAsSpectator() public {
     changePrank(p3);
-    vm.expectRevert(ChessEngine.PlayerOnly.selector);
+    vm.expectRevert(PlayerOnly.selector);
     engine.disputeGame(gameId);
   }
 
   function testMoveFailsAfterDispute() public {
     engine.disputeGame(gameId);
-    vm.expectRevert(ChessEngine.InvalidContractState.selector);
+    vm.expectRevert(InvalidContractState.selector);
     _move(p2, 'b7b6');
   }
 }

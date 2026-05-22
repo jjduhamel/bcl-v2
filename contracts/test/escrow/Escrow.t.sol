@@ -23,6 +23,7 @@ abstract contract EscrowTest is Test, Escrow {
     token.approve(address(this), type(uint256).max);
     vm.prank(p2);
     token.approve(address(this), type(uint256).max);
+    _setPlatformFee(1);
   }
 }
 

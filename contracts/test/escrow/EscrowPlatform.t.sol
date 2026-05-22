@@ -5,10 +5,10 @@ import './Escrow.t.sol';
 
 contract EscrowERC20PlatformTest is EscrowTest {
   function setUp() public {
-    deposit(p1, gameId, address(token), wager + fee);
-    deposit(p2, gameId, address(token), wager + fee);
-    chargeFee(p1, gameId, address(token), fee);
-    chargeFee(p2, gameId, address(token), fee);
+    deposit(p1, gameId, address(token), wager);
+    deposit(p2, gameId, address(token), wager);
+    chargeFee(p1, gameId, address(token));
+    chargeFee(p2, gameId, address(token));
   }
 
   function testPlatformEarningsAccumulate() public {
@@ -37,10 +37,10 @@ contract EscrowERC20PlatformTest is EscrowTest {
 
 contract EscrowETHPlatformTest is EscrowETHTest {
   function setUp() public {
-    this.depositETH{value: wager + fee}(p1, gameId, address(0), wager+fee);
-    this.depositETH{value: wager + fee}(p2, gameId, address(0), wager+fee);
-    chargeFee(p1, gameId, address(0), fee);
-    chargeFee(p2, gameId, address(0), fee);
+    this.depositETH{value: wager}(p1, gameId, address(0), wager);
+    this.depositETH{value: wager}(p2, gameId, address(0), wager);
+    chargeFee(p1, gameId, address(0));
+    chargeFee(p2, gameId, address(0));
   }
 
   function testPlatformEarningsAccumulate() public {

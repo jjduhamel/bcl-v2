@@ -20,7 +20,7 @@ contract ModifyChallengeTest is ChallengeTest {
   function testModifyColor() public
     expectTouchRecord(gameId, p2, p1)
   {
-    engine.modifyChallenge{ value: wager }(gameId, true, timePerMove, wager);
+    lobby.modifyChallenge{ value: wager }(gameId, true, timePerMove, wager);
     GameData memory gameData = engine.game(gameId);
     assertEq(gameData.currentMove, p1);
     assertEq(gameData.whitePlayer, p2);
@@ -31,7 +31,7 @@ contract ModifyChallengeTest is ChallengeTest {
     expectTouchRecord(gameId, p1, p2)
   {
     changePrank(p1);
-    engine.modifyChallenge(gameId, false, timePerMove, wager);
+    lobby.modifyChallenge(gameId, false, timePerMove, wager);
     GameData memory gameData = engine.game(gameId);
     assertTrue(gameData.state == IChessEngine.GameState.Pending);
     assertEq(gameData.currentMove, p2);
@@ -41,36 +41,32 @@ contract ModifyChallengeTest is ChallengeTest {
 
   function testModifyFailsWithoutDeposit() public
   {
-    vm.expectRevert(ChessEngine.InvalidDepositAmount.selector);
-    engine.modifyChallenge(gameId, true, timePerMove, wager);
+    vm.expectRevert(Escrow.InvalidDeposit.selector);
+    lobby.modifyChallenge(gameId, true, timePerMove, wager);
   }
 
   function testModifyFailsWithLowDeposit() public {
-    vm.expectRevert(ChessEngine.InvalidDepositAmount.selector);
-    engine.modifyChallenge{ value: wager-1 }(gameId, true, timePerMove, wager);
+    vm.expectRevert(Escrow.InvalidDeposit.selector);
+    lobby.modifyChallenge{ value: wager-1 }(gameId, true, timePerMove, wager);
   }
 
   function testModifyTimePerMove() public
     expectTouchRecord(gameId, p2, p1)
   {
-    engine.modifyChallenge{ value: wager }(gameId, false, timePerMove-1, wager);
+    lobby.modifyChallenge{ value: wager }(gameId, false, timePerMove-1, wager);
     GameData memory gameData = engine.game(gameId);
     assertEq(gameData.timePerMove, timePerMove-1);
   }
 
   function testModifyInvalidTPMFails() public {
-    vm.expectRevert(ChessEngine.InvalidTimePerMove.selector);
-    engine.modifyChallenge{ value: wager }(gameId, false, 59, wager);
+    vm.expectRevert(InvalidTimePerMove.selector);
+    lobby.modifyChallenge{ value: wager }(gameId, false, 59, wager);
   }
 
   function testModifyWager() public
-    // NOTE: Modifying the challenge will also change the platform fee
-    //       that the contract computes, so the earnings will be in 
-    //       excess of wager amount.
-    testEarnings(p1, wager/2)
     expectTouchRecord(gameId, p2, p1)
   {
-    engine.modifyChallenge{ value: wager-1 }(gameId, true, timePerMove, wager/2);
+    lobby.modifyChallenge{ value: wager/2 }(gameId, true, timePerMove, wager/2);
     GameData memory gameData = engine.game(gameId);
     assertEq(gameData.wagerAmount, wager/2);
   }
@@ -81,19 +77,19 @@ contract ModifyChallengeTest is ChallengeTest {
     expectTouchRecord(gameId, p1, p2)
   {
     changePrank(p1);
-    engine.modifyChallenge{ value: wager }(gameId, true, timePerMove, wager*2);
+    lobby.modifyChallenge{ value: wager }(gameId, true, timePerMove, wager*2);
     GameData memory gameData = engine.game(gameId);
     assertEq(gameData.wagerAmount, wager*2);
   }
 
   function testModifyWagerFailsWithoutDeposit() public {
-    vm.expectRevert(ChessEngine.InvalidDepositAmount.selector);
-    engine.modifyChallenge(gameId, true, timePerMove, wager*2);
+    vm.expectRevert(Escrow.InvalidDeposit.selector);
+    lobby.modifyChallenge(gameId, true, timePerMove, wager*2);
   }
 
   function testModifyFailsAsSpectator() public {
     changePrank(p3);
-    vm.expectRevert(ChessEngine.PlayerOnly.selector);
-    engine.modifyChallenge(gameId, false, timePerMove*2, wager/2);
+    vm.expectRevert(PlayerOnly.selector);
+    lobby.modifyChallenge(gameId, false, timePerMove*2, wager/2);
   }
 }

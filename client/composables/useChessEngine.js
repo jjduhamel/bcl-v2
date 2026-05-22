@@ -363,7 +363,7 @@ export default async function(gameId) {
   const withdrawWinnings = () => new Promise(async (resolve, reject) => {
     try {
       $amplitude.track('WithdrawWinnings', { gameId });
-      const tx = await gameContract.withdraw(constants.AddressZero);
+      const tx = await lobbyContract.withdraw(constants.AddressZero);
       await tx.wait();
       console.log('Withdrew winnings for game', gameId);
       playAudioClip('nes/Victory');

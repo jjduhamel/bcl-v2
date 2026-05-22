@@ -4,6 +4,7 @@ import '@oz-upgradeable/access/AccessControlEnumerableUpgradeable.sol';
 import '@oz-upgradeable/proxy/utils/Initializable.sol';
 import '@oz-upgradeable/proxy/utils/UUPSUpgradeable.sol';
 import '@oz/utils/structs/EnumerableMap.sol';
+import '@lib/Escrow.sol';
 import './ILobby.sol';
 import './IChessEngine.sol';
 import './ChessEngine.sol';
@@ -12,14 +13,9 @@ contract Lobby is
   Initializable,
   UUPSUpgradeable,
   AccessControlEnumerableUpgradeable,
+  Escrow,
   ILobby
 {
-  error ChessEngineOnly();
-  error GameEngineOnly();
-  error ChallengingDisabled();
-  error WageringDisabled();
-  error InvalidDepositAmount();
-  error UserBanned();
   using EnumerableSet for EnumerableSet.AddressSet;
   using EnumerableSet for EnumerableSet.UintSet;
 
@@ -31,6 +27,7 @@ contract Lobby is
     uint netEarnings;
   }
 
+  // TODO This should include disputesSent, disputesReceieved, disputesWon, disputesLost
   struct PlayerMetadata {
     uint challengesSent;
     uint challengesReceived;
@@ -41,6 +38,9 @@ contract Lobby is
     uint netWagers;
     uint netWinnings;
     uint netLosses;
+    uint totalDisputes;
+    uint disputesWon;
+    uint disputesLost;
   }
 
   struct PlayerLobby {
@@ -70,11 +70,11 @@ contract Lobby is
   bytes32 public constant ROLE_8 = keccak256('ROLE_8');
 
   // Player Lobby
-  // Map player -> lobby
-  LobbyMetadata private __house;
+  LobbyMetadata private __lounge;
   EnumerableSet.AddressSet private __users;
   mapping(address => PlayerLobby) private __lobby;
   mapping(address => PlayerMetadata) private __player;
+
   // Disputed games
   EnumerableSet.UintSet private __disputes;
 
@@ -84,13 +84,6 @@ contract Lobby is
   // Map gameId -> ChessEngine
   mapping(uint => address) private __gameEngine;
 
-  // Map player -> gameId
-  //mapping(address => uint[]) private __challenges;
-  //mapping(address => uint[]) private __games;
-  //mapping(address => uint[]) private __player;
-  // List gameId[]
-  //uint[] private __disputes;
-
   constructor() {
     _disableInitializers();
   }
@@ -99,6 +92,7 @@ contract Lobby is
     __UUPSUpgradeable_init();
     _setupRole(ADMIN_ROLE, admin);
     _grantRole(ARBITER_ROLE, admin);
+    _setPlatformFee(2);
   }
 
   function _authorizeUpgrade(address newImplementation) internal override
@@ -110,19 +104,13 @@ contract Lobby is
    */
 
   modifier isAdmin() {
-    _checkRole(ADMIN_ROLE);
+    if (!hasRole(ADMIN_ROLE, msg.sender)) revert AdminOnly();
     _;
   }
 
   modifier isArbiter() {
-    _checkRole(ARBITER_ROLE);
+    if (!hasRole(ARBITER_ROLE, msg.sender)) revert IChessEngine.ArbiterOnly();
     _;
-  }
-
-  function disputes() public view
-    isArbiter
-  returns (uint[] memory) {
-    return __disputes.values();
   }
 
   function allowChallenges(bool allow) external
@@ -171,6 +159,31 @@ contract Lobby is
   }
 
   /*
+   * Platform Fees
+   */
+
+  function setPlatformFee(uint perc) public
+    isAdmin
+  { _setPlatformFee(perc); }
+
+  function platformFee(uint gameId) public view
+  returns (uint) {
+    return _platformFee(chessEngine(gameId).game(gameId).wagerAmount);
+  }
+
+  function profit(address token) public view
+    isAdmin
+  returns (uint) {
+    return releasedFunds(address(0), token);
+  }
+
+  function withdrawPlatformFunds(address token, address payable receiver) public
+    isAdmin
+  {
+    releasePlatformFunds(token, receiver);
+  }
+
+  /*
    * Modifiers
    */
 
@@ -190,15 +203,33 @@ contract Lobby is
     _;
   }
 
+  modifier isGameState(uint gameId, IChessEngine.GameState state) {
+    if (chessEngine(gameId).game(gameId).state != state) revert IChessEngine.InvalidContractState();
+    _;
+  }
+
+  modifier isPlayer(uint gameId) {
+    IChessEngine.GameData memory game = chessEngine(gameId).game(gameId);
+    if (msg.sender != game.whitePlayer && msg.sender != game.blackPlayer) revert IChessEngine.PlayerOnly();
+    _;
+  }
+
+  modifier isCurrentMove(uint gameId) {
+    IChessEngine.GameData memory game = chessEngine(gameId).game(gameId);
+    if (msg.sender != game.whitePlayer && msg.sender != game.blackPlayer) revert IChessEngine.PlayerOnly();
+    if (msg.sender != game.currentMove) revert IChessEngine.NotCurrentMove();
+    _;
+  }
+
   modifier allowChallenge() {
     if (!__allowChallenges) revert ChallengingDisabled();
     _;
   }
 
-  modifier allowWager(uint _amount, address _token) {
-    if (_amount > 0) {
+  modifier allowWager(uint wagerAmount, address wagerToken) {
+    if (wagerAmount > 0) {
       if (!__allowWagers) revert WageringDisabled();
-      if (_token == address(0) && msg.value < _amount) revert InvalidDepositAmount();
+      if (wagerToken == address(0) && msg.value < wagerAmount) revert InvalidDepositAmount();
     }
     _;
   }
@@ -209,6 +240,37 @@ contract Lobby is
   }
 
   /*
+   * Player Balances
+   */
+
+  function currentDeposit(uint gameId) public view
+    isPlayer(gameId)
+  returns (uint) {
+    return currentDeposit(msg.sender, gameId).amount;
+  }
+
+  function checkPlayerDeposit(uint gameId, address player) public view
+    isArbiter
+  returns (uint) {
+    return currentDeposit(player, gameId).amount;
+  }
+
+  function earnings(address token) public view
+  returns (uint) {
+    return releasedFunds(msg.sender, token);
+  }
+
+  function checkPlayerEarnings(address player, address token) public view
+    isAdmin
+  returns (uint) {
+    return releasedFunds(player, token);
+  }
+
+  function withdraw(address token) public {
+    release(msg.sender, token);
+  }
+
+  /*
    * Getters
    */
 
@@ -216,31 +278,13 @@ contract Lobby is
     return __lobby[player].pendingChallenges.values();
   }
 
-  /*
-  function challenges() public view returns (uint[] memory) {
-    return challenges(msg.sender);
-  }
-  */
-
   function games(address player) public view returns (uint[] memory) {
     return __lobby[player].currentGames.values();
   }
 
-  /*
-  function games() public view returns (uint[] memory) {
-    return games(msg.sender);
-  }
-  */
-
   function history(address player) public view returns (uint[] memory) {
     return __lobby[player].finishedGames.values();
   }
-
-  /*
-  function history() public view returns (uint[] memory) {
-    return history(msg.sender);
-  }
-  */
 
   function challengesSent(address player) public view returns (uint) {
     return __player[player].challengesSent;
@@ -292,15 +336,15 @@ contract Lobby is
   }
 
   function totalChallenges() public view returns (uint) {
-    return __house.gamesCreated;
+    return __lounge.gamesCreated;
   }
 
   function totalGames() public view returns (uint) {
-    return __house.gamesStarted;
+    return __lounge.gamesStarted;
   }
 
   function totalFinishes() public view returns (uint) {
-    return __house.gamesFinished;
+    return __lounge.gamesFinished;
   }
 
   /*
@@ -337,21 +381,29 @@ contract Lobby is
     allowWager(wagerAmount, wagerToken)
   returns (uint) {
     initPlayerLobby(msg.sender, opponent);
+
     // Create a new challenge on the current game engine
-    uint gameId = __currentEngine.createChallenge{ value: msg.value }
-                                                 (__house.gamesCreated
+    uint gameId = __currentEngine.createChallenge(__lounge.gamesCreated
                                                  , msg.sender
                                                  , opponent
                                                  , startAsWhite
                                                  , timePerMove
                                                  , wagerAmount
                                                  , wagerToken);
-    __house.gamesCreated++;
+    __lounge.gamesCreated++;
+
     // Set the game engine
     __gameEngine[gameId] = address(__currentEngine);
+
+    // Hold sender's wager in lobby escrow
+    if (wagerAmount > 0) {
+      deposit(msg.sender, gameId, wagerToken, wagerAmount);
+    }
+
     // Add to pending challenges
     __lobby[msg.sender].pendingChallenges.add(gameId);
     __lobby[opponent].pendingChallenges.add(gameId);
+
     // Update challenges sent/received
     __player[msg.sender].challengesSent++;
     __player[opponent].challengesReceived++;
@@ -359,39 +411,108 @@ contract Lobby is
     return gameId;
   }
 
-  function cancelChallenge(uint gameId, address sender, address receiver) external
-    isGameEngine(gameId)
-  {
-    // Remove from pending challenges
-    __lobby[sender].pendingChallenges.remove(gameId);
-    __lobby[receiver].pendingChallenges.remove(gameId);
-    emit ChallengeDeclined(gameId, sender, receiver);
-  }
-
-  function acceptChallenge(uint gameId, address sender, address receiver) external
-    isGameEngine(gameId)
+  function acceptChallenge(uint gameId) external payable
+    notBanned
+    isGameState(gameId, IChessEngine.GameState.Pending)
+    isCurrentMove(gameId)
   {
     ChessEngine engine = chessEngine(gameId);
     IChessEngine.GameData memory gameData = engine.game(gameId);
-    // Start the game
+
+    address opponent = (msg.sender == gameData.whitePlayer) ? gameData.blackPlayer
+                                                            : gameData.whitePlayer;
+    if (gameData.wagerAmount > 0) {
+      // The player may already have made a partial deposit if the challenge was modified.
+      uint balance = currentDeposit(msg.sender, gameId).amount;
+      if (balance < gameData.wagerAmount) {
+        deposit(msg.sender, gameId, gameData.wagerToken, gameData.wagerAmount - balance);
+      }
+
+      // Refund any excess deposits.  This can occur if the wager amount is modified.
+      refundExcess(msg.sender, gameId, gameData.wagerAmount);
+      refundExcess(opponent, gameId, gameData.wagerAmount);
+
+      // Charge platform fees out of both players' escrowed wagers
+      chargeFee(msg.sender, gameId, gameData.wagerToken);
+      chargeFee(opponent, gameId, gameData.wagerToken);
+      __lounge.netEarnings += 2 * uint(_platformFee(gameData.wagerAmount));
+    }
+
+    // Engine transitions Pending -> Started + emits GameStarted
     engine.startGame(gameId);
-    // Increment total games started
-    __house.gamesStarted++;
-    __house.netWagers += 2*gameData.wagerAmount;
-    __house.netEarnings += 2*engine.platformFee(gameId);
-    // Remove from pending challenges
-    __lobby[sender].pendingChallenges.remove(gameId);
-    __lobby[receiver].pendingChallenges.remove(gameId);
-    // Add to current games
-    __lobby[sender].currentGames.add(gameId);
-    __lobby[receiver].currentGames.add(gameId);
-    // Update games started
-    __player[sender].gamesStarted++;
-    __player[receiver].gamesStarted++;
-    // Update net wagers
-    __player[sender].netWagers += gameData.wagerAmount;
-    __player[receiver].netWagers += gameData.wagerAmount;
-    emit ChallengeAccepted(gameId, sender, receiver);
+
+    // Sanatize pending challenges
+    __lobby[msg.sender].pendingChallenges.remove(gameId);
+    __lobby[opponent].pendingChallenges.remove(gameId);
+
+    // Populate current games
+    __lobby[msg.sender].currentGames.add(gameId);
+    __lobby[opponent].currentGames.add(gameId);
+
+    // Platform metadata
+    __lounge.gamesStarted++;
+    __lounge.netWagers += 2*gameData.wagerAmount;
+
+    // Player metadata
+    __player[msg.sender].gamesStarted++;
+    __player[msg.sender].netWagers += gameData.wagerAmount;
+
+    // Opponent metadata
+    __player[opponent].gamesStarted++;
+    __player[opponent].netWagers += gameData.wagerAmount;
+
+    emit ChallengeAccepted(gameId, msg.sender, opponent);
+  }
+
+  // TODO support changing wagerToken (requires refunding existing escrow and re-depositing)
+  function modifyChallenge(uint gameId, bool startAsWhite, uint timePerMove, uint wagerAmount) external payable
+    notBanned
+    isPlayer(gameId)
+  {
+    if (wagerAmount > 0 && !__allowWagers) revert WageringDisabled();
+    ChessEngine engine = chessEngine(gameId);
+    IChessEngine.GameData memory gameData = engine.game(gameId);
+    address opponent = (msg.sender == gameData.whitePlayer) ? gameData.blackPlayer
+                                                            : gameData.whitePlayer;
+    address token = gameData.wagerToken;
+
+    // Engine validates state + applies seat/timePerMove/wagerAmount updates,
+    // and bumps currentMove to receiver so they can accept the modified challenge.
+    engine.modifyChallenge(gameId, msg.sender, startAsWhite, timePerMove, wagerAmount);
+
+    // Top up sender if needed. Any over-deposit from a wager decrease stays in
+    // escrow and is trimmed at game start (acceptChallenge) or returned on cancel.
+    if (wagerAmount > 0) {
+      uint balance = currentDeposit(msg.sender, gameId).amount;
+      if (balance < wagerAmount) {
+        deposit(msg.sender, gameId, token, wagerAmount - balance);
+      }
+    }
+
+    emit TouchRecord(gameId, msg.sender, opponent);
+  }
+
+  function declineChallenge(uint gameId) external
+    notBanned
+    isPlayer(gameId)
+  {
+    ChessEngine engine = chessEngine(gameId);
+    IChessEngine.GameData memory gameData = engine.game(gameId);
+    address opponent = (msg.sender == gameData.whitePlayer) ? gameData.blackPlayer
+                                                            : gameData.whitePlayer;
+
+    // Engine validates state + transitions Pending -> Declined
+    engine.declineChallenge(gameId);
+
+    // Return escrowed wagers to both players
+    refund(msg.sender, gameId);
+    refund(opponent, gameId);
+
+    // Sanitize pending challenges
+    __lobby[msg.sender].pendingChallenges.remove(gameId);
+    __lobby[opponent].pendingChallenges.remove(gameId);
+
+    emit ChallengeDeclined(gameId, msg.sender, opponent);
   }
 
   function finishGame(uint gameId, IChessEngine.GameOutcome outcome) external
@@ -401,14 +522,23 @@ contract Lobby is
     IChessEngine.GameData memory gameData = engine.game(gameId);
     address white = gameData.whitePlayer;
     address black = gameData.blackPlayer;
+
+    // Payout winner / split on draw
+    if (gameData.wagerAmount > 0) {
+      disburse(white, black, gameId, outcome);
+    }
+
     // Increment total finished games
-    __house.gamesFinished++;
+    __lounge.gamesFinished++;
+
     // Remove from current games
     __lobby[white].currentGames.remove(gameId);
     __lobby[black].currentGames.remove(gameId);
+
     // Add to finished games
     __lobby[white].finishedGames.add(gameId);
     __lobby[black].finishedGames.add(gameId);
+
     // Update games won/lost/drawn
     if (outcome == IChessEngine.GameOutcome.Draw) {
       __player[white].gamesDrawn++;
@@ -423,12 +553,14 @@ contract Lobby is
         winner = black;
         loser = white;
       }
+
       // Update winner/loser
       __player[winner].gamesWon++;
       __player[winner].netWinnings += gameData.wagerAmount;
       __player[loser].gamesLost++;
       __player[loser].netLosses += gameData.wagerAmount;
     }
+
     emit GameFinished(gameId, white, black);
   }
 
@@ -436,17 +568,27 @@ contract Lobby is
    * Disputes
    */
 
+  function disputes() public view
+    isArbiter
+  returns (uint[] memory) {
+    return __disputes.values();
+  }
+
   function disputeGame(uint gameId, address sender, address receiver) external
     isGameEngine(gameId)
   {
     __disputes.add(gameId);
+    __player[sender].totalDisputes++;
+    __player[receiver].totalDisputes++;
     emit GameDisputed(gameId, sender, receiver);
   }
 
-  function resolveDispute(uint gameId, address white, address black) external
+  function resolveDispute(uint gameId, address winner, address loser) external
     isGameEngine(gameId)
   {
     __disputes.remove(gameId);
-    emit DisputeResolved(gameId, white, black);
+    __player[winner].disputesWon++;
+    __player[loser].disputesLost++;
+    emit DisputeResolved(gameId, winner, loser);
   }
 }

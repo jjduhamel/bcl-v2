@@ -14,14 +14,14 @@ contract EscrowERC20DepositTest is EscrowTest {
   }
 
   function testUpdatesEscrowBalance() public {
-    assertEq(restrictedFunds(p1, gameId).token, address(token));
-    assertEq(restrictedFunds(p1, gameId).amount, wager);
+    assertEq(currentDeposit(p1, gameId).token, address(token));
+    assertEq(currentDeposit(p1, gameId).amount, wager);
   }
 
   function testDoubleDepositAccumulates() public {
     deposit(p1, gameId, address(token), wager);
-    assertEq(restrictedFunds(p1, gameId).token, address(token));
-    assertEq(restrictedFunds(p1, gameId).amount, 2 * wager);
+    assertEq(currentDeposit(p1, gameId).token, address(token));
+    assertEq(currentDeposit(p1, gameId).amount, 2 * wager);
   }
 
   function testWrongTokenReverts() public {
@@ -44,12 +44,12 @@ contract EscrowERC20DepositTest is EscrowTest {
     uint remaining = uint(type(uint96).max) - wager;
     token.mint(p1, remaining);
     deposit(p1, gameId, address(token), remaining);
-    assertEq(restrictedFunds(p1, gameId).amount, type(uint96).max);
+    assertEq(currentDeposit(p1, gameId).amount, type(uint96).max);
   }
 
   function testRefundMovesToEarnings() public {
     refund(p1, gameId);
-    assertEq(restrictedFunds(p1, gameId).amount, 0);
+    assertEq(currentDeposit(p1, gameId).amount, 0);
     assertEq(releasedFunds(p1, address(token)), wager);
   }
 
@@ -57,6 +57,30 @@ contract EscrowERC20DepositTest is EscrowTest {
     refund(p2, gameId);
     assertEq(releasedFunds(p2, address(token)), 0);
     assertEq(tokens(p2).length, 0);
+  }
+
+  function testRefundExcessTrimsOverage() public {
+    uint expected = wager / 2;
+    refundExcess(p1, gameId, expected);
+    assertEq(currentDeposit(p1, gameId).amount, expected);
+    assertEq(releasedFunds(p1, address(token)), wager - expected);
+  }
+
+  function testRefundExcessNoopWhenAtExpected() public {
+    refundExcess(p1, gameId, wager);
+    assertEq(currentDeposit(p1, gameId).amount, wager);
+    assertEq(releasedFunds(p1, address(token)), 0);
+  }
+
+  function testRefundExcessNoopWhenUnderExpected() public {
+    refundExcess(p1, gameId, wager + 1);
+    assertEq(currentDeposit(p1, gameId).amount, wager);
+    assertEq(releasedFunds(p1, address(token)), 0);
+  }
+
+  function testRefundExcessNoopWhenNoDeposit() public {
+    refundExcess(p2, gameId, wager);
+    assertEq(releasedFunds(p2, address(token)), 0);
   }
 }
 
@@ -66,23 +90,23 @@ contract EscrowETHDepositTest is EscrowETHTest {
   }
 
   function testUpdatesEscrowBalance() public {
-    assertEq(restrictedFunds(p1, gameId).token, address(0));
-    assertEq(restrictedFunds(p1, gameId).amount, wager);
+    assertEq(currentDeposit(p1, gameId).token, address(0));
+    assertEq(currentDeposit(p1, gameId).amount, wager);
   }
 
   function testDoubleDepositAccumulates() public {
     this.depositETH{value: wager}(p1, gameId, address(0), wager);
-    assertEq(restrictedFunds(p1, gameId).amount, 2 * wager);
+    assertEq(currentDeposit(p1, gameId).amount, 2 * wager);
   }
 
   function testInsufficientValueReverts() public {
-    vm.expectRevert(InsufficientFunds.selector);
+    vm.expectRevert(InvalidDeposit.selector);
     this.depositETH{value: wager - 1}(p2, gameId, address(0), wager);
   }
 
   function testRefundMovesToEarnings() public {
     refund(p1, gameId);
-    assertEq(restrictedFunds(p1, gameId).amount, 0);
+    assertEq(currentDeposit(p1, gameId).amount, 0);
     assertEq(releasedFunds(p1, address(0)), wager);
   }
 
@@ -102,16 +126,16 @@ contract EscrowMultiGameTest is EscrowTest {
   }
 
   function testBalancesAreIndependent() public {
-    assertEq(restrictedFunds(p1, gameId).token, address(token));
-    assertEq(restrictedFunds(p1, gameId).amount, wager);
-    assertEq(restrictedFunds(p1, gameId2).token, address(token));
-    assertEq(restrictedFunds(p1, gameId2).amount, wager);
+    assertEq(currentDeposit(p1, gameId).token, address(token));
+    assertEq(currentDeposit(p1, gameId).amount, wager);
+    assertEq(currentDeposit(p1, gameId2).token, address(token));
+    assertEq(currentDeposit(p1, gameId2).amount, wager);
   }
 
   function testRefundOneGamePreservesOther() public {
     refund(p1, gameId);
-    assertEq(restrictedFunds(p1, gameId).amount, 0);
-    assertEq(restrictedFunds(p1, gameId2).amount, wager);
+    assertEq(currentDeposit(p1, gameId).amount, 0);
+    assertEq(currentDeposit(p1, gameId2).amount, wager);
   }
 
   function testRefundBothGamesAccumulatesEarnings() public {

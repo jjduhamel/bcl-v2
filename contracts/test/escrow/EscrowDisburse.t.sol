@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 import '@forge/Test.sol';
-import '@src/lib/GameIDToTokenDepositMap.sol';
+//import '@src/lib/GameIDToTokenDepositMap.sol';
 import './Escrow.t.sol';
 import './MockERC20Token.sol';
 
@@ -31,13 +31,13 @@ contract EscrowERC20DisburseTest is EscrowTest {
 
   function testDisburseClearsEscrow() public {
     disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
-    assertEq(restrictedFunds(p1, gameId).amount, 0);
-    assertEq(restrictedFunds(p2, gameId).amount, 0);
+    assertEq(currentDeposit(p1, gameId).amount, 0);
+    assertEq(currentDeposit(p2, gameId).amount, 0);
   }
 
   function testDisburseSameGameTwiceReverts() public {
     disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
-    vm.expectRevert(GameIDToTokenDepositMap.NoDeposit.selector);
+    vm.expectRevert(TokenDepositMap.NoDeposit.selector);
     disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
   }
 
@@ -73,13 +73,13 @@ contract EscrowETHDisburseTest is EscrowETHTest {
 
   function testDisburseClearsEscrow() public {
     disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
-    assertEq(restrictedFunds(p1, gameId).amount, 0);
-    assertEq(restrictedFunds(p2, gameId).amount, 0);
+    assertEq(currentDeposit(p1, gameId).amount, 0);
+    assertEq(currentDeposit(p2, gameId).amount, 0);
   }
 
   function testDisburseSameGameTwiceReverts() public {
     disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
-    vm.expectRevert(GameIDToTokenDepositMap.NoDeposit.selector);
+    vm.expectRevert(TokenDepositMap.NoDeposit.selector);
     disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
   }
 

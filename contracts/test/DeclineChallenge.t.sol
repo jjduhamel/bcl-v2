@@ -37,7 +37,7 @@ contract DeclineChallengeTest is ChallengeTest {
     testEarnings(p1, wager)
   {
     changePrank(p1);
-    engine.declineChallenge(gameId);
+    lobby.declineChallenge(gameId);
   }
 
   function testDeclineAsReceiver() public
@@ -47,40 +47,40 @@ contract DeclineChallengeTest is ChallengeTest {
     testEarnings(p1, wager)
   {
     changePrank(p2);
-    engine.declineChallenge(gameId);
+    lobby.declineChallenge(gameId);
   }
 
   function testRefundAccumulatesEarnings() public
     testEarnings(p1, 2*wager)
   {
-    engine.declineChallenge(gameId);
+    lobby.declineChallenge(gameId);
     changePrank(p1);
     uint gameId2 = lobby.challenge{ value: wager }(p2, true, timePerMove, wager, address(0));
     changePrank(p2);
-    engine.declineChallenge(gameId2);
+    lobby.declineChallenge(gameId2);
   }
 
   function testDeclineAsSpectator() public {
     changePrank(p3);
-    vm.expectRevert(ChessEngine.PlayerOnly.selector);
-    engine.declineChallenge(gameId);
+    vm.expectRevert(PlayerOnly.selector);
+    lobby.declineChallenge(gameId);
   }
 
   function testAcceptFailsAfterDecline() public {
-    engine.declineChallenge(gameId);
-    vm.expectRevert(ChessEngine.InvalidContractState.selector);
-    engine.acceptChallenge(gameId);
+    lobby.declineChallenge(gameId);
+    vm.expectRevert(InvalidContractState.selector);
+    lobby.acceptChallenge(gameId);
   }
 
   function testDeclineFailsAfterDecline() public {
-    engine.declineChallenge(gameId);
-    vm.expectRevert(ChessEngine.InvalidContractState.selector);
-    engine.declineChallenge(gameId);
+    lobby.declineChallenge(gameId);
+    vm.expectRevert(InvalidContractState.selector);
+    lobby.declineChallenge(gameId);
   }
 
   function testModifyFailsAfterDecline() public {
-    engine.declineChallenge(gameId);
-    vm.expectRevert(ChessEngine.InvalidContractState.selector);
-    engine.modifyChallenge(gameId, true, timePerMove, wager);
+    lobby.declineChallenge(gameId);
+    vm.expectRevert(InvalidContractState.selector);
+    lobby.modifyChallenge(gameId, true, timePerMove, wager);
   }
 }
