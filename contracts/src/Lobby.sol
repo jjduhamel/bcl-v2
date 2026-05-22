@@ -38,6 +38,9 @@ contract Lobby is
     uint netWagers;
     uint netWinnings;
     uint netLosses;
+    uint totalDisputes;
+    uint disputesWon;
+    uint disputesLost;
   }
 
   struct PlayerLobby {
@@ -575,13 +578,17 @@ contract Lobby is
     isGameEngine(gameId)
   {
     __disputes.add(gameId);
+    __player[sender].totalDisputes++;
+    __player[receiver].totalDisputes++;
     emit GameDisputed(gameId, sender, receiver);
   }
 
-  function resolveDispute(uint gameId, address white, address black) external
+  function resolveDispute(uint gameId, address winner, address loser) external
     isGameEngine(gameId)
   {
     __disputes.remove(gameId);
-    emit DisputeResolved(gameId, white, black);
+    __player[winner].disputesWon++;
+    __player[loser].disputesLost++;
+    emit DisputeResolved(gameId, winner, loser);
   }
 }
