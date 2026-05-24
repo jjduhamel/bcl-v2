@@ -21,7 +21,7 @@ contract UpgradeEngine is Script {
 
     ChessEngine newImpl = new ChessEngine();
     console.log('Impl', address(newImpl));
-    engineProxy.upgradeTo(address(newImpl));
+    engineProxy.upgradeToAndCall(address(newImpl), '');
     vm.stopBroadcast();
   }
 }

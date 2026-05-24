@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-V3
 pragma solidity >=0.4.22 <0.9.0;
-import '@oz-upgradeable/access/AccessControlEnumerableUpgradeable.sol';
+import '@oz-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol';
 import '@oz-upgradeable/proxy/utils/Initializable.sol';
 import '@oz-upgradeable/proxy/utils/UUPSUpgradeable.sol';
 import '@oz/utils/structs/EnumerableMap.sol';
@@ -73,7 +73,7 @@ contract Lobby is
     EnumerableSet.UintSet pendingChallenges;
     EnumerableSet.UintSet currentGames;
     EnumerableSet.UintSet finishedGames;
-    AccountStats stats;
+    //AccountStats stats;
   }
 
   // Lobby Settings
@@ -116,8 +116,7 @@ contract Lobby is
   }
 
   function initialize(address admin) public initializer {
-    __UUPSUpgradeable_init();
-    _setupRole(ADMIN_ROLE, admin);
+    _grantRole(ADMIN_ROLE, admin);
     _grantRole(ARBITER_ROLE, admin);
     _setPlatformFee(2);
   }
