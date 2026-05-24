@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { getContract, zeroAddress, type Abi, type Address } from 'viem';
-import { publicClient, walletClient } from '../chain.js';
+import { publicClient } from '../chain.js';
 import { lobby } from './lobby.js';
 
 const require = createRequire(import.meta.url);
@@ -8,11 +8,12 @@ const { abi } = require('../../../out/ChessEngine.sol/ChessEngine.json') as { ab
 
 export const chessEngineAbi = abi;
 
+// Read-only binding — writes go through writeAs() in chain.ts.
 function makeEngine(address: Address) {
   return getContract({
     address,
     abi,
-    client: { public: publicClient, wallet: walletClient },
+    client: { public: publicClient },
   });
 }
 

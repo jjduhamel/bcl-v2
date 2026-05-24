@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { getContract, type Abi } from 'viem';
-import { publicClient, walletClient, lobbyAddress } from '../chain.js';
+import { publicClient, lobbyAddress } from '../chain.js';
 
 // The ABI lives outside src/ (it's a Forge build artifact at repo/out/) so we
 // load it via createRequire rather than a static `import ... with { type: 'json' }`
@@ -12,8 +12,10 @@ const { abi } = require('../../../out/Lobby.sol/Lobby.json') as { abi: Abi };
 
 export const lobbyAbi = abi;
 
+// Read-only binding — writes go through writeAs() in chain.ts so dev (local
+// PRIVATE_KEY) and prod (caller-signed round 2) share one funnel.
 export const lobby = getContract({
   address: lobbyAddress,
   abi,
-  client: { public: publicClient, wallet: walletClient },
+  client: { public: publicClient },
 });

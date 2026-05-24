@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { zeroAddress, type Address, type Hash } from 'viem';
+import { zeroAddress, type Address } from 'viem';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { lobby } from '../contracts/lobby.js';
-import { botAddress, submit } from '../chain.js';
+import { lobby, lobbyAbi } from '../contracts/lobby.js';
+import { resolvePlayer, signingFields, writeAs } from '../chain.js';
 import { textResult, tool } from '../util.js';
 
 const addressSchema = z.string().regex(/^0x[a-fA-F0-9]{40}$/, 'must be a 0x-prefixed 40-hex address');
@@ -22,7 +22,7 @@ export function registerLobbyTools(server: McpServer) {
       inputSchema: { player: addressSchema.optional() },
     },
     async ({ player }) => {
-      const addr = (player ?? botAddress) as Address;
+      const addr = resolvePlayer(player as Address | undefined);
       const ids = (await lobby.read.challenges([addr])) as bigint[];
       return textResult({ player: addr, challenges: ids });
     },
@@ -36,7 +36,7 @@ export function registerLobbyTools(server: McpServer) {
       inputSchema: { player: addressSchema.optional() },
     },
     async ({ player }) => {
-      const addr = (player ?? botAddress) as Address;
+      const addr = resolvePlayer(player as Address | undefined);
       const ids = (await lobby.read.games([addr])) as bigint[];
       return textResult({ player: addr, games: ids });
     },
@@ -50,7 +50,7 @@ export function registerLobbyTools(server: McpServer) {
       inputSchema: { player: addressSchema.optional() },
     },
     async ({ player }) => {
-      const addr = (player ?? botAddress) as Address;
+      const addr = resolvePlayer(player as Address | undefined);
       const ids = (await lobby.read.history([addr])) as bigint[];
       return textResult({ player: addr, history: ids });
     },
@@ -64,7 +64,7 @@ export function registerLobbyTools(server: McpServer) {
       inputSchema: { player: addressSchema.optional() },
     },
     async ({ player }) => {
-      const addr = (player ?? botAddress) as Address;
+      const addr = resolvePlayer(player as Address | undefined);
       const [
         totalWins,
         totalLosses,
@@ -107,7 +107,7 @@ export function registerLobbyTools(server: McpServer) {
       },
     },
     async ({ player, token }) => {
-      const addr = (player ?? botAddress) as Address;
+      const addr = resolvePlayer(player as Address | undefined);
       const tok = (token ?? zeroAddress) as Address;
       const [grossWagers, grossWinnings, grossLosses, earnings] = (await Promise.all([
         lobby.read.grossWagers([addr]),
@@ -130,14 +130,14 @@ export function registerLobbyTools(server: McpServer) {
     'check_deposit',
     {
       title: 'Inspect escrow deposit',
-      description: 'Amount held in lobby escrow for a player on a given game (defaults to bot).',
+      description: 'Amount held in lobby escrow for a player on a given game (defaults to bot in dev mode).',
       inputSchema: {
         gameId: gameIdSchema,
         player: addressSchema.optional(),
       },
     },
     async ({ gameId, player }) => {
-      const addr = (player ?? botAddress) as Address;
+      const addr = resolvePlayer(player as Address | undefined);
       const amount = (await lobby.read.checkPlayerDeposit([gameId, addr])) as bigint;
       return textResult({ gameId, player: addr, amount });
     },
@@ -205,16 +205,22 @@ export function registerLobbyTools(server: McpServer) {
         timePerMove: bigUintSchema.describe('Seconds allowed per move'),
         wagerAmount: bigUintSchema.default(0).describe('Wager in wei (or token base units)'),
         wagerToken: addressSchema.optional(),
+        ...signingFields,
       },
     },
-    async ({ opponent, startAsWhite, timePerMove, wagerAmount, wagerToken }) => {
+    async ({ opponent, startAsWhite, timePerMove, wagerAmount, wagerToken, from, signature, unsignedTx }) => {
       const token = (wagerToken ?? zeroAddress) as Address;
       const value = token === zeroAddress ? wagerAmount : 0n;
-      const hash = (await lobby.write.challenge(
-        [opponent as Address, startAsWhite, timePerMove, wagerAmount, token],
-        { value },
-      )) as Hash;
-      return textResult(await submit(hash));
+      return writeAs(
+        { from, signature, unsignedTx },
+        {
+          to: lobby.address,
+          abi: lobbyAbi,
+          functionName: 'challenge',
+          args: [opponent as Address, startAsWhite, timePerMove, wagerAmount, token],
+          value,
+        },
+      );
     },
   );
 
@@ -227,11 +233,20 @@ export function registerLobbyTools(server: McpServer) {
       inputSchema: {
         gameId: gameIdSchema,
         value: bigUintSchema.optional().describe('Wei to send with the call (for ETH top-up)'),
+        ...signingFields,
       },
     },
-    async ({ gameId, value }) => {
-      const hash = (await lobby.write.acceptChallenge([gameId], { value: value ?? 0n })) as Hash;
-      return textResult(await submit(hash));
+    async ({ gameId, value, from, signature, unsignedTx }) => {
+      return writeAs(
+        { from, signature, unsignedTx },
+        {
+          to: lobby.address,
+          abi: lobbyAbi,
+          functionName: 'acceptChallenge',
+          args: [gameId],
+          value: value ?? 0n,
+        },
+      );
     },
   );
 
@@ -247,14 +262,20 @@ export function registerLobbyTools(server: McpServer) {
         timePerMove: bigUintSchema,
         wagerAmount: bigUintSchema,
         value: bigUintSchema.optional().describe('Wei to send if the new wager requires a top-up'),
+        ...signingFields,
       },
     },
-    async ({ gameId, startAsWhite, timePerMove, wagerAmount, value }) => {
-      const hash = (await lobby.write.modifyChallenge(
-        [gameId, startAsWhite, timePerMove, wagerAmount],
-        { value: value ?? 0n },
-      )) as Hash;
-      return textResult(await submit(hash));
+    async ({ gameId, startAsWhite, timePerMove, wagerAmount, value, from, signature, unsignedTx }) => {
+      return writeAs(
+        { from, signature, unsignedTx },
+        {
+          to: lobby.address,
+          abi: lobbyAbi,
+          functionName: 'modifyChallenge',
+          args: [gameId, startAsWhite, timePerMove, wagerAmount],
+          value: value ?? 0n,
+        },
+      );
     },
   );
 
@@ -263,11 +284,18 @@ export function registerLobbyTools(server: McpServer) {
     {
       title: 'Decline a pending challenge',
       description: 'Decline a pending challenge. Refunds any deposited wager.',
-      inputSchema: { gameId: gameIdSchema },
+      inputSchema: { gameId: gameIdSchema, ...signingFields },
     },
-    async ({ gameId }) => {
-      const hash = (await lobby.write.declineChallenge([gameId])) as Hash;
-      return textResult(await submit(hash));
+    async ({ gameId, from, signature, unsignedTx }) => {
+      return writeAs(
+        { from, signature, unsignedTx },
+        {
+          to: lobby.address,
+          abi: lobbyAbi,
+          functionName: 'declineChallenge',
+          args: [gameId],
+        },
+      );
     },
   );
 
@@ -277,12 +305,19 @@ export function registerLobbyTools(server: McpServer) {
       title: 'Withdraw accumulated earnings',
       description:
         'Pull all withdrawable earnings of the given token out of the lobby. Default token is the zero address (ETH).',
-      inputSchema: { token: addressSchema.optional() },
+      inputSchema: { token: addressSchema.optional(), ...signingFields },
     },
-    async ({ token }) => {
+    async ({ token, from, signature, unsignedTx }) => {
       const tok = (token ?? zeroAddress) as Address;
-      const hash = (await lobby.write.withdraw([tok])) as Hash;
-      return textResult(await submit(hash));
+      return writeAs(
+        { from, signature, unsignedTx },
+        {
+          to: lobby.address,
+          abi: lobbyAbi,
+          functionName: 'withdraw',
+          args: [tok],
+        },
+      );
     },
   );
 }

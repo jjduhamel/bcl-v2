@@ -31,6 +31,37 @@ export function tool<Args = any>(
   meta: { title?: string; description?: string; inputSchema?: ZodShape },
   handler: (args: Args) => Promise<CallToolResult>,
 ): void {
+  const wrapped = async (args: Args): Promise<CallToolResult> => {
+    const start = Date.now();
+    try {
+      const result = await handler(args);
+      const ms = Date.now() - start;
+      const status = (result as { isError?: boolean }).isError ? 'err' : 'ok';
+      console.error(`[bcl-mcp] ${name} ${status} ${ms}ms ${argsSummary(args)}`);
+      return result;
+    } catch (err) {
+      const ms = Date.now() - start;
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[bcl-mcp] ${name} throw ${ms}ms ${argsSummary(args)} :: ${msg}`);
+      throw err;
+    }
+  };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (server as any).registerTool(name, meta, handler);
+  (server as any).registerTool(name, meta, wrapped);
+}
+
+// Compact one-line arg summary. Truncates anything long so a stray giant blob
+// (signature, unsignedTx) doesn't make the log line useless.
+function argsSummary(args: unknown): string {
+  if (!args || typeof args !== 'object') return '';
+  const out: string[] = [];
+  for (const [k, v] of Object.entries(args as Record<string, unknown>)) {
+    if (v === undefined) continue;
+    let s: string;
+    if (typeof v === 'bigint') s = v.toString();
+    else if (typeof v === 'string') s = v.length > 20 ? `${v.slice(0, 12)}…(${v.length})` : v;
+    else s = JSON.stringify(v);
+    out.push(`${k}=${s}`);
+  }
+  return out.join(' ');
 }

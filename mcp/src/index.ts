@@ -20,7 +20,7 @@ async function main() {
   // Diagnostic line to stderr — stdout is reserved for JSON-RPC frames.
   console.log('\n\nbcl-mcp server connected:\n');
   console.log(`  agent = ${botAddress}`);
-  console.log(`  lobby = ${lobbyAddress}`);
+  console.log(`  lobby = ${lobbyAddress}\n`);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

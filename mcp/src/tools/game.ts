@@ -1,9 +1,9 @@
 import { z } from 'zod';
-import type { Address, Hash } from 'viem';
+import type { Address } from 'viem';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { lobby } from '../contracts/lobby.js';
-import { engineFor } from '../contracts/chessEngine.js';
-import { submit } from '../chain.js';
+import { chessEngineAbi, engineFor } from '../contracts/chessEngine.js';
+import { signingFields, writeAs } from '../chain.js';
 import { getFEN, legalMoves, renderBoard, validateUCI } from '../chess.js';
 import { textResult, tool } from '../util.js';
 
@@ -175,12 +175,20 @@ export function registerGameTools(server: McpServer) {
       inputSchema: {
         gameId: gameIdSchema,
         uci: z.string().describe('UCI notation, e.g. "e2e4" or "a7a8q"'),
+        ...signingFields,
       },
     },
-    async ({ gameId, uci }) => {
+    async ({ gameId, uci, from, signature, unsignedTx }) => {
       const engine = await engineFor(gameId);
-      const hash = (await engine.write.move([gameId, uci])) as Hash;
-      return textResult(await submit(hash));
+      return writeAs(
+        { from, signature, unsignedTx },
+        {
+          to: engine.address,
+          abi: chessEngineAbi,
+          functionName: 'move',
+          args: [gameId, uci],
+        },
+      );
     },
   );
 
@@ -189,12 +197,19 @@ export function registerGameTools(server: McpServer) {
     {
       title: 'Resign a game',
       description: 'Resign the game. Opponent wins; wager is paid out.',
-      inputSchema: { gameId: gameIdSchema },
+      inputSchema: { gameId: gameIdSchema, ...signingFields },
     },
-    async ({ gameId }) => {
+    async ({ gameId, from, signature, unsignedTx }) => {
       const engine = await engineFor(gameId);
-      const hash = (await engine.write.resign([gameId])) as Hash;
-      return textResult(await submit(hash));
+      return writeAs(
+        { from, signature, unsignedTx },
+        {
+          to: engine.address,
+          abi: chessEngineAbi,
+          functionName: 'resign',
+          args: [gameId],
+        },
+      );
     },
   );
 
@@ -204,12 +219,19 @@ export function registerGameTools(server: McpServer) {
       title: 'Offer a draw',
       description:
         'Offer a draw. The game state transitions to Draw and currentMove flips to the opponent, who must call respond_draw.',
-      inputSchema: { gameId: gameIdSchema },
+      inputSchema: { gameId: gameIdSchema, ...signingFields },
     },
-    async ({ gameId }) => {
+    async ({ gameId, from, signature, unsignedTx }) => {
       const engine = await engineFor(gameId);
-      const hash = (await engine.write.offerDraw([gameId])) as Hash;
-      return textResult(await submit(hash));
+      return writeAs(
+        { from, signature, unsignedTx },
+        {
+          to: engine.address,
+          abi: chessEngineAbi,
+          functionName: 'offerDraw',
+          args: [gameId],
+        },
+      );
     },
   );
 
@@ -222,12 +244,20 @@ export function registerGameTools(server: McpServer) {
       inputSchema: {
         gameId: gameIdSchema,
         accept: z.boolean(),
+        ...signingFields,
       },
     },
-    async ({ gameId, accept }) => {
+    async ({ gameId, accept, from, signature, unsignedTx }) => {
       const engine = await engineFor(gameId);
-      const hash = (await engine.write.respondDraw([gameId, accept])) as Hash;
-      return textResult(await submit(hash));
+      return writeAs(
+        { from, signature, unsignedTx },
+        {
+          to: engine.address,
+          abi: chessEngineAbi,
+          functionName: 'respondDraw',
+          args: [gameId, accept],
+        },
+      );
     },
   );
 
@@ -237,12 +267,19 @@ export function registerGameTools(server: McpServer) {
       title: 'Claim victory on timeout',
       description:
         'Claim a win because the opponent’s move timer expired. Reverts (TimerActive) if the timer is still running.',
-      inputSchema: { gameId: gameIdSchema },
+      inputSchema: { gameId: gameIdSchema, ...signingFields },
     },
-    async ({ gameId }) => {
+    async ({ gameId, from, signature, unsignedTx }) => {
       const engine = await engineFor(gameId);
-      const hash = (await engine.write.claimVictory([gameId])) as Hash;
-      return textResult(await submit(hash));
+      return writeAs(
+        { from, signature, unsignedTx },
+        {
+          to: engine.address,
+          abi: chessEngineAbi,
+          functionName: 'claimVictory',
+          args: [gameId],
+        },
+      );
     },
   );
 
@@ -252,12 +289,19 @@ export function registerGameTools(server: McpServer) {
       title: 'Send the game to arbiter review',
       description:
         'Flag the game for arbiter review. State transitions to Review; an arbiter must call resolveDispute (not exposed here) to settle.',
-      inputSchema: { gameId: gameIdSchema },
+      inputSchema: { gameId: gameIdSchema, ...signingFields },
     },
-    async ({ gameId }) => {
+    async ({ gameId, from, signature, unsignedTx }) => {
       const engine = await engineFor(gameId);
-      const hash = (await engine.write.disputeGame([gameId])) as Hash;
-      return textResult(await submit(hash));
+      return writeAs(
+        { from, signature, unsignedTx },
+        {
+          to: engine.address,
+          abi: chessEngineAbi,
+          functionName: 'disputeGame',
+          args: [gameId],
+        },
+      );
     },
   );
 }
