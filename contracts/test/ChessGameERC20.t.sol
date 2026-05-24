@@ -20,7 +20,7 @@ abstract contract ERC20ChallengeTest is ChallengeTest {
 
     changePrank(p1);
     token.approve(address(lobby), wager);
-    gameId = lobby.challenge(p2, true, timePerMove, wager, address(token));
+    gameId = lobby.challenge(p1, p2, true, timePerMove, wager, address(token));
     changePrank(p2);
   }
 

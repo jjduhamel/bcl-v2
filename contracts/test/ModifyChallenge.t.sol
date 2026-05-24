@@ -7,7 +7,7 @@ import './Challenge.t.sol';
 
 contract ModifyChallengeTest is ChallengeTest {
   function setUp() public {
-    gameId = lobby.challenge{ value: wager }(p2, true, timePerMove, wager, address(0));
+    gameId = lobby.challenge{ value: wager }(p1, p2, true, timePerMove, wager, address(0));
     changePrank(p2);
   }
 
@@ -41,12 +41,12 @@ contract ModifyChallengeTest is ChallengeTest {
 
   function testModifyFailsWithoutDeposit() public
   {
-    vm.expectRevert(Escrow.InvalidDeposit.selector);
+    vm.expectRevert(EscrowContract.InvalidDeposit.selector);
     lobby.modifyChallenge(gameId, true, timePerMove, wager);
   }
 
   function testModifyFailsWithLowDeposit() public {
-    vm.expectRevert(Escrow.InvalidDeposit.selector);
+    vm.expectRevert(EscrowContract.InvalidDeposit.selector);
     lobby.modifyChallenge{ value: wager-1 }(gameId, true, timePerMove, wager);
   }
 
@@ -83,7 +83,7 @@ contract ModifyChallengeTest is ChallengeTest {
   }
 
   function testModifyWagerFailsWithoutDeposit() public {
-    vm.expectRevert(Escrow.InvalidDeposit.selector);
+    vm.expectRevert(EscrowContract.InvalidDeposit.selector);
     lobby.modifyChallenge(gameId, true, timePerMove, wager*2);
   }
 
