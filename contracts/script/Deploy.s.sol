@@ -9,14 +9,6 @@ import '@src/ChessEngine.sol';
 import '@aa/accounts/Simple7702Account.sol';
 
 // Deterministic (CREATE2) deployment.
-//
-// Run under `forge script --broadcast`: Foundry routes every `new{salt}` through the
-// canonical deterministic deployer at 0x4e59...b4956c, so each address is a pure function
-// of (factory, salt, initcode) and is therefore identical on every chain. The Lobby proxy
-// address additionally depends on the admin baked into its initializer, and `setChessEngine`
-// must be called by that admin — so use the SAME deployer key on every chain (admin =
-// deployer). The Engine proxy address depends on the Lobby proxy address, which is itself
-// deterministic, so the whole graph is reproducible cross-chain.
 contract Deploy is Script {
   bytes32 constant SALT = keccak256('bcl-v2.deterministic.v1');
 
@@ -44,19 +36,21 @@ contract Deploy is Script {
 
     vm.stopBroadcast();
 
-    console.log('Lobby impl   ', address(lobbyImpl));
-    console.log('Lobby proxy  ', address(lobby));
-    console.log('Engine impl  ', address(engineImpl));
-    console.log('Engine proxy ', address(engine));
-    console.log('AgentAccount ', address(agentAccount));
-    console.log('Admin        ', admin);
+    console.log('Admin:         ', admin);
+    console.log('Contract:');
+    console.log('  Lobby:       ', address(lobbyImpl));
+    console.log('  Engine:      ', address(engineImpl));
+    console.log('Proxy:');
+    console.log('  Lobby:       ', address(lobby));
+    console.log('  Engine:      ', address(engine));
+    console.log('AgentAccount:  ', address(agentAccount));
 
     // The user-facing proxy address must equal the independently computed CREATE2 address,
-    // proving the deploy went through the canonical factory (i.e. is chain-deterministic).
+    // proving the deploy went through the canonical factory
     bytes32 lobbyProxyInitHash = keccak256(
       abi.encodePacked(type(ERC1967Proxy).creationCode, abi.encode(address(lobbyImpl), lobbyInit))
     );
     address expected = vm.computeCreate2Address(SALT, lobbyProxyInitHash, CREATE2_FACTORY);
-    require(expected == address(lobby), 'lobby proxy not deterministic');
+    require(expected == address(lobby), 'Lobby proxy not deterministic');
   }
 }

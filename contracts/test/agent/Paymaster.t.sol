@@ -1,0 +1,216 @@
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.28;
+
+import '@forge/Test.sol';
+import '../Lobby.t.sol';
+import '@aa/core/EntryPoint.sol';
+import '@aa/core/BaseAccount.sol';
+import '@aa/interfaces/IPaymaster.sol';
+import '@aa/interfaces/PackedUserOperation.sol';
+
+// Unit tests for the Lobby's ERC-4337 paymaster surface (Subproject 2). These exercise the
+// paymaster's own logic only, so a plain (non-canonical) EntryPoint instance is enough — the
+// 7702 account + canonical address live in AgentGasless.t.sol.
+contract PaymasterTest is LobbyTest {
+  EntryPoint ep;
+  address a1; // registered agent, owned by p1
+
+  function setUp() public {
+    vm.deal(arbiter, 100 ether);     // arbiter == admin; LobbyTest only funds p1/p2/p3
+    ep = new EntryPoint();
+    lobby.setEntryPoint(ep);
+    a1 = makeAddr('agent1');
+    changePrank(p1);
+    lobby.registerAgent(a1, 'bot', '', '', '', '');
+    changePrank(arbiter);
+  }
+
+  // Wrap an inner call as Simple7702Account.execute(target, value, inner) calldata.
+  function _op(address sender, address target, uint value, bytes memory inner)
+    internal pure returns (PackedUserOperation memory op)
+  {
+    op.sender = sender;
+    op.callData = abi.encodeCall(BaseAccount.execute, (target, value, inner));
+  }
+
+  // Run validation as the EntryPoint and expect it to reject `op` with `err`.
+  function _expectRejected(PackedUserOperation memory op, bytes4 err) internal {
+    changePrank(address(ep));
+    vm.expectRevert(err);
+    lobby.validatePaymasterUserOp(op, bytes32(0), 0);
+  }
+
+  // Sponsoring `execute(target, 0, <selector>)` from the agent must revert with `err`.
+  function _expectCallRejected(address target, bytes4 selector, bytes4 err) internal {
+    _expectRejected(_op(a1, target, 0, abi.encodeWithSelector(selector)), err);
+  }
+
+  // Run validation as the EntryPoint and expect it to sponsor `execute(engine, 0, inner)`.
+  function _expectSponsored(bytes memory inner) internal {
+    changePrank(address(ep));
+    (bytes memory context, uint256 validationData) =
+      lobby.validatePaymasterUserOp(_op(a1, address(engine), 0, inner), bytes32(0), 0);
+    assertEq(validationData, 0);
+    assertEq(context, abi.encode(p1)); // billable owner carried to postOp
+  }
+
+  /* ---- onlyEntryPoint guard on the 4337 callbacks ---- */
+
+  function testValidateRevertsWhenCallerIsNotEntryPoint() public {
+    PackedUserOperation memory op =
+      _op(a1, address(engine), 0, abi.encodeWithSelector(ChessEngine.move.selector, uint(0), 'e2e4'));
+    changePrank(p1);
+    vm.expectRevert(EntryPointOnly.selector);
+    lobby.validatePaymasterUserOp(op, bytes32(0), 0);
+  }
+
+  function testPostOpRevertsWhenCallerIsNotEntryPoint() public {
+    changePrank(p1);
+    vm.expectRevert(EntryPointOnly.selector);
+    lobby.postOp(IPaymaster.PostOpMode.opSucceeded, '', 0, 0);
+  }
+
+  function testPostOpIsNoopForEntryPoint() public {
+    changePrank(address(ep));
+    lobby.postOp(IPaymaster.PostOpMode.opSucceeded, '', 1 gwei, 1 gwei); // no revert, no state change
+  }
+
+  /* ---- validate: sponsors a delegated agent's whitelisted engine calls ---- */
+
+  function testValidateSponsorsEveryWhitelistedEngineCall() public {
+    _expectSponsored(abi.encodeWithSelector(ChessEngine.move.selector, uint(0), 'e2e4'));
+    _expectSponsored(abi.encodeWithSelector(ChessEngine.resign.selector, uint(0)));
+    _expectSponsored(abi.encodeWithSelector(ChessEngine.offerDraw.selector, uint(0)));
+    _expectSponsored(abi.encodeWithSelector(ChessEngine.respondDraw.selector, uint(0), true));
+    _expectSponsored(abi.encodeWithSelector(ChessEngine.claimVictory.selector, uint(0)));
+    _expectSponsored(abi.encodeWithSelector(ChessEngine.disputeGame.selector, uint(0)));
+  }
+
+  /* ---- validate: rejects sponsoring Lobby actions (target is not a registered engine) ---- */
+
+  function testValidateRejectsEverySponsoredLobbyAction() public {
+    _expectCallRejected(address(lobby), Lobby.challenge.selector, UnsupportedExecuteCall.selector);
+    _expectCallRejected(address(lobby), Lobby.acceptChallenge.selector, UnsupportedExecuteCall.selector);
+    _expectCallRejected(address(lobby), Lobby.withdraw.selector, UnsupportedExecuteCall.selector);
+    _expectCallRejected(address(lobby), Lobby.registerAgent.selector, UnsupportedExecuteCall.selector);
+    // an agent must never be sponsored to drain the platform's own EntryPoint deposit
+    _expectCallRejected(address(lobby), Lobby.withdrawEntryPointDeposit.selector, UnsupportedExecuteCall.selector);
+    // nor target an arbitrary contract
+    _expectCallRejected(address(0xBEEF), ChessEngine.move.selector, UnsupportedExecuteCall.selector);
+  }
+
+  /* ---- validate: rejects non-whitelisted engine functions (right target, wrong selector) ---- */
+
+  function testValidateRejectsEveryNonWhitelistedEngineCall() public {
+    _expectCallRejected(address(engine), ChessEngine.startGame.selector, SelectorNotSponsored.selector);
+    _expectCallRejected(address(engine), ChessEngine.createChallenge.selector, SelectorNotSponsored.selector);
+    _expectCallRejected(address(engine), ChessEngine.modifyChallenge.selector, SelectorNotSponsored.selector);
+    _expectCallRejected(address(engine), ChessEngine.declineChallenge.selector, SelectorNotSponsored.selector);
+    _expectCallRejected(address(engine), ChessEngine.resolveDispute.selector, SelectorNotSponsored.selector);
+  }
+
+  /* ---- validate: rejects malformed / non-agent / value-bearing ops ---- */
+
+  function testValidateRejectsSenderThatIsNotAnAgent() public {
+    _expectRejected(
+      _op(p2, address(engine), 0, abi.encodeWithSelector(ChessEngine.move.selector, uint(0), 'e2e4')),
+      NotAnAgent.selector);
+  }
+
+  function testValidateRejectsEthValueTransfer() public {
+    _expectRejected(
+      _op(a1, address(engine), 1, abi.encodeWithSelector(ChessEngine.move.selector, uint(0), 'e2e4')),
+      UnsupportedExecuteCall.selector);
+  }
+
+  function testValidateRejectsCallDataThatIsNotAnExecuteCall() public {
+    PackedUserOperation memory op;
+    op.sender = a1;
+    op.callData = abi.encodeWithSelector(ChessEngine.move.selector, uint(0), 'e2e4'); // not execute(...)
+    _expectRejected(op, UnsupportedExecuteCall.selector);
+  }
+
+  function testValidateRejectsTruncatedCallData() public {
+    PackedUserOperation memory op;
+    op.sender = a1;
+    op.callData = hex'b61d27'; // fewer than 4 bytes
+    _expectRejected(op, UnsupportedExecuteCall.selector);
+  }
+
+  function testValidateRejectsExecuteWithEmptyInnerCall() public {
+    _expectRejected(_op(a1, address(engine), 0, ''), UnsupportedExecuteCall.selector); // inner has no selector
+  }
+
+  /* ---- funding surface is admin-only ---- */
+
+  function testSetEntryPointRequiresAdmin() public {
+    changePrank(p1);
+    vm.expectRevert(AdminOnly.selector);
+    lobby.setEntryPoint(ep);
+  }
+
+  function testDepositToEntryPointRequiresAdmin() public {
+    changePrank(p1);
+    vm.expectRevert(AdminOnly.selector);
+    lobby.depositToEntryPoint{ value: 1 ether }();
+  }
+
+  function testAddStakeRequiresAdmin() public {
+    changePrank(p1);
+    vm.expectRevert(AdminOnly.selector);
+    lobby.addStake{ value: 1 ether }(1 days);
+  }
+
+  function testWithdrawEntryPointDepositRequiresAdmin() public {
+    changePrank(p1);
+    vm.expectRevert(AdminOnly.selector);
+    lobby.withdrawEntryPointDeposit(1, payable(p1));
+  }
+
+  function testUnlockStakeRequiresAdmin() public {
+    changePrank(p1);
+    vm.expectRevert(AdminOnly.selector);
+    lobby.unlockStake();
+  }
+
+  function testWithdrawStakeRequiresAdmin() public {
+    changePrank(p1);
+    vm.expectRevert(AdminOnly.selector);
+    lobby.withdrawStake(payable(p1));
+  }
+
+  /* ---- funding moves ETH to/from the EntryPoint (admin == arbiter, the default prank) ---- */
+
+  function testDepositThenWithdrawTracksLobbyEntryPointBalance() public {
+    lobby.depositToEntryPoint{ value: 1 ether }();
+    assertEq(lobby.entryPointDeposit(), 1 ether);
+    assertEq(ep.balanceOf(address(lobby)), 1 ether);
+
+    lobby.withdrawEntryPointDeposit(0.4 ether, payable(arbiter));
+    assertEq(lobby.entryPointDeposit(), 0.6 ether);
+  }
+
+  function testAddStakeLocksStakeForTheLobby() public {
+    lobby.addStake{ value: 1 ether }(1 days);
+    IStakeManager.DepositInfo memory info = ep.getDepositInfo(address(lobby));
+    assertEq(info.stake, 1 ether);
+    assertTrue(info.staked);
+  }
+
+  function testStakeUnlockAndWithdrawReturnsEth() public {
+    lobby.addStake{ value: 1 ether }(1 days);
+    lobby.unlockStake();
+    vm.expectRevert(); // not due until the unstake delay elapses
+    lobby.withdrawStake(payable(arbiter));
+
+    skip(1 days + 1);
+    uint256 balanceBefore = arbiter.balance;
+    lobby.withdrawStake(payable(arbiter));
+    assertEq(arbiter.balance, balanceBefore + 1 ether);
+    assertEq(ep.getDepositInfo(address(lobby)).stake, 0);
+  }
+
+  function testEntryPointGetterReturnsConfiguredEntryPoint() public {
+    assertEq(address(lobby.entryPoint()), address(ep));
+  }
+}

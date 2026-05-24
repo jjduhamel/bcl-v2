@@ -39,4 +39,10 @@ interface ILobby {
   error NotAgentOwner();
   error WagerExceedsAgentMax();
   error AgentInGame();
+
+  // ERC-4337 paymaster
+  error EntryPointOnly();
+  error NotAnAgent();
+  error UnsupportedExecuteCall();
+  error SelectorNotSponsored();
 }
