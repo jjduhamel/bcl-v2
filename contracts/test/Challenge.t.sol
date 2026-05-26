@@ -24,45 +24,45 @@ abstract contract ChallengeTest is LobbyTest {
   }
 
   modifier testChallengeSent(uint gameId, address player) {
-    uint nSent = lobby.challengesSent(player);
-    uint nRecv = lobby.challengesReceived(player);
+    uint nSent = lobby.gameStats(player).created;
+    uint nRecv = lobby.gameStats(player).received;
     _;
     uint[] memory challenges = lobby.challenges(player);
-    assertEq(lobby.challengesSent(player), nSent+1);
-    assertEq(lobby.challengesReceived(player), nRecv);
+    assertEq(lobby.gameStats(player).created, nSent+1);
+    assertEq(lobby.gameStats(player).received, nRecv);
     assertEq(gameId, challenges[nSent+nRecv]);
   }
 
   modifier testChallengeReceived(uint gameId, address player) {
-    uint nSent = lobby.challengesSent(player);
-    uint nRecv = lobby.challengesReceived(player);
+    uint nSent = lobby.gameStats(player).created;
+    uint nRecv = lobby.gameStats(player).received;
     _;
     uint[] memory challenges = lobby.challenges(player);
-    assertEq(lobby.challengesSent(player), nSent);
-    assertEq(lobby.challengesReceived(player), nRecv+1);
+    assertEq(lobby.gameStats(player).created, nSent);
+    assertEq(lobby.gameStats(player).received, nRecv+1);
     assertEq(gameId, challenges[nSent+nRecv]);
   }
 
   modifier testGameStarted(uint gameId, address player) {
-    uint nGames = lobby.gamesStarted(player);
+    uint nGames = lobby.gameStats(player).started;
     uint wagers = totalWagers(player);
     _;
     changePrank(player);
     uint[] memory games = lobby.games(player);
     ChessEngine.GameData memory gameData = engine.game(gameId);
     assertEq(gameId, games[nGames]);
-    assertEq(lobby.gamesStarted(player), nGames+1);
+    assertEq(lobby.gameStats(player).started, nGames+1);
     assertEq(totalWagers(player), wagers+gameData.wagerAmount);
     assertTrue(gameData.state == IChessEngine.GameState.Started);
     assertTrue(gameData.outcome == IChessEngine.GameOutcome.Undecided);
   }
 
   modifier testGameFinished(uint gameId, address player) {
-    uint nGames = lobby.gamesFinished(player);
+    uint nGames = lobby.gameStats(player).finished;
     _;
     uint[] memory history = lobby.history(player);
     ChessEngine.GameData memory gameData = engine.game(gameId);
-    assertEq(lobby.gamesFinished(player), nGames+1);
+    assertEq(lobby.gameStats(player).finished, nGames+1);
     assertEq(gameId, history[nGames]);
     assertTrue(gameData.state == IChessEngine.GameState.Finished);
     assertFalse(gameData.outcome == IChessEngine.GameOutcome.Undecided);

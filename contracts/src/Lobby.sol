@@ -22,35 +22,6 @@ contract Lobby is
   using EnumerableSet for EnumerableSet.AddressSet;
   using EnumerableSet for EnumerableSet.UintSet;
 
-  struct GameStats {
-    uint created;
-    uint received;
-    uint started;
-    uint finished;
-    uint won;
-    uint lost;
-    uint draws;
-  }
-
-  struct WagerStats {
-    uint total;
-    uint won;
-    uint lost;
-  }
-
-  struct DisputeStats {
-    uint created;
-    uint received;
-    uint won;
-    uint lost;
-  }
-
-  struct AccountStats {
-    GameStats games;
-    WagerStats wagers;
-    DisputeStats disputes;
-  }
-
   struct PlayerProfile {
     string username;
     string avatar;            // Avatar URI
@@ -184,13 +155,9 @@ contract Lobby is
                                                  : __robots[account].stats;
   }
 
-  function statistics(address account) public view
+  function gameStats(address account) public view
   returns (GameStats memory) {
     return _stats(account).games;
-  }
-
-  function statistics() public view returns (GameStats memory) {
-    return statistics(msg.sender);
   }
 
   function wagerStats(address account) public view
@@ -199,62 +166,10 @@ contract Lobby is
     return _stats(account).wagers;
   }
 
-  function wagerStats() public view returns (WagerStats memory) {
-    return wagerStats(msg.sender);
-  }
-
-  function challengesSent(address player) public view returns (uint) {
-    return _stats(player).games.created;
-  }
-
-  function challengesReceived(address player) public view returns (uint) {
-    return _stats(player).games.received;
-  }
-
-  function gamesStarted(address player) public view returns (uint) {
-    return _stats(player).games.started;
-  }
-
-  function gamesFinished(address player) public view returns (uint) {
-    return _stats(player).games.finished;
-  }
-
-  function totalWins(address player) public view returns (uint) {
-    return _stats(player).games.won;
-  }
-
-  function totalLosses(address player) public view returns (uint) {
-    return _stats(player).games.lost;
-  }
-
-  function totalDraws(address player) public view returns (uint) {
-    return _stats(player).games.draws;
-  }
-
-  function totalChallenges() public view returns (uint) {
-    return __platform.games.created;
-  }
-
-  function totalFinishes() public view returns (uint) {
-    return __platform.games.finished;
-  }
-
-  function grossWagers() public view returns (uint) {
-    return _stats(msg.sender).wagers.total;
-  }
-
-  function grossWinnings() public view returns (uint) {
-    return _stats(msg.sender).wagers.won;
-  }
-
-  function grossLosses() public view returns (uint) {
-    return _stats(msg.sender).wagers.lost;
-  }
-
-  function netEarnings(address account) public view returns (int) {
-    uint gains = _stats(msg.sender).wagers.won;
-    uint losses = _stats(msg.sender).wagers.lost;
-    return int(gains)-int(losses);
+  function disputeStats(address account) public view
+    isOwner(account)
+  returns (DisputeStats memory) {
+    return _stats(account).disputes;
   }
 
   /*
@@ -342,6 +257,12 @@ contract Lobby is
   /*
    * Player Balances
    */
+
+  function netEarnings(address account) public view returns (int) {
+    uint gains = _stats(msg.sender).wagers.won;
+    uint losses = _stats(msg.sender).wagers.lost;
+    return int(gains)-int(losses);
+  }
 
   function earnings(address token) public view
   returns (uint) {

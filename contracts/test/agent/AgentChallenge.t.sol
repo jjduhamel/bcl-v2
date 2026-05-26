@@ -31,8 +31,7 @@ contract AgentChallengeTest is ChallengeTest {
     assertEq(ca[ca.length-1], gid);
     assertEq(cp[cp.length-1], gid);
 
-    // Stats accrue on the seat (the agent), not the owner.
-    assertEq(lobby.challengesSent(a1), 1);
+    assertEq(lobby.gameStats(a1).created, 1);
   }
 
   function testChallengeAsSelf() public {

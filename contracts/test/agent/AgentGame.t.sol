@@ -37,8 +37,8 @@ contract AgentGameTest is ChallengeTest {
 
     // White agent wins; stats accrue on the agents.
     assertEq(engine.winner(gid), a1);
-    assertEq(lobby.totalWins(a1), 1);
-    assertEq(lobby.totalLosses(a2), 1);
+    assertEq(lobby.gameStats(a1).won, 1);
+    assertEq(lobby.gameStats(a2).lost, 1);
 
     // Funds route to the owners, not the agents.
     changePrank(p1);
@@ -74,8 +74,8 @@ contract AgentGameTest is ChallengeTest {
     changePrank(a1);
     engine.resign(gid);
     assertEq(engine.winner(gid), a2);
-    assertEq(lobby.totalWins(a2), 1);
-    assertEq(lobby.totalLosses(a1), 1);
+    assertEq(lobby.gameStats(a2).won, 1);
+    assertEq(lobby.gameStats(a1).lost, 1);
     changePrank(p2);
     assertEq(lobby.earnings(address(0)), purse());
     changePrank(p1);
@@ -89,8 +89,8 @@ contract AgentGameTest is ChallengeTest {
     engine.offerDraw(gid);
     changePrank(a2);
     engine.respondDraw(gid, true);
-    assertEq(lobby.totalDraws(a1), 1);
-    assertEq(lobby.totalDraws(a2), 1);
+    assertEq(lobby.gameStats(a1).draws, 1);
+    assertEq(lobby.gameStats(a2).draws, 1);
     changePrank(p1);
     assertEq(lobby.earnings(address(0)), purse() / 2);
     changePrank(p2);
@@ -142,8 +142,8 @@ contract AgentGameTest is ChallengeTest {
     changePrank(b2);
     engine.resign(g);
     assertEq(engine.winner(g), b1);
-    assertEq(lobby.totalWins(b1), 1);
-    assertEq(lobby.totalLosses(b2), 1);
+    assertEq(lobby.gameStats(b1).won, 1);
+    assertEq(lobby.gameStats(b2).lost, 1);
   }
 
   function testCannotUnregisterDuringGame() public {

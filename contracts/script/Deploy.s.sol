@@ -7,10 +7,12 @@ import '@oz/proxy/ERC1967/ERC1967Proxy.sol';
 import '@src/Lobby.sol';
 import '@src/ChessEngine.sol';
 import '@aa/accounts/Simple7702Account.sol';
+import '@aa/interfaces/IEntryPoint.sol';
 
 // Deterministic (CREATE2) deployment.
 contract Deploy is Script {
   bytes32 constant SALT = keccak256('bcl-v2.deterministic.v1');
+  address constant ENTRYPOINT_V8 = 0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108;
 
   function run() public {
     uint256 deployerKey = vm.envUint('PRIVATE_KEY');
@@ -33,6 +35,11 @@ contract Deploy is Script {
 
     // Reused EIP-7702 account implementation — the delegation target for agent EOAs.
     Simple7702Account agentAccount = new Simple7702Account{ salt: SALT }();
+
+    // Wire the paymaster's EntryPoint and open the lobby. Funding the deposit is FundEntryPoint.s.sol.
+    lobby.setEntryPoint(IEntryPoint(ENTRYPOINT_V8));
+    lobby.allowChallenges(true);
+    lobby.allowWagers(true);
 
     vm.stopBroadcast();
 
