@@ -73,6 +73,14 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
     _;
   }
 
+  modifier isLiveGame(uint gameId) {
+    if (
+      __games[gameId].state != GameState.Started &&
+      __games[gameId].state != GameState.Draw
+   ) revert InvalidContractState();
+    _;
+  }
+
   modifier inDraw(uint gameId) {
     if (__games[gameId].state != GameState.Draw) revert InvalidContractState();
     _;
@@ -344,7 +352,7 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
   }
 
   function claimVictory(uint gameId) external
-    inProgress(gameId)
+    isLiveGame(gameId)
     isOpponentsMove(gameId)
     timerExpired(gameId)
   {

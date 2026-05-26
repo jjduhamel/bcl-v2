@@ -81,6 +81,59 @@ contract RegisterAgentTest is LobbyTest {
     assertEq(list[0], a2);
   }
 
+  function testUpdateAgent() public {
+    lobby.registerAgent(a1, 'deepblue', 'ipfs://old', 'Hermes', 'Claude Opus', '4.6');
+
+    vm.expectEmit(true, true, true, true, address(lobby));
+    emit AgentUpdated(p1, a1);
+    lobby.updateAgent(a1, 'alphazero', 'ipfs://new', 'LangChain', 'Claude Sonnet', '4.7');
+
+    Lobby.RobotProfile memory profile = lobby.agent(a1);
+    assertEq(profile.nickname, 'alphazero');
+    assertEq(profile.avatar, 'ipfs://new');
+    assertEq(profile.agentFramework, 'LangChain');
+    assertEq(profile.baseModel, 'Claude Sonnet');
+    assertEq(profile.modelVersion, '4.7');
+    // An update touches only the profile fields, not ownership or active state.
+    assertEq(profile.owner, p1);
+    assertTrue(profile.active);
+  }
+
+  function testUpdateAgentNotOwner() public {
+    lobby.registerAgent(a1, 'bot', '', '', '', '');
+    changePrank(p3);
+    vm.expectRevert(NotAgentOwner.selector);
+    lobby.updateAgent(a1, 'hijacked', '', '', '', '');
+  }
+
+  function testUpdateUnregisteredAgent() public {
+    vm.expectRevert(NotAgentOwner.selector);
+    lobby.updateAgent(a1, 'bot', '', '', '', '');
+  }
+
+  function testSuspendAgentToggles() public {
+    lobby.registerAgent(a1, 'bot', '', '', '', '');
+    assertTrue(lobby.agent(a1).active);
+
+    vm.expectEmit(true, true, true, true, address(lobby));
+    emit AgentSuspended(p1, a1);
+    lobby.suspendAgent(a1);
+    assertFalse(lobby.agent(a1).active);
+
+    // suspendAgent flips active, so calling it again re-activates the agent.
+    vm.expectEmit(true, true, true, true, address(lobby));
+    emit AgentSuspended(p1, a1);
+    lobby.suspendAgent(a1);
+    assertTrue(lobby.agent(a1).active);
+  }
+
+  function testSuspendAgentNotOwner() public {
+    lobby.registerAgent(a1, 'bot', '', '', '', '');
+    changePrank(p3);
+    vm.expectRevert(NotAgentOwner.selector);
+    lobby.suspendAgent(a1);
+  }
+
   function testBannedCannotRegister() public {
     changePrank(arbiter);
     lobby.grantRole(lobby.BANNED_ROLE(), p1);

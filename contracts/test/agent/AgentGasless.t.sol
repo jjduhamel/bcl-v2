@@ -15,6 +15,7 @@ contract AgentGaslessTest is LobbyTest {
   address constant ENTRYPOINT_V8 = 0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108;
 
   IEntryPoint ep;
+  Simple7702Account impl;
   address a1;
   uint256 a1Pk;
   address relayer;
@@ -24,7 +25,7 @@ contract AgentGaslessTest is LobbyTest {
     EntryPoint deployed = new EntryPoint();
     vm.etch(ENTRYPOINT_V8, address(deployed).code);
     ep = IEntryPoint(ENTRYPOINT_V8);
-    Simple7702Account impl = new Simple7702Account();
+    impl = new Simple7702Account();
 
     vm.deal(arbiter, 10 ether);
     lobby.setEntryPoint(ep);
@@ -40,7 +41,17 @@ contract AgentGaslessTest is LobbyTest {
 
     relayer = makeAddr('relayer');
     vm.deal(relayer, 10 ether);
-    vm.etch(a1, bytes.concat(hex'ef0100', abi.encodePacked(address(impl)))); // 7702 delegation
+
+    // Real EIP-7702 authorization signed by the agent key. The cheatcode designates the *next* call
+    // as the 7702 tx, so a trivial call into the account applies the delegation.
+    changePrank(relayer);
+    vm.signAndAttachDelegation(address(impl), a1Pk);
+    (bool delegated, ) = a1.call('');
+    assertTrue(delegated);
+  }
+
+  function testSignDelegationStampsTheDesignator() public view {
+    assertEq(a1.code, bytes.concat(hex'ef0100', abi.encodePacked(address(impl))));
   }
 
   function _pack(uint hi, uint lo) internal pure returns (bytes32) {

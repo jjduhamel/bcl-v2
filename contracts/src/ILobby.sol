@@ -27,6 +27,10 @@ interface ILobby {
                       , address indexed agent);
   event AgentUnregistered(address indexed owner
                         , address indexed agent);
+  event AgentUpdated(address indexed owner
+                   , address indexed agent);
+  event AgentSuspended(address indexed owner
+                     , address indexed agent);
 
   error ChessEngineOnly();
   error GameEngineOnly();

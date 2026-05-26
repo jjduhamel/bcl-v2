@@ -193,14 +193,14 @@ contract Lobby is
     return statistics(msg.sender);
   }
 
-  function wagers(address account) public view
+  function wagerStats(address account) public view
     isOwner(account)
   returns (WagerStats memory) {
     return _stats(account).wagers;
   }
 
-  function wagers() public view returns (WagerStats memory) {
-    return wagers(msg.sender);
+  function wagerStats() public view returns (WagerStats memory) {
+    return wagerStats(msg.sender);
   }
 
   function challengesSent(address player) public view returns (uint) {
@@ -390,7 +390,7 @@ contract Lobby is
     _;
   }
 
-  // TODO: Remove this
+  // TODO: Remove this.  Should we really?  Or rename it possibly
   function agent(address robot) external view returns (RobotProfile memory) {
     return __robots[robot];
   }
@@ -424,6 +424,30 @@ contract Lobby is
     __players[msg.sender].robots.add(robot);
     _grantRole(ROBOT_ROLE, robot);
     emit AgentRegistered(msg.sender, robot);
+  }
+
+  function updateAgent(
+    address robot,
+    string calldata nickname,
+    string calldata avatar,
+    string calldata agentFramework,
+    string calldata baseModel,
+    string calldata modelVersion
+  ) external {
+    if (__robots[robot].owner != msg.sender) revert NotAgentOwner();
+    RobotProfile storage r = __robots[robot];
+    r.nickname = nickname;
+    r.avatar = avatar;
+    r.agentFramework = agentFramework;
+    r.baseModel = baseModel;
+    r.modelVersion = modelVersion;
+    emit AgentUpdated(msg.sender, robot);
+  }
+
+  function suspendAgent(address robot) external {
+    if (__robots[robot].owner != msg.sender) revert NotAgentOwner();
+    __robots[robot].active = !__robots[robot].active;
+    emit AgentSuspended(msg.sender, robot);
   }
 
   function unregisterAgent(address robot) external {
