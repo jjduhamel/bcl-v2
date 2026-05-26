@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { assertLocalChain, botAddress, lobbyAddress } from './chain.js';
+import { assertLocalChain, relayerAddress, lobbyAddress } from './chain.js';
 import { registerLobbyTools } from './tools/lobby.js';
 import { registerGameTools } from './tools/game.js';
+import { registerAgentTools } from './tools/agent.js';
 
 async function main() {
   // Fail fast on the wrong chain — server-held key is anvil-only for now.
@@ -16,10 +17,11 @@ async function main() {
 
   registerLobbyTools(server);
   registerGameTools(server);
+  registerAgentTools(server);
 
   // Diagnostic line to stderr — stdout is reserved for JSON-RPC frames.
   console.log('\n\nbcl-mcp server connected:\n');
-  console.log(`  agent = ${botAddress}`);
+  console.log(`  agent = ${relayerAddress}`);
   console.log(`  lobby = ${lobbyAddress}\n`);
 
   const transport = new StdioServerTransport();

@@ -2,7 +2,8 @@ import { z } from 'zod';
 import { zeroAddress, type Address } from 'viem';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { lobby, lobbyAbi } from '../contracts/lobby.js';
-import { resolvePlayer, signingFields, writeAs } from '../chain.js';
+import { resolvePlayer } from '../chain.js';
+import { agentOpFields, submitUserOp } from '../userop.js';
 import { textResult, tool } from '../util.js';
 
 const addressSchema = z.string().regex(/^0x[a-fA-F0-9]{40}$/, 'must be a 0x-prefixed 40-hex address');
@@ -53,6 +54,20 @@ export function registerLobbyTools(server: McpServer) {
       const addr = resolvePlayer(player as Address | undefined);
       const ids = (await lobby.read.history([addr])) as bigint[];
       return textResult({ player: addr, history: ids });
+    },
+  );
+
+  tool(server,
+    'list_agents',
+    {
+      title: "List a player's agents",
+      description: 'Agent EOAs a player owns (registered via registerAgent). Each can be delegated and play gaslessly on the owner\'s behalf.',
+      inputSchema: { player: addressSchema.optional() },
+    },
+    async ({ player }) => {
+      const addr = resolvePlayer(player as Address | undefined);
+      const agents = (await lobby.read.agents([addr])) as Address[];
+      return textResult({ player: addr, agents });
     },
   );
 
@@ -198,27 +213,25 @@ export function registerLobbyTools(server: McpServer) {
     {
       title: 'Open a new challenge',
       description:
-        'Create a challenge against an opponent. wagerToken defaults to the zero address (ETH); for ETH games wagerAmount is sent as msg.value. ERC20 wagers require a prior approval (not handled here).',
+        'Create a challenge against an opponent. NOTE: not available under the 7702-only path (the Lobby paymaster sponsors only engine moves) — returns an error. Open challenges from an owner wallet / the frontend.',
       inputSchema: {
         opponent: addressSchema,
         startAsWhite: z.boolean().default(true),
         timePerMove: bigUintSchema.describe('Seconds allowed per move'),
         wagerAmount: bigUintSchema.default(0).describe('Wager in wei (or token base units)'),
         wagerToken: addressSchema.optional(),
-        ...signingFields,
+        ...agentOpFields,
       },
     },
-    async ({ opponent, startAsWhite, timePerMove, wagerAmount, wagerToken, from, signature, unsignedTx }) => {
+    async ({ opponent, startAsWhite, timePerMove, wagerAmount, wagerToken, sender, signature, userOp }) => {
       const token = (wagerToken ?? zeroAddress) as Address;
-      const value = token === zeroAddress ? wagerAmount : 0n;
-      return writeAs(
-        { from, signature, unsignedTx },
+      return submitUserOp(
+        { sender, signature, userOp },
         {
-          to: lobby.address,
+          engine: lobby.address,
           abi: lobbyAbi,
           functionName: 'challenge',
           args: [opponent as Address, startAsWhite, timePerMove, wagerAmount, token],
-          value,
         },
       );
     },
@@ -229,22 +242,20 @@ export function registerLobbyTools(server: McpServer) {
     {
       title: 'Accept a pending challenge',
       description:
-        'Accept a pending challenge. The lobby will pull the wager into escrow if the bot has not already deposited it; pass `value` if a top-up is required for an ETH game.',
+        'Accept a pending challenge. NOTE: not available under the 7702-only path (the Lobby paymaster sponsors only engine moves) — returns an error. Accept from an owner wallet / the frontend.',
       inputSchema: {
         gameId: gameIdSchema,
-        value: bigUintSchema.optional().describe('Wei to send with the call (for ETH top-up)'),
-        ...signingFields,
+        ...agentOpFields,
       },
     },
-    async ({ gameId, value, from, signature, unsignedTx }) => {
-      return writeAs(
-        { from, signature, unsignedTx },
+    async ({ gameId, sender, signature, userOp }) => {
+      return submitUserOp(
+        { sender, signature, userOp },
         {
-          to: lobby.address,
+          engine: lobby.address,
           abi: lobbyAbi,
           functionName: 'acceptChallenge',
           args: [gameId],
-          value: value ?? 0n,
         },
       );
     },
@@ -255,25 +266,23 @@ export function registerLobbyTools(server: McpServer) {
     {
       title: 'Modify a pending challenge',
       description:
-        'Counter-offer on a pending challenge: change seat, time-per-move, or wager amount. The contract bumps currentMove to the opponent so they can re-accept.',
+        'Counter-offer on a pending challenge: change seat, time-per-move, or wager amount. NOTE: not available under the 7702-only path (the Lobby paymaster sponsors only engine moves) — returns an error. Use an owner wallet / the frontend.',
       inputSchema: {
         gameId: gameIdSchema,
         startAsWhite: z.boolean(),
         timePerMove: bigUintSchema,
         wagerAmount: bigUintSchema,
-        value: bigUintSchema.optional().describe('Wei to send if the new wager requires a top-up'),
-        ...signingFields,
+        ...agentOpFields,
       },
     },
-    async ({ gameId, startAsWhite, timePerMove, wagerAmount, value, from, signature, unsignedTx }) => {
-      return writeAs(
-        { from, signature, unsignedTx },
+    async ({ gameId, startAsWhite, timePerMove, wagerAmount, sender, signature, userOp }) => {
+      return submitUserOp(
+        { sender, signature, userOp },
         {
-          to: lobby.address,
+          engine: lobby.address,
           abi: lobbyAbi,
           functionName: 'modifyChallenge',
           args: [gameId, startAsWhite, timePerMove, wagerAmount],
-          value: value ?? 0n,
         },
       );
     },
@@ -283,14 +292,14 @@ export function registerLobbyTools(server: McpServer) {
     'decline_challenge',
     {
       title: 'Decline a pending challenge',
-      description: 'Decline a pending challenge. Refunds any deposited wager.',
-      inputSchema: { gameId: gameIdSchema, ...signingFields },
+      description: 'Decline a pending challenge (refunds any deposited wager). NOTE: not available under the 7702-only path — returns an error. Use an owner wallet / the frontend.',
+      inputSchema: { gameId: gameIdSchema, ...agentOpFields },
     },
-    async ({ gameId, from, signature, unsignedTx }) => {
-      return writeAs(
-        { from, signature, unsignedTx },
+    async ({ gameId, sender, signature, userOp }) => {
+      return submitUserOp(
+        { sender, signature, userOp },
         {
-          to: lobby.address,
+          engine: lobby.address,
           abi: lobbyAbi,
           functionName: 'declineChallenge',
           args: [gameId],
@@ -304,15 +313,15 @@ export function registerLobbyTools(server: McpServer) {
     {
       title: 'Withdraw accumulated earnings',
       description:
-        'Pull all withdrawable earnings of the given token out of the lobby. Default token is the zero address (ETH).',
-      inputSchema: { token: addressSchema.optional(), ...signingFields },
+        'Pull all withdrawable earnings of the given token out of the lobby (default ETH). NOTE: not available under the 7702-only path — returns an error. Withdraw from an owner wallet / the frontend.',
+      inputSchema: { token: addressSchema.optional(), ...agentOpFields },
     },
-    async ({ token, from, signature, unsignedTx }) => {
+    async ({ token, sender, signature, userOp }) => {
       const tok = (token ?? zeroAddress) as Address;
-      return writeAs(
-        { from, signature, unsignedTx },
+      return submitUserOp(
+        { sender, signature, userOp },
         {
-          to: lobby.address,
+          engine: lobby.address,
           abi: lobbyAbi,
           functionName: 'withdraw',
           args: [tok],

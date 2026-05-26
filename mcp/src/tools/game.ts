@@ -3,7 +3,7 @@ import type { Address } from 'viem';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { lobby } from '../contracts/lobby.js';
 import { chessEngineAbi, engineFor } from '../contracts/chessEngine.js';
-import { signingFields, writeAs } from '../chain.js';
+import { agentOpFields, submitUserOp } from '../userop.js';
 import { getFEN, legalMoves, renderBoard, validateUCI } from '../chess.js';
 import { textResult, tool } from '../util.js';
 
@@ -171,23 +171,18 @@ export function registerGameTools(server: McpServer) {
     {
       title: 'Play a move',
       description:
-        'Submit a UCI move to the per-game engine. Use validate_uci/legal_moves first to avoid wasted gas on rejected moves.',
+        'Submit a UCI move to the per-game engine as a gasless (EIP-7702) sponsored UserOp. Two-round: call with `sender` (the agent) to get a `userOpHash` to sign, then call again with `signature` + the echoed `userOp`. Use validate_uci/legal_moves first to avoid a wasted op on a rejected move.',
       inputSchema: {
         gameId: gameIdSchema,
         uci: z.string().describe('UCI notation, e.g. "e2e4" or "a7a8q"'),
-        ...signingFields,
+        ...agentOpFields,
       },
     },
-    async ({ gameId, uci, from, signature, unsignedTx }) => {
+    async ({ gameId, uci, sender, signature, userOp }) => {
       const engine = await engineFor(gameId);
-      return writeAs(
-        { from, signature, unsignedTx },
-        {
-          to: engine.address,
-          abi: chessEngineAbi,
-          functionName: 'move',
-          args: [gameId, uci],
-        },
+      return submitUserOp(
+        { sender, signature, userOp },
+        { engine: engine.address, abi: chessEngineAbi, functionName: 'move', args: [gameId, uci] },
       );
     },
   );
@@ -196,19 +191,14 @@ export function registerGameTools(server: McpServer) {
     'resign',
     {
       title: 'Resign a game',
-      description: 'Resign the game. Opponent wins; wager is paid out.',
-      inputSchema: { gameId: gameIdSchema, ...signingFields },
+      description: 'Resign the game (gasless EIP-7702 UserOp, two-round). Opponent wins; wager is paid out.',
+      inputSchema: { gameId: gameIdSchema, ...agentOpFields },
     },
-    async ({ gameId, from, signature, unsignedTx }) => {
+    async ({ gameId, sender, signature, userOp }) => {
       const engine = await engineFor(gameId);
-      return writeAs(
-        { from, signature, unsignedTx },
-        {
-          to: engine.address,
-          abi: chessEngineAbi,
-          functionName: 'resign',
-          args: [gameId],
-        },
+      return submitUserOp(
+        { sender, signature, userOp },
+        { engine: engine.address, abi: chessEngineAbi, functionName: 'resign', args: [gameId] },
       );
     },
   );
@@ -218,19 +208,14 @@ export function registerGameTools(server: McpServer) {
     {
       title: 'Offer a draw',
       description:
-        'Offer a draw. The game state transitions to Draw and currentMove flips to the opponent, who must call respond_draw.',
-      inputSchema: { gameId: gameIdSchema, ...signingFields },
+        'Offer a draw (gasless EIP-7702 UserOp, two-round). The game state transitions to Draw and currentMove flips to the opponent, who must call respond_draw.',
+      inputSchema: { gameId: gameIdSchema, ...agentOpFields },
     },
-    async ({ gameId, from, signature, unsignedTx }) => {
+    async ({ gameId, sender, signature, userOp }) => {
       const engine = await engineFor(gameId);
-      return writeAs(
-        { from, signature, unsignedTx },
-        {
-          to: engine.address,
-          abi: chessEngineAbi,
-          functionName: 'offerDraw',
-          args: [gameId],
-        },
+      return submitUserOp(
+        { sender, signature, userOp },
+        { engine: engine.address, abi: chessEngineAbi, functionName: 'offerDraw', args: [gameId] },
       );
     },
   );
@@ -240,23 +225,18 @@ export function registerGameTools(server: McpServer) {
     {
       title: 'Accept or decline a draw offer',
       description:
-        'Respond to a standing draw offer. accept=true finishes the game as a draw; accept=false returns it to Started.',
+        'Respond to a standing draw offer (gasless EIP-7702 UserOp, two-round). accept=true finishes the game as a draw; accept=false returns it to Started.',
       inputSchema: {
         gameId: gameIdSchema,
         accept: z.boolean(),
-        ...signingFields,
+        ...agentOpFields,
       },
     },
-    async ({ gameId, accept, from, signature, unsignedTx }) => {
+    async ({ gameId, accept, sender, signature, userOp }) => {
       const engine = await engineFor(gameId);
-      return writeAs(
-        { from, signature, unsignedTx },
-        {
-          to: engine.address,
-          abi: chessEngineAbi,
-          functionName: 'respondDraw',
-          args: [gameId, accept],
-        },
+      return submitUserOp(
+        { sender, signature, userOp },
+        { engine: engine.address, abi: chessEngineAbi, functionName: 'respondDraw', args: [gameId, accept] },
       );
     },
   );
@@ -266,19 +246,14 @@ export function registerGameTools(server: McpServer) {
     {
       title: 'Claim victory on timeout',
       description:
-        'Claim a win because the opponent’s move timer expired. Reverts (TimerActive) if the timer is still running.',
-      inputSchema: { gameId: gameIdSchema, ...signingFields },
+        'Claim a win because the opponent’s move timer expired (gasless EIP-7702 UserOp, two-round). Reverts (TimerActive) if the timer is still running.',
+      inputSchema: { gameId: gameIdSchema, ...agentOpFields },
     },
-    async ({ gameId, from, signature, unsignedTx }) => {
+    async ({ gameId, sender, signature, userOp }) => {
       const engine = await engineFor(gameId);
-      return writeAs(
-        { from, signature, unsignedTx },
-        {
-          to: engine.address,
-          abi: chessEngineAbi,
-          functionName: 'claimVictory',
-          args: [gameId],
-        },
+      return submitUserOp(
+        { sender, signature, userOp },
+        { engine: engine.address, abi: chessEngineAbi, functionName: 'claimVictory', args: [gameId] },
       );
     },
   );
@@ -288,19 +263,14 @@ export function registerGameTools(server: McpServer) {
     {
       title: 'Send the game to arbiter review',
       description:
-        'Flag the game for arbiter review. State transitions to Review; an arbiter must call resolveDispute (not exposed here) to settle.',
-      inputSchema: { gameId: gameIdSchema, ...signingFields },
+        'Flag the game for arbiter review (gasless EIP-7702 UserOp, two-round). State transitions to Review; an arbiter must call resolveDispute (not exposed here) to settle.',
+      inputSchema: { gameId: gameIdSchema, ...agentOpFields },
     },
-    async ({ gameId, from, signature, unsignedTx }) => {
+    async ({ gameId, sender, signature, userOp }) => {
       const engine = await engineFor(gameId);
-      return writeAs(
-        { from, signature, unsignedTx },
-        {
-          to: engine.address,
-          abi: chessEngineAbi,
-          functionName: 'disputeGame',
-          args: [gameId],
-        },
+      return submitUserOp(
+        { sender, signature, userOp },
+        { engine: engine.address, abi: chessEngineAbi, functionName: 'disputeGame', args: [gameId] },
       );
     },
   );

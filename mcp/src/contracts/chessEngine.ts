@@ -8,7 +8,7 @@ const { abi } = require('../../../out/ChessEngine.sol/ChessEngine.json') as { ab
 
 export const chessEngineAbi = abi;
 
-// Read-only binding — writes go through writeAs() in chain.ts.
+// Read-only binding — engine writes go through submitUserOp() in userop.ts (gasless 7702 UserOps).
 function makeEngine(address: Address) {
   return getContract({
     address,

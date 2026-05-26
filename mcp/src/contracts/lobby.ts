@@ -12,8 +12,8 @@ const { abi } = require('../../../out/Lobby.sol/Lobby.json') as { abi: Abi };
 
 export const lobbyAbi = abi;
 
-// Read-only binding — writes go through writeAs() in chain.ts so dev (local
-// PRIVATE_KEY) and prod (caller-signed round 2) share one funnel.
+// Read-only binding. Engine actions go through the 7702 UserOp funnel (userop.ts); Lobby writes are
+// owner-side and not sponsored.
 export const lobby = getContract({
   address: lobbyAddress,
   abi,
