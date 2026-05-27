@@ -41,12 +41,12 @@ contract ModifyChallengeTest is ChallengeTest {
 
   function testModifyFailsWithoutDeposit() public
   {
-    vm.expectRevert(EscrowContract.InvalidDeposit.selector);
+    vm.expectRevert(Escrow.InvalidDeposit.selector);
     lobby.modifyChallenge(gameId, true, timePerMove, wager);
   }
 
   function testModifyFailsWithLowDeposit() public {
-    vm.expectRevert(EscrowContract.InvalidDeposit.selector);
+    vm.expectRevert(Escrow.InvalidDeposit.selector);
     lobby.modifyChallenge{ value: wager-1 }(gameId, true, timePerMove, wager);
   }
 
@@ -83,7 +83,7 @@ contract ModifyChallengeTest is ChallengeTest {
   }
 
   function testModifyWagerFailsWithoutDeposit() public {
-    vm.expectRevert(EscrowContract.InvalidDeposit.selector);
+    vm.expectRevert(Escrow.InvalidDeposit.selector);
     lobby.modifyChallenge(gameId, true, timePerMove, wager*2);
   }
 

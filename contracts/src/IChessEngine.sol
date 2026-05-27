@@ -9,8 +9,8 @@ interface IChessEngine {
     bool exists;
     GameState state;
     GameOutcome outcome;
-    address payable whitePlayer;
-    address payable blackPlayer;
+    address whitePlayer;
+    address blackPlayer;
     address currentMove;
     uint timePerMove;
     uint timeOfLastMove;

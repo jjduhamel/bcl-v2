@@ -78,7 +78,7 @@ contract AgentGameTest is ChallengeTest {
     engine.resign(gid);
 
     changePrank(a1);
-    vm.expectRevert(EscrowContract.InsufficientBalance.selector);
+    vm.expectRevert(Escrow.InsufficientBalance.selector);
     lobby.withdraw(address(0));
   }
 

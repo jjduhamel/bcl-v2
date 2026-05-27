@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: GPL-V3
 pragma solidity >=0.4.22 <0.9.0;
-import '@oz-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol';
+import '@oz-upgradeable/access/AccessControlUpgradeable.sol';
 import '@oz-upgradeable/proxy/utils/Initializable.sol';
 import '@oz-upgradeable/proxy/utils/UUPSUpgradeable.sol';
-import '@oz/utils/structs/EnumerableMap.sol';
 import '@lib/Escrow.sol';
 import './ILobby.sol';
 import './IChessEngine.sol';
@@ -14,8 +13,8 @@ import '@aa/interfaces/IEntryPoint.sol';
 contract Lobby is
   Initializable,
   UUPSUpgradeable,
-  AccessControlEnumerableUpgradeable,
-  EscrowContract,
+  AccessControlUpgradeable,
+  EscrowWrapper,
   IPaymaster,
   ILobby
 {
@@ -62,13 +61,13 @@ contract Lobby is
   // User Roles
   bytes32 public constant ADMIN_ROLE = 0x00;
   bytes32 public constant ARBITER_ROLE = keccak256('ARBITER_ROLE');
-  bytes32 public constant AMBASSADOR_ROLE = keccak256('AMBASSADOR_ROLE');
-  bytes32 public constant VIP_ROLE = keccak256('VIP_ROLE');
+  bytes32 internal constant AMBASSADOR_ROLE = keccak256('AMBASSADOR_ROLE');
+  bytes32 internal constant VIP_ROLE = keccak256('VIP_ROLE');
   bytes32 public constant BANNED_ROLE = keccak256('BANNED_ROLE');
   bytes32 public constant ROBOT_ROLE = keccak256('ROBOT_ROLE');
-  bytes32 public constant ROLE_6 = keccak256('ROLE_6');
-  bytes32 public constant ROLE_7 = keccak256('ROLE_7');
-  bytes32 public constant ROLE_8 = keccak256('ROLE_8');
+  bytes32 internal constant ROLE_6 = keccak256('ROLE_6');
+  bytes32 internal constant ROLE_7 = keccak256('ROLE_7');
+  bytes32 internal constant ROLE_8 = keccak256('ROLE_8');
 
   // Player Lobby
   mapping(address => PlayerLobby) private __lobby;
@@ -501,7 +500,7 @@ contract Lobby is
   }
 
   function acceptChallenge(uint gameId) external payable
-    isRegistered(msg.sender)
+    //isRegistered(msg.sender)
     isGameState(gameId, IChessEngine.GameState.Pending)
     isPlayersGame(gameId)
     isCurrentMove(gameId)
@@ -552,7 +551,7 @@ contract Lobby is
 
   // TODO support changing wagerToken (requires refunding existing escrow and re-depositing)
   function modifyChallenge(uint gameId, bool startAsWhite, uint timePerMove, uint wagerAmount) external payable
-    isRegistered(msg.sender)
+    //isRegistered(msg.sender)
     isPlayersGame(gameId)
   {
     if (wagerAmount > 0 && !__allowWagers) revert WageringDisabled();
