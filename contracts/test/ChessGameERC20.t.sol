@@ -79,11 +79,11 @@ contract ERC20GameTest is ERC20ChallengeTest {
     _move(p1, 'a2a3');
     _move(p2, 'h4e1');
     changePrank(arbiter);
-    assertEq(lobby.profit(address(token)), 2 * fee());
+    assertEq(lobby.platformBalance(address(token)), 2 * fee());
     address receiver = makeAddr('feeReceiver');
     uint balBefore = token.balanceOf(receiver);
     lobby.withdrawPlatformFunds(address(token), payable(receiver));
     assertEq(token.balanceOf(receiver) - balBefore, 2 * fee());
-    assertEq(lobby.profit(address(token)), 0);
+    assertEq(lobby.platformBalance(address(token)), 0);
   }
 }

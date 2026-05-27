@@ -68,7 +68,8 @@ interface ILobby {
   error InvalidDepositAmount();
   error UserBanned();
   error AdminOnly();
-  error AgentAlreadyRegistered();
+  error Unregistered();
+  error AlreadyRegistered();
   error NotAgentOwner();
   error WagerExceedsAgentMax();
   error AgentInGame();

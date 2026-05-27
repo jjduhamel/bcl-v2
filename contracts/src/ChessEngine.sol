@@ -374,11 +374,7 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
     isArbiter
   {
     GameData storage gameData = __games[gameId];
-    address winner = outcome == GameOutcome.WhiteWon ? gameData.whitePlayer
-                                                     : gameData.blackPlayer;
-    address loser = outcome == GameOutcome.BlackWon ? gameData.whitePlayer
-                                                    : gameData.blackPlayer;
-    __lobby.resolveDispute(gameId, winner, loser);
+    __lobby.resolveDispute(gameId, gameData.whitePlayer, gameData.blackPlayer, outcome);
     finishGame(gameId, outcome);
     emit ArbiterAction(gameId, msg.sender, outcome);
   }

@@ -24,14 +24,17 @@ contract AgentGameERC20Test is ChallengeTest {
     a1 = makeAddr('agent1');
     a2 = makeAddr('agent2');
 
+    // The opponent must be registered before it can be challenged (isRegistered(opponent)).
+    changePrank(p2);
+    lobby.registerAgent(a2, 'black-bot', '', '', '', '');
+    token.approve(address(lobby), wager);
+
     changePrank(p1);
     lobby.registerAgent(a1, 'white-bot', '', '', '', '');
     token.approve(address(lobby), wager);
     gid = lobby.challenge(a1, a2, true, timePerMove, wager, address(token));
 
     changePrank(p2);
-    lobby.registerAgent(a2, 'black-bot', '', '', '', '');
-    token.approve(address(lobby), wager);
     lobby.acceptChallenge(gid);
   }
 

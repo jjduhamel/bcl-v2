@@ -57,6 +57,20 @@ contract AgentGameTest is ChallengeTest {
     assertEq(a1.balance, agentBefore);
   }
 
+  // netEarnings reports the queried account's net wager P&L, not the caller's.
+  function testNetEarnings() public {
+    _accept();
+    changePrank(a1);
+    engine.move(gid, 'e2e4');
+    changePrank(a2);
+    engine.resign(gid); // a1 wins the wager
+
+    changePrank(p1);
+    assertEq(lobby.netEarnings(a1), int(wager));
+    changePrank(p2);
+    assertEq(lobby.netEarnings(a2), -int(wager));
+  }
+
   // A compromised agent key cannot pull the owner's winnings.
   function testAgentHasNoWithdrawableBalance() public {
     _accept();
@@ -159,6 +173,6 @@ contract AgentGameTest is ChallengeTest {
     engine.resign(gid);
     changePrank(p1);
     lobby.unregisterAgent(a1);
-    assertEq(lobby.ownerOf(a1), a1);
+    assertEq(lobby.agents(p1).length, 0);
   }
 }

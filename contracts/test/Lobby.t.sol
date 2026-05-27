@@ -55,6 +55,9 @@ abstract contract LobbyTest is Test, ILobby, IChessEngine {
     vm.startPrank(arbiter);
     _initializeLobby();
     _initializeEngine();
+    lobby.registerPlayer(p1, '', '');
+    lobby.registerPlayer(p2, '', '');
+    lobby.registerPlayer(p3, '', '');
   }
 
   function fee() internal view returns (uint) {

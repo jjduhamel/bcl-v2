@@ -27,7 +27,6 @@ contract Lobby is
     string avatar;            // Avatar URI
     uint40  createdAt;
     AccountStats stats;
-    EnumerableSet.AddressSet robots;
   }
 
   // TODO: Handle maxWager for different token types
@@ -47,6 +46,7 @@ contract Lobby is
     EnumerableSet.UintSet pendingChallenges;
     EnumerableSet.UintSet currentGames;
     EnumerableSet.UintSet finishedGames;
+    EnumerableSet.AddressSet robots;
     //AccountStats stats;
   }
 
@@ -100,6 +100,14 @@ contract Lobby is
     _setPlatformFee(2);
   }
 
+  function setAuthData(address signer, uint ttl, bool enabled) external
+    isAdmin
+  {
+    __authEnabled = enabled;
+    __authSigner = signer;
+    __authTokenTTL = ttl;
+  }
+
   function _authorizeUpgrade(address newImplementation) internal override
     isAdmin
   {}
@@ -137,14 +145,6 @@ contract Lobby is
     __currentEngine = ChessEngine(engine);
   }
 
-  function setAuthData(address signer, uint ttl, bool enabled) external
-    isAdmin
-  {
-    __authEnabled = enabled;
-    __authSigner = signer;
-    __authTokenTTL = ttl;
-  }
-
   /*
    * Stats accessors
    */
@@ -170,31 +170,6 @@ contract Lobby is
     isOwner(account)
   returns (DisputeStats memory) {
     return _stats(account).disputes;
-  }
-
-  /*
-   * Platform Fees
-   */
-
-  function setPlatformFee(uint perc) public
-    isAdmin
-  { _setPlatformFee(perc); }
-
-  function platformFee(uint gameId) public view
-  returns (uint) {
-    return _platformFee(chessEngine(gameId).game(gameId).wagerAmount);
-  }
-
-  function profit(address token) public view
-    isAdmin
-  returns (uint) {
-    return releasedFunds(address(0), token);
-  }
-
-  function withdrawPlatformFunds(address token, address payable receiver) public
-    isAdmin
-  {
-    releasePlatformFunds(token, receiver);
   }
 
   /*
@@ -224,7 +199,7 @@ contract Lobby is
 
   // A seat (whitePlayer/blackPlayer) holds an agent or a human. The owner — the human who
   // runs the agent, or the human playing as themselves — is authorized to manage the game.
-  modifier isPlayer(uint gameId) {
+  modifier isPlayersGame(uint gameId) {
     IChessEngine.GameData memory game = chessEngine(gameId).game(gameId);
     if (msg.sender != ownerOf(game.whitePlayer) && msg.sender != ownerOf(game.blackPlayer)) revert IChessEngine.PlayerOnly();
     _;
@@ -255,12 +230,39 @@ contract Lobby is
   }
 
   /*
+   * Platform Fees
+   */
+
+  function setPlatformFee(uint perc) public
+    isAdmin
+  { _setPlatformFee(perc); }
+
+  function platformFee(uint gameId) public view
+  returns (uint) {
+    return _platformFee(chessEngine(gameId).game(gameId).wagerAmount);
+  }
+
+  function platformBalance(address token) public view
+    isAdmin
+  returns (uint) {
+    return releasedFunds(address(0), token);
+  }
+
+  function withdrawPlatformFunds(address token, address payable receiver) public
+    isAdmin
+  {
+    releasePlatformFunds(token, receiver);
+  }
+
+  /*
    * Player Balances
    */
 
-  function netEarnings(address account) public view returns (int) {
-    uint gains = _stats(msg.sender).wagers.won;
-    uint losses = _stats(msg.sender).wagers.lost;
+  function netEarnings(address account) public view
+    isOwner(account)
+  returns (int) {
+    uint gains = _stats(account).wagers.won;
+    uint losses = _stats(account).wagers.lost;
     return int(gains)-int(losses);
   }
 
@@ -270,7 +272,7 @@ contract Lobby is
   }
 
   function currentDeposit(uint gameId) public view
-    isPlayer(gameId)
+    isPlayersGame(gameId)
   returns (uint) {
     return currentDeposit(msg.sender, gameId).amount;
   }
@@ -291,17 +293,67 @@ contract Lobby is
     release(msg.sender, token);
   }
 
+  modifier isRegistered(address account) {
+    if (hasRole(BANNED_ROLE, account)) revert UserBanned();
+    if (__players[account].createdAt == 0 &&
+        __robots[account].createdAt == 0
+    ) revert Unregistered();
+    _;
+  }
+
+  modifier isUnregistered(address account) {
+    if (__players[account].createdAt != 0 ||
+        __robots[account].createdAt != 0
+    ) revert AlreadyRegistered();
+    _;
+  }
+
+  function playerProfile(address player) external view
+    isRegistered(player)
+  returns (PlayerProfile memory) {
+    PlayerProfile storage p = __players[player];
+    return p;
+  }
+
+  function registerPlayer(
+    address player,
+    string calldata username,
+    string calldata avatar
+  ) external
+    isUnregistered(player)
+  {
+    PlayerProfile storage p = __players[player];
+    p.username = username;
+    p.avatar = avatar;
+    p.createdAt = uint40(block.timestamp);
+  }
+
   /*
    * Agents
    */
 
+  function agents(address owner) external view
+    isRegistered(owner)
+  returns (address[] memory) {
+    return __lobby[owner].robots.values();
+  }
+
+  function agentProfile(address robot) external view
+    isRegistered(robot)
+  returns (RobotProfile memory) {
+    return __robots[robot];
+  }
+
   // The human accountable for a seat: an agent's owner, or the address itself for a human.
-  function ownerOf(address account) public view returns (address) {
+  function ownerOf(address account) internal view
+    isRegistered(account)
+  returns (address) {
     address owner = __robots[account].owner;
     return owner == address(0) ? account : owner;
   }
 
   modifier isOwner(address account) {
+    if (hasRole(BANNED_ROLE, account) || hasRole(BANNED_ROLE, ownerOf(account))) revert UserBanned();
     if (ownerOf(account) != msg.sender) revert NotAgentOwner();
     _;
   }
@@ -309,15 +361,6 @@ contract Lobby is
   modifier isAgent(address account) {
     if (__robots[account].owner == address(0)) revert NotAnAgent();
     _;
-  }
-
-  // TODO: Remove this.  Should we really?  Or rename it possibly
-  function agent(address robot) external view returns (RobotProfile memory) {
-    return __robots[robot];
-  }
-
-  function agents(address owner) external view returns (address[] memory) {
-    return __players[owner].robots.values();
   }
 
   // TODO: no agent consent yet. Any owner can claim an unregistered address as their agent
@@ -331,8 +374,10 @@ contract Lobby is
     string calldata agentFramework,
     string calldata baseModel,
     string calldata modelVersion
-  ) external notBanned {
-    if (__robots[robot].owner != address(0)) revert AgentAlreadyRegistered();
+  ) external
+    isRegistered(msg.sender)
+    isUnregistered(robot)
+  {
     RobotProfile storage r = __robots[robot];
     r.owner = msg.sender;
     r.active = true;
@@ -342,7 +387,7 @@ contract Lobby is
     r.baseModel = baseModel;
     r.modelVersion = modelVersion;
     r.createdAt = uint40(block.timestamp);
-    __players[msg.sender].robots.add(robot);
+    __lobby[msg.sender].robots.add(robot);
     _grantRole(ROBOT_ROLE, robot);
     emit AgentRegistered(msg.sender, robot);
   }
@@ -354,8 +399,9 @@ contract Lobby is
     string calldata agentFramework,
     string calldata baseModel,
     string calldata modelVersion
-  ) external {
-    if (__robots[robot].owner != msg.sender) revert NotAgentOwner();
+  ) external
+    isOwner(robot)
+  {
     RobotProfile storage r = __robots[robot];
     r.nickname = nickname;
     r.avatar = avatar;
@@ -365,16 +411,19 @@ contract Lobby is
     emit AgentUpdated(msg.sender, robot);
   }
 
-  function suspendAgent(address robot) external {
-    if (__robots[robot].owner != msg.sender) revert NotAgentOwner();
+  function suspendAgent(address robot) external
+    isOwner(robot)
+  {
     __robots[robot].active = !__robots[robot].active;
     emit AgentSuspended(msg.sender, robot);
   }
 
-  function unregisterAgent(address robot) external {
+  function unregisterAgent(address robot) external
+    isOwner(robot)
+  {
     if (__robots[robot].owner != msg.sender) revert NotAgentOwner();
     if (__lobby[robot].currentGames.length() > 0) revert AgentInGame();
-    __players[msg.sender].robots.remove(robot);
+    __lobby[msg.sender].robots.remove(robot);
     delete __robots[robot];
     _revokeRole(ROBOT_ROLE, robot);
     emit AgentUnregistered(msg.sender, robot);
@@ -400,10 +449,6 @@ contract Lobby is
    * Engine Interface
    */
 
-  // TODO: Implement user registration flow
-  function registerPlayer(address player) private {
-  }
-
   // Simply emits an event.  Signals that the opponent did something
   // and the client should update the record.
   function touch(uint gameId, address sender, address receiver) external
@@ -420,14 +465,11 @@ contract Lobby is
     uint wagerAmount,
     address wagerToken
   ) external payable
-    notBanned
     allowChallenge
     allowWager(wagerAmount, wagerToken)
     isOwner(sender)
+    isRegistered(opponent)
   returns (uint) {
-    registerPlayer(sender);
-    registerPlayer(opponent);
-
     // Create a new challenge on the current game engine
     uint gameId = __currentEngine.createChallenge(__platform.games.created++
                                                  , sender
@@ -459,9 +501,9 @@ contract Lobby is
   }
 
   function acceptChallenge(uint gameId) external payable
-    notBanned
+    isRegistered(msg.sender)
     isGameState(gameId, IChessEngine.GameState.Pending)
-    isPlayer(gameId)
+    isPlayersGame(gameId)
     isCurrentMove(gameId)
   {
     ChessEngine engine = chessEngine(gameId);
@@ -510,8 +552,8 @@ contract Lobby is
 
   // TODO support changing wagerToken (requires refunding existing escrow and re-depositing)
   function modifyChallenge(uint gameId, bool startAsWhite, uint timePerMove, uint wagerAmount) external payable
-    notBanned
-    isPlayer(gameId)
+    isRegistered(msg.sender)
+    isPlayersGame(gameId)
   {
     if (wagerAmount > 0 && !__allowWagers) revert WageringDisabled();
     ChessEngine engine = chessEngine(gameId);
@@ -539,8 +581,8 @@ contract Lobby is
   }
 
   function declineChallenge(uint gameId) external
-    notBanned
-    isPlayer(gameId)
+    isRegistered(msg.sender)
+    isPlayersGame(gameId)
   {
     ChessEngine engine = chessEngine(gameId);
     IChessEngine.GameData memory gameData = engine.game(gameId);
@@ -633,14 +675,26 @@ contract Lobby is
     emit GameDisputed(gameId, sender, receiver);
   }
 
-  function resolveDispute(uint gameId, address winner, address loser) external
+  function resolveDispute(
+    uint gameId,
+    address white,
+    address black,
+    IChessEngine.GameOutcome outcome
+  ) external
     isGameEngine(gameId)
   {
-    __disputes.remove(gameId);
-    _stats(winner).disputes.won++;
-    _stats(loser).disputes.lost++;
+    if (outcome == IChessEngine.GameOutcome.Draw) {
+      _stats(white).disputes.won++;
+      _stats(black).disputes.won++;
+    } else {
+      address winner = outcome == IChessEngine.GameOutcome.WhiteWon ? white : black;
+      address loser = outcome == IChessEngine.GameOutcome.WhiteWon ? black : white;
+      _stats(winner).disputes.won++;
+      _stats(loser).disputes.lost++;
+    }
     __platform.disputes.won++;             // Counts disputes resolved
-    emit DisputeResolved(gameId, winner, loser);
+    __disputes.remove(gameId);
+    emit DisputeResolved(gameId, white, black);
   }
 
   /*
