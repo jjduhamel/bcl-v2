@@ -1,6 +1,8 @@
 # The Blockchain Chess Lounge
 
-## Client
+## Local Development
+
+### Frontend
 
 The reference client uses the Nuxt3 framework.
 
@@ -10,19 +12,24 @@ The reference client uses the Nuxt3 framework.
 $ yarn dev
 ```
 
-## Contracts
+### Contracts
 
 The *contracts/* directory contains the code for the smart contracts using [Foundry](https://github.com/foundry-rs/foundry).
 
-*Start local blockchain*
-
 ```
-$ anvil -m "$(cat .mnemonic)"
+$ yarn devchain
+$ yarn deploy:local
 ```
 
-*Build and deploy the project*
+## Deployment
+
+*Build and Deploy*
 
 ```
 $ forge build
-$ forge script script/DeployLobby.s.sol --mnemonic-paths .mnemonic --sender <address> --fork-url http://localhost:8545 --broadcast
+$ yarn deploy:app --sender <address> --rpc-url <rpc-url> --broadcast
 ```
+
+*Upgrade ChessEngine Contract*
+
+TODO

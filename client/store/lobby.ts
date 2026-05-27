@@ -9,6 +9,7 @@ export default defineStore('lobby', {
     return {
       initializing: false,
       initialized: false,
+      agents: [] as AgentInfo[],
       pending: [] as number,
       current: [] as number,
       finished: [] as number,
@@ -75,24 +76,31 @@ export default defineStore('lobby', {
       if (!address) throw new Error('MissingRecord');
       return address;
     },
-    opponent(gameId: number) {
+    controls(seat: string) {
       const wallet = useWalletStore();
+      return seat === wallet.address || _.some(this.agents, { address: seat });
+    },
+    opponent(gameId: number) {
       const { whitePlayer, blackPlayer } = this.metadata[gameId];
-      switch (wallet.address) {
-        case whitePlayer: return blackPlayer;
-        case blackPlayer: return whitePlayer;
-        default: throw Error('Not a player');
-      }
+      if (this.controls(whitePlayer)) return blackPlayer;
+      if (this.controls(blackPlayer)) return whitePlayer;
+      return null;  // spectator — not seated in this game
+    },
+    player(gameId: number) {
+      const { whitePlayer, blackPlayer } = this.metadata[gameId];
+      if (this.controls(whitePlayer)) return whitePlayer;
+      if (this.controls(blackPlayer)) return blackPlayer;
+      return null;  // spectator — not seated in this game
+    },
+    isPlayer(gameId: number) {
+      const { whitePlayer, blackPlayer } = this.metadata[gameId];
+      return this.controls(whitePlayer) || this.controls(blackPlayer);
     },
     isWhitePlayer(gameId: number) {
-      const wallet = useWalletStore();
-      const { whitePlayer } = this.metadata[gameId];
-      return wallet.address == whitePlayer;
+      return this.controls(this.metadata[gameId].whitePlayer);
     },
     isCurrentMove(gameId: number) {
-      const wallet = useWalletStore();
-      const { currentMove } = this.metadata[gameId];
-      return wallet.address == currentMove;
+      return this.controls(this.metadata[gameId].currentMove);
     },
     isInReview(gameId: number) {
       return this.metadata[gameId]?.state === 5;  // GameState.Review
@@ -101,6 +109,8 @@ export default defineStore('lobby', {
       return {
         ...this.metadata[gameId],
         opponent: this.opponent(gameId),
+        player: this.player(gameId),
+        isPlayer: this.isPlayer(gameId),
         isWhitePlayer: this.isWhitePlayer(gameId),
         isCurrentMove: this.isCurrentMove(gameId),
         isInReview: this.isInReview(gameId)
@@ -108,6 +118,19 @@ export default defineStore('lobby', {
     }
   }
 });
+
+interface AgentInfo {
+  address: string,
+  owner: string,
+  nickname: string,
+  avatar: string,
+  active: boolean,
+  delegated: boolean,
+  wins: number,
+  losses: number,
+  draws: number,
+  games: number
+}
 
 interface GameInfo {
   id: number,

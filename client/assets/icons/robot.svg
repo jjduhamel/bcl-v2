@@ -1,0 +1,6 @@
+<svg id="i-robot" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none" stroke="currentcolor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
+    <path d="M9 11 L23 11 Q26 11 26 14 L26 24 Q26 27 23 27 L9 27 Q6 27 6 24 L6 14 Q6 11 9 11 Z M16 11 L16 6 M12 23 L20 23 M6 18 L3 18 M26 18 L29 18" />
+    <circle cx="16" cy="4" r="2" />
+    <circle cx="12" cy="18" r="1.5" />
+    <circle cx="20" cy="18" r="1.5" />
+</svg>

@@ -37,7 +37,7 @@ export default defineNuxtConfig({
       // engine still accepts opponent illegal moves regardless.
       allowPseudoLegalMoves: process.env.ALLOW_PSEUDO_LEGAL === 'true',
       lobbyAddress: {
-        local: process.env.LOCAL_LOBBY_ADDR,
+        local: process.env.LOBBY_PROXY_ADDR,
         ethereum: process.env.HOMESTEAD_LOBBY_ADDR,
         goerli: process.env.GOERLI_LOBBY_ADDR,
         matic: process.env.MATIC_LOBBY_ADDR,
@@ -58,6 +58,17 @@ export default defineNuxtConfig({
     }
   },
   vite: {
+    plugins: [
+      {
+        name: 'composable-full-reload',
+        handleHotUpdate({ file, server }) {
+          if (file.includes('/composables/')) {
+            server.ws.send({ type: 'full-reload' });
+            return [];
+          }
+        }
+      }
+    ],
     build: {
       sourcemap: true,
       // https://github.com/blocknative/web3-onboard/issues/762#issuecomment-997246672
