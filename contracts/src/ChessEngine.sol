@@ -26,7 +26,6 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
   }
 
   function initialize(address lobby) public initializer {
-    __UUPSUpgradeable_init();
     __lobby = Lobby(lobby);
   }
 

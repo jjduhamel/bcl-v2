@@ -9,7 +9,7 @@ contract CreateChallengeTest is ChallengeTest {
     testChallengeSent(0, p1)
     testChallengeReceived(0, p2)
   {
-    lobby.challenge(p2, true, timePerMove, 0, address(0));
+    lobby.challenge(p1, p2, true, timePerMove, 0, address(0));
   }
 
   function testChallengeWithWager() public
@@ -17,33 +17,33 @@ contract CreateChallengeTest is ChallengeTest {
     testChallengeReceived(0, p2)
     testEarnings(p1, 0)
   {
-    lobby.challenge{ value: wager }(p2, true, timePerMove, wager, address(0));
+    lobby.challenge{ value: wager }(p1, p2, true, timePerMove, wager, address(0));
   }
 
   function testChallengeSucceedsWithMinTPM() public
     testChallengeSent(0, p1)
     testChallengeReceived(0, p2)
   {
-    lobby.challenge(p2, true, 60, 0, address(0));
+    lobby.challenge(p1, p2, true, 60, 0, address(0));
   }
 
   function testChallengeFailsWithInvalidTPM() public {
     vm.expectRevert(InvalidTimePerMove.selector);
-    lobby.challenge(p2, true, 59, 0, address(0));
+    lobby.challenge(p1, p2, true, 59, 0, address(0));
   }
 
   function testChallengeFailsWithNoDeposit() public {
     vm.expectRevert(InvalidDepositAmount.selector);
-    lobby.challenge(p2, true, timePerMove, wager, address(0));
+    lobby.challenge(p1, p2, true, timePerMove, wager, address(0));
   }
 
   function testChallengeFailsWithLowDeposit() public {
     vm.expectRevert(InvalidDepositAmount.selector);
-    lobby.challenge{ value: wager-1 }(p2, true, timePerMove, wager, address(0));
+    lobby.challenge{ value: wager-1 }(p1, p2, true, timePerMove, wager, address(0));
   }
 
   function testChallengeRevertsOnExcessDeposit() public {
-    vm.expectRevert(Escrow.InvalidDeposit.selector);
-    lobby.challenge{ value: wager+1 }(p2, true, timePerMove, wager, address(0));
+    vm.expectRevert(EscrowContract.InvalidDeposit.selector);
+    lobby.challenge{ value: wager+1 }(p1, p2, true, timePerMove, wager, address(0));
   }
 }

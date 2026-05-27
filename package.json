@@ -8,7 +8,9 @@
     "postinstall": "nuxt prepare",
     "compile": "forge build",
     "devchain": "anvil -m \"$(cat .mnemonic)\"",
-    "deploy:lobby": "forge script contracts/script/DeployLobby.s.sol --broadcast"
+    "deploy:app": "forge script contracts/script/Deploy.s.sol:Deploy --broadcast",
+    "deploy:entrypoint": "forge script contracts/script/LocalEntryPoint.s.sol:LocalEntryPoint --rpc-url http://127.0.0.1:8545 --broadcast --skip-simulation",
+    "deploy:local": "yarn deploy:app --rpc-url http://127.0.0.1:8545 && yarn deploy:entrypoint"
   },
   "dependencies": {
     "@amplitude/analytics-browser": "^1.6.4",

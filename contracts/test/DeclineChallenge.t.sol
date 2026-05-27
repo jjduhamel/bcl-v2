@@ -7,7 +7,7 @@ import './Challenge.t.sol';
 contract DeclineChallengeTest is ChallengeTest {
   function setUp() public {
     changePrank(p1);
-    gameId = lobby.challenge{ value: wager }(p2, true, timePerMove, wager, address(0));
+    gameId = lobby.challenge{ value: wager }(p1, p2, true, timePerMove, wager, address(0));
     changePrank(p2);
   }
 
@@ -55,7 +55,7 @@ contract DeclineChallengeTest is ChallengeTest {
   {
     lobby.declineChallenge(gameId);
     changePrank(p1);
-    uint gameId2 = lobby.challenge{ value: wager }(p2, true, timePerMove, wager, address(0));
+    uint gameId2 = lobby.challenge{ value: wager }(p1, p2, true, timePerMove, wager, address(0));
     changePrank(p2);
     lobby.declineChallenge(gameId2);
   }

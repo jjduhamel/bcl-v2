@@ -5,7 +5,7 @@ import '@lib/Escrow.sol';
 import '@src/IChessEngine.sol';
 import './MockERC20Token.sol';
 
-abstract contract EscrowTest is Test, Escrow {
+abstract contract EscrowTest is EscrowContract, Test {
   MockERC20Token token;
   address p1;
   address p2;

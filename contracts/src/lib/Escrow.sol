@@ -11,7 +11,7 @@ struct TokenDeposit {
   uint96 amount;
 }
 
-abstract contract Escrow {
+abstract contract EscrowContract {
   using SafeERC20 for IERC20;
   using EnumerableMap for EnumerableMap.AddressToUintMap;
   using TokenDepositMap for TokenDepositMap.GameIDTokenDepositMap;

@@ -23,6 +23,10 @@ interface ILobby {
   event DisputeResolved(uint indexed gameId
                       , address indexed sender
                       , address indexed receiver);
+  event AgentRegistered(address indexed owner
+                      , address indexed agent);
+  event AgentUnregistered(address indexed owner
+                        , address indexed agent);
 
   error ChessEngineOnly();
   error GameEngineOnly();
@@ -31,4 +35,14 @@ interface ILobby {
   error InvalidDepositAmount();
   error UserBanned();
   error AdminOnly();
+  error AgentAlreadyRegistered();
+  error NotAgentOwner();
+  error WagerExceedsAgentMax();
+  error AgentInGame();
+
+  // ERC-4337 paymaster
+  error EntryPointOnly();
+  error NotAnAgent();
+  error UnsupportedExecuteCall();
+  error SelectorNotSponsored();
 }

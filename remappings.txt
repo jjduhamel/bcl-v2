@@ -1,5 +1,6 @@
 @src/=contracts/src/
 @lib/=contracts/src/lib/
 @forge/=contracts/lib/forge-std/src/
+@aa/=contracts/lib/account-abstraction/contracts/
 @oz/=contracts/lib/openzeppelin-contracts/contracts/
 @oz-upgradeable/=contracts/lib/openzeppelin-contracts-upgradeable/contracts/
