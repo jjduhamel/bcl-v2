@@ -10,7 +10,7 @@ import {
   type Hex,
 } from 'viem';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { lobbyAddress, relayerAddress, submit, walletClient } from './chain.js';
+import { lobbyAddress, publicClient, relayerAddress, submit, walletClient } from './chain.js';
 import { entryPoint, entryPointAbi } from './contracts/entryPoint.js';
 import { errorResult, textResult } from './util.js';
 
@@ -28,13 +28,14 @@ export const agentOpFields = {
 // Engine functions the Lobby paymaster sponsors (mirrors Lobby._isSponsoredSelector).
 const SPONSORED = new Set(['move', 'resign', 'offerDraw', 'respondDraw', 'claimVictory', 'disputeGame']);
 
-// Fixed gas params for sponsored agent ops (phase 1, anvil). Refine to on-chain estimation later.
+// Conservative fixed gas limits for sponsored agent ops. The relayer submits handleOps itself
+// (no bundler / eth_estimateUserOperationGas), and the EntryPoint refunds unused gas — so
+// over-provisioning only raises the paymaster's required prefund, it can't strand an op.
+// Fees, by contrast, must track the live base fee (estimated per-op in buildUserOp).
 const VERIFICATION_GAS_LIMIT = 1_000_000n;
 const CALL_GAS_LIMIT = 2_000_000n;
 const PRE_VERIFICATION_GAS = 200_000n;
 const POST_OP_GAS_LIMIT = 200_000n;
-const MAX_PRIORITY_FEE_PER_GAS = 1_000_000_000n; // 1 gwei
-const MAX_FEE_PER_GAS = 2_000_000_000n; // 2 gwei
 
 const executeAbi = [
   {
@@ -102,6 +103,9 @@ async function buildUserOp(sender: Address, spec: EngineCallSpec): Promise<Packe
   const inner = encodeFunctionData({ abi: spec.abi, functionName: spec.functionName, args: spec.args });
   const callData = encodeFunctionData({ abi: executeAbi, functionName: 'execute', args: [spec.engine, 0n, inner] });
   const nonce = (await entryPoint.read.getNonce([sender, 0n])) as bigint;
+  // Price the op off the live base fee (viem applies a headroom multiplier). A fixed maxFee
+  // strands the op whenever the chain's base fee climbs above it.
+  const { maxFeePerGas, maxPriorityFeePerGas } = await publicClient.estimateFeesPerGas();
   return {
     sender,
     nonce,
@@ -109,7 +113,7 @@ async function buildUserOp(sender: Address, spec: EngineCallSpec): Promise<Packe
     callData,
     accountGasLimits: pack(VERIFICATION_GAS_LIMIT, CALL_GAS_LIMIT),
     preVerificationGas: PRE_VERIFICATION_GAS,
-    gasFees: pack(MAX_PRIORITY_FEE_PER_GAS, MAX_FEE_PER_GAS),
+    gasFees: pack(maxPriorityFeePerGas, maxFeePerGas),
     paymasterAndData: concatHex([lobbyAddress, toHex(VERIFICATION_GAS_LIMIT, { size: 16 }), toHex(POST_OP_GAS_LIMIT, { size: 16 })]),
     signature: '0x',
   };

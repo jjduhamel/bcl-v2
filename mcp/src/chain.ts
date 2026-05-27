@@ -9,7 +9,7 @@ import {
   type Hex,
   type WalletClient,
 } from 'viem';
-import { foundry } from 'viem/chains';
+import { foundry, sepolia } from 'viem/chains';
 import { hashAuthorization } from 'viem/utils';
 import { privateKeyToAccount } from 'viem/accounts';
 
@@ -23,6 +23,20 @@ if (!LOBBY_ADDRESS) {
 if (!PRIVATE_KEY) {
   throw new Error('PRIVATE_KEY (relayer / gas sponsor) env var is required');
 }
+
+// The chain the server signs and submits for. CHAIN_ID must match the RPC (asserted at startup by
+// assertChain) — a mismatch would produce 7702 authorizations / UserOps valid on the wrong chain.
+const SUPPORTED_CHAINS = [foundry, sepolia];
+const CHAIN_ID = Number(process.env.CHAIN_ID || foundry.id);
+const chain = (() => {
+  const c = SUPPORTED_CHAINS.find((x) => x.id === CHAIN_ID);
+  if (!c) {
+    throw new Error(
+      `unsupported CHAIN_ID=${CHAIN_ID}; supported: ${SUPPORTED_CHAINS.map((x) => x.id).join(', ')}`,
+    );
+  }
+  return c;
+})();
 
 // The server holds only this key: the relayer that sponsors gas (7702 setup txs + handleOps). It is
 // never a game player — agents sign their own authorizations and UserOps and hold no ETH.
@@ -45,13 +59,13 @@ export function resolvePlayer(player?: Address): Address {
 }
 
 export const publicClient = createPublicClient({
-  chain: foundry,
+  chain,
   transport: http(RPC_URL),
 });
 
 export const walletClient: WalletClient = createWalletClient({
   account,
-  chain: foundry,
+  chain,
   transport: http(RPC_URL),
 });
 
@@ -74,14 +88,14 @@ export async function agentDelegation(agent: Address): Promise<{ delegated: bool
 export async function buildDelegationAuth(agent: Address): Promise<{ digest: Hex; nonce: number }> {
   if (!agentImpl) throw new Error('AGENT_ACCOUNT (delegate impl) env var is required');
   const nonce = await publicClient.getTransactionCount({ address: agent });
-  return { digest: hashAuthorization({ chainId: foundry.id, contractAddress: agentImpl, nonce }), nonce };
+  return { digest: hashAuthorization({ chainId: chain.id, contractAddress: agentImpl, nonce }), nonce };
 }
 
 // Round 2: assemble the signed authorization and broadcast the type-4 setCode tx via the relayer.
 export async function submitDelegation(agent: Address, nonce: number, signature: Hex): Promise<Hash> {
   if (!agentImpl) throw new Error('AGENT_ACCOUNT (delegate impl) env var is required');
   const { r, s, yParity } = parseSignature(signature);
-  const authorization = { address: agentImpl, chainId: foundry.id, nonce, r, s, yParity: yParity ?? 0 };
+  const authorization = { address: agentImpl, chainId: chain.id, nonce, r, s, yParity: yParity ?? 0 };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (walletClient as any).sendTransaction({ authorizationList: [authorization], to: agent });
 }
@@ -97,13 +111,12 @@ export async function submit(hash: Hash) {
   };
 }
 
-// TODO: session-key delegation. Once Lobby gains setSessionKey + a per-action
-// `principal` modifier, lift the chainId guard for proxy mode.
-export async function assertLocalChain(): Promise<void> {
-  const chainId = await publicClient.getChainId();
-  if (chainId !== foundry.id) {
+// Guard against a misconfigured endpoint: the RPC must actually be the chain we sign for.
+export async function assertChain(): Promise<void> {
+  const actual = await publicClient.getChainId();
+  if (actual !== chain.id) {
     throw new Error(
-      `bcl-mcp is localhost-only for now; got chainId=${chainId}, expected ${foundry.id} (anvil)`,
+      `RPC chainId=${actual} does not match configured CHAIN_ID=${chain.id} (${chain.name})`,
     );
   }
 }

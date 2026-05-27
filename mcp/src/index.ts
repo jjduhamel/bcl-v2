@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { assertLocalChain, relayerAddress, lobbyAddress } from './chain.js';
+import { assertChain, relayerAddress, lobbyAddress } from './chain.js';
 import { registerLobbyTools } from './tools/lobby.js';
 import { registerGameTools } from './tools/game.js';
 import { registerAgentTools } from './tools/agent.js';
 
 async function main() {
-  // Fail fast on the wrong chain — server-held key is anvil-only for now.
-  await assertLocalChain();
+  // Fail fast if the RPC isn't the chain we're configured to sign for.
+  await assertChain();
 
   const server = new McpServer({
     name: 'bcl-mcp',
