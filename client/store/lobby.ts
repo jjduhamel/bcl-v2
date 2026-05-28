@@ -19,15 +19,7 @@ export default defineStore('lobby', {
   },
   getters: {
     address() {
-      const config = useRuntimeConfig();
-      const wallet = useWalletStore();
-      switch (wallet.network) {
-        case 'homestead': return config.lobbyAddress.ethereum;
-        case 'goerli': return config.lobbyAddress.goerli;
-        case 'matic': return config.lobbyAddress.matic;
-        case 'maticmum': return config.lobbyAddress.mumbai;
-        default: return config.lobbyAddress.local;
-      }
+      return useRuntimeConfig().lobbyAddress;
     },
     challenges() {
       return _.map(this.pending, gameId => this.gameData(gameId));

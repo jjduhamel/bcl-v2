@@ -36,13 +36,8 @@ export default defineNuxtConfig({
       // moves (e.g. leaving their own king in check). Off by default; the
       // engine still accepts opponent illegal moves regardless.
       allowPseudoLegalMoves: process.env.ALLOW_PSEUDO_LEGAL === 'true',
-      lobbyAddress: {
-        local: process.env.LOBBY_PROXY_ADDR,
-        ethereum: process.env.HOMESTEAD_LOBBY_ADDR,
-        goerli: process.env.GOERLI_LOBBY_ADDR,
-        matic: process.env.MATIC_LOBBY_ADDR,
-        mumbai: process.env.MUMBAI_LOBBY_ADDR
-      }
+      // CREATE2 puts the Lobby proxy at the same address on every chain.
+      lobbyAddress: process.env.LOBBY_PROXY_ADDR
     }
   },
   hooks: {

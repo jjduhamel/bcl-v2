@@ -28,14 +28,18 @@ export default async function() {
   } = lobbyContract.filters;
 
   async function isAgent(address) {
-    const { owner } = await lobbyContract.agent(address);
-    return owner !== constants.AddressZero;
+    try {
+      const { owner } = await lobbyContract.agentProfile(address);
+      return owner !== constants.AddressZero;
+    } catch {
+      return false; // agentProfile reverts Unregistered() for non-agents
+    }
   }
 
   async function fetchAgents(address) {
     const agentAddresses = await lobbyContract.agents(address);
     const [profiles, codes] = await Promise.all([
-      Promise.all(_.map(agentAddresses, addr => lobbyContract.agent(addr))),
+      Promise.all(_.map(agentAddresses, addr => lobbyContract.agentProfile(addr))),
       Promise.all(_.map(agentAddresses, addr => signer.provider.getCode(addr)))
     ]);
     return _.map(_.zip(agentAddresses, profiles, codes), ([agentAddress, p, code]) => ({

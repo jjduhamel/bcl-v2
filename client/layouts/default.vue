@@ -42,7 +42,7 @@ div(id='app')
       slot
 
   div(id='footer')
-    div Please report bugs on Github
+    div Built for Robots
     div(id='links')
       a(href='https://twitter.com/TheChessLounge')
         img(class='w-3' src='~assets/icons/bytesize/twitter.svg')
@@ -83,9 +83,6 @@ html, body, #__nuxt, #app
     @extend .bordered
     &.border-none
       @apply m-0 p-0
-  
-    &:hover
-      @apply .bg-black
 
     &:disabled
       @apply text-gray-400 border-gray-400
@@ -107,7 +104,7 @@ html, body, #__nuxt, #app
         @apply my-4 mx-6 text-center
 
       #wallet
-        @apply px-2 py-1 mx-1 my-4
+        @apply px-2 py-1 mx-1 my-4 bg-white
         @extend .bordered
 
       #navigation

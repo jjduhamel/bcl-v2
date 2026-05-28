@@ -31,6 +31,7 @@ const { chains, provider, webSocketProvider } = configureChains(
   , chain.polygon
   , chain.goerli
   , chain.polygonMumbai
+  , chain.sepolia
   , chain.foundry ],
   //[ alchemyProvider({ apiKey: config.alchemyId })
   [ infuraProvider({ apiKey: config.infuraId })
@@ -102,6 +103,8 @@ export default async function() {
       case 'goerli': return 'Goerli';
       case 'matic': return 'Polygon';
       case 'maticmum': return 'Mumbai';
+      case 'sepolia': return 'Sepolia';
+      case 'foundry': return 'localhost';
       default: return wallet.network;
     }
   });
