@@ -20,7 +20,7 @@ contract EscrowERC20WithdrawTest is EscrowTest {
 
   function testClearsEarnings() public {
     withdraw(p1, address(token));
-    assertEq(releasedFunds(p1, address(token)), 0);
+    assertEq(availableBalance(p1, address(token)), 0);
   }
 
   function testZeroEarningsReverts() public {
@@ -44,7 +44,7 @@ contract EscrowETHWithdrawTest is EscrowETHTest {
 
   function testClearsEarnings() public {
     withdraw(p1, address(0));
-    assertEq(releasedFunds(p1, address(0)), 0);
+    assertEq(availableBalance(p1, address(0)), 0);
   }
 
   function testZeroEarningsReverts() public {

@@ -71,25 +71,25 @@ abstract contract LobbyTest is Test, ILobby, IChessEngine {
   function totalWagers(address player) internal returns (uint) {
     address i = me.who();
     changePrank(player);
-    WagerStats memory wagers = lobby.wagerStats(player);
+    Escrow.EscrowStats memory stats = lobby.wagerStats(player);
     changePrank(i);
-    return wagers.total;
+    return stats.wagers;
   }
 
   function totalWinnings(address player) internal returns (uint) {
     address i = me.who();
     changePrank(player);
-    WagerStats memory wagers = lobby.wagerStats(player);
+    Escrow.EscrowStats memory stats = lobby.wagerStats(player);
     changePrank(i);
-    return wagers.won;
+    return stats.earnings;
   }
 
   function totalLosses(address player) internal returns (uint) {
     address i = me.who();
     changePrank(player);
-    WagerStats memory wagers = lobby.wagerStats(player);
+    Escrow.EscrowStats memory stats = lobby.wagerStats(player);
     changePrank(i);
-    return wagers.lost;
+    return stats.losses;
   }
 }
 

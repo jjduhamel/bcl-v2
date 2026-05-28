@@ -73,7 +73,6 @@ contract Lobby is
   mapping(address => PlayerLobby) private __lobby;
   mapping(address => PlayerProfile) private __players;
   mapping(address => RobotProfile) private __robots;
-  AccountStats private __platform;
 
   // Disputed games
   EnumerableSet.UintSet private __disputes;
@@ -97,6 +96,7 @@ contract Lobby is
     _grantRole(ADMIN_ROLE, admin);
     _grantRole(ARBITER_ROLE, admin);
     _setPlatformFee(2);
+    _setGasFee(10);
   }
 
   function setAuthData(address signer, uint ttl, bool enabled) external
@@ -150,25 +150,27 @@ contract Lobby is
 
   function _stats(address account) private view
   returns (AccountStats storage) {
+    if (account == address(0)) return __players[address(0)].stats;
     return __robots[account].owner == address(0) ? __players[account].stats
                                                  : __robots[account].stats;
   }
 
   function gameStats(address account) public view
-  returns (GameStats memory) {
-    return _stats(account).games;
+  returns (AccountStats memory) {
+    return _stats(account);
   }
 
+  function wagerStats(address account, address token) public view
+    isOwner(account)
+  returns (Escrow.EscrowStats memory) {
+    return escrowStats(account, token);
+  }
+
+  // FIXME: Kept to legacy compatibility.  Remove
   function wagerStats(address account) public view
     isOwner(account)
-  returns (WagerStats memory) {
-    return _stats(account).wagers;
-  }
-
-  function disputeStats(address account) public view
-    isOwner(account)
-  returns (DisputeStats memory) {
-    return _stats(account).disputes;
+  returns (Escrow.EscrowStats memory) {
+    return wagerStats(account, address(0));
   }
 
   /*
@@ -229,19 +231,16 @@ contract Lobby is
    * Platform Fees
    */
 
-  function setPlatformFee(uint perc) public
+  function setPlatformFee(uint perc) external
     isAdmin
-  { _setPlatformFee(perc); }
-
-  function platformFee(uint gameId) public view
-  returns (uint) {
-    return _platformFee(chessEngine(gameId).game(gameId).wagerAmount);
+  {
+    _setPlatformFee(perc);
   }
 
   function platformBalance(address token) public view
     isAdmin
   returns (uint) {
-    return releasedFunds(address(0), token);
+    return availableBalance(address(0), token);
   }
 
   function withdrawPlatformFunds(address token, address payable receiver) public
@@ -257,14 +256,16 @@ contract Lobby is
   function netEarnings(address account) public view
     isOwner(account)
   returns (int) {
-    uint gains = _stats(account).wagers.won;
-    uint losses = _stats(account).wagers.lost;
+    // Funds flow through the owner, not the seat — resolve agents to their owner before reading.
+    address owner = ownerOf(account);
+    uint gains = escrowStats(owner, address(0)).earnings;
+    uint losses = escrowStats(owner, address(0)).losses;
     return int(gains)-int(losses);
   }
 
   function earnings(address token) public view
   returns (uint) {
-    return releasedFunds(msg.sender, token);
+    return availableBalance(msg.sender, token);
   }
 
   function currentDeposit(uint gameId) public view
@@ -282,10 +283,16 @@ contract Lobby is
   function checkPlayerEarnings(address player, address token) public view
     isAdmin
   returns (uint) {
-    return releasedFunds(player, token);
+    return availableBalance(player, token);
   }
 
-  function withdraw(address token) public
+  function deposit(uint amount, address token) external payable
+    isRegistered(msg.sender)
+  {
+    deposit(msg.sender, amount, token);
+  }
+
+  function withdraw(address token) external
     isRegistered(msg.sender)
   {
     withdraw(msg.sender, token);
@@ -364,10 +371,6 @@ contract Lobby is
     _;
   }
 
-  // TODO: no agent consent yet. Any owner can claim an unregistered address as their agent
-  // (including an existing human's address), making ownerOf(victim) resolve to the attacker
-  // and routing the victim's winnings to them. Before mainnet, require proof the caller
-  // controls the agent key (e.g. an off-chain signature from `robot` over (owner, chainId, lobby)).
   function registerAgent(
     address robot,
     string calldata nickname,
@@ -378,8 +381,10 @@ contract Lobby is
   )
     isRegistered(msg.sender)
     isUnregistered(robot)
-  public {
+  public payable {
     RobotProfile storage r = __robots[robot];
+    // Deposit any ETH user sends to fund gas budget
+    if (msg.value > 0) deposit(msg.sender, msg.value, address(0));
     r.owner = msg.sender;
     r.active = true;
     r.nickname = nickname;
@@ -517,7 +522,7 @@ contract Lobby is
     allowChallenge(wagerAmount, wagerToken)
   returns (uint) {
     // Create a new challenge on the current game engine
-    uint gameId = __currentEngine.createChallenge(__platform.games.created++
+    uint gameId = __currentEngine.createChallenge(_stats(address(0)).created++
                                                  , player 
                                                  , opponent
                                                  , startAsWhite
@@ -539,8 +544,8 @@ contract Lobby is
     __lobby[opponent].pendingChallenges.add(gameId);
 
     // Update challenges sent/received
-    _stats(player).games.created++;
-    _stats(opponent).games.received++;
+    _stats(player).created++;
+    _stats(opponent).received++;
 
     emit NewChallenge(gameId, player, opponent);
 
@@ -630,13 +635,9 @@ contract Lobby is
     __lobby[opponent].currentGames.add(gameId);
     __lobby[address(0)].currentGames.add(gameId);
 
-    _stats(player).games.started++;
-    _stats(opponent).games.started++;
-    __platform.games.started++;
-
-    _stats(player).wagers.total += gameData.wagerAmount;
-    _stats(opponent).wagers.total += gameData.wagerAmount;
-    __platform.wagers.total += 2*gameData.wagerAmount;
+    _stats(player).started++;
+    _stats(opponent).started++;
+    _stats(address(0)).started++;
 
     emit ChallengeAccepted(gameId, player, opponent);
   }
@@ -690,9 +691,9 @@ contract Lobby is
     __lobby[address(0)].finishedGames.add(gameId);
 
     if (outcome == IChessEngine.GameOutcome.Draw) {
-      _stats(white).games.draws++;
-      _stats(black).games.draws++;
-      __platform.games.draws++;
+      _stats(white).draws++;
+      _stats(black).draws++;
+      _stats(address(0)).draws++;
     } else {
       address winner;
       address loser;
@@ -704,16 +705,13 @@ contract Lobby is
         loser = white;
       }
 
-      _stats(winner).games.won++;
-      _stats(winner).wagers.won += gameData.wagerAmount;
-
-      _stats(loser).games.lost++;
-      _stats(loser).wagers.lost += gameData.wagerAmount;
+      _stats(winner).victories++;
+      _stats(loser).defeats++;
     }
 
-    _stats(white).games.finished++;
-    _stats(black).games.finished++;
-    __platform.games.finished++;
+    _stats(white).finished++;
+    _stats(black).finished++;
+    _stats(address(0)).finished++;
 
     emit GameFinished(gameId, white, black);
   }
@@ -732,9 +730,9 @@ contract Lobby is
     isGameEngine(gameId)
   {
     __disputes.add(gameId);
-    _stats(sender).disputes.created++;
-    _stats(receiver).disputes.received++;
-    __platform.disputes.created++;
+    _stats(sender).disputes++;
+    _stats(receiver).disputes++;
+    _stats(address(0)).disputes++;
     emit GameDisputed(gameId, sender, receiver);
   }
 
@@ -747,15 +745,15 @@ contract Lobby is
     isGameEngine(gameId)
   {
     if (outcome == IChessEngine.GameOutcome.Draw) {
-      _stats(white).disputes.won++;
-      _stats(black).disputes.won++;
+      _stats(white).disputesWon++;
+      _stats(black).disputesWon++;
     } else {
       address winner = outcome == IChessEngine.GameOutcome.WhiteWon ? white : black;
       address loser = outcome == IChessEngine.GameOutcome.WhiteWon ? black : white;
-      _stats(winner).disputes.won++;
-      _stats(loser).disputes.lost++;
+      _stats(winner).disputesWon++;
+      _stats(loser).disputesLost++;
     }
-    __platform.disputes.won++;             // Counts disputes resolved
+    _stats(address(0)).disputesWon++;             // Counts disputes resolved
     __disputes.remove(gameId);
     emit DisputeResolved(gameId, white, black);
   }
@@ -793,7 +791,7 @@ contract Lobby is
   function validatePaymasterUserOp(
     PackedUserOperation calldata op,
     bytes32 /* userOpHash */,
-    uint256 /* maxCost */
+    uint256 maxCost
   ) external override onlyEntryPoint isAgent(op.sender)
     returns (bytes memory context, uint256 validationData)
   {
@@ -801,19 +799,23 @@ contract Lobby is
     if (!__chessEngines.contains(target) || value != 0) revert UnsupportedExecuteCall();
     if (!_isSponsoredSelector(innerSelector)) revert SelectorNotSponsored();
 
-    // Carry the billable owner forward to postOp (unused in phase 1; Subproject 5 bills it).
-    // validationData 0 == valid, no time bounds.
-    return (abi.encode(ownerOf(op.sender)), 0);
+    address owner = ownerOf(op.sender);
+    if (availableBalance(owner, address(0)) < maxCost + gasFee(maxCost)) {
+      revert Escrow.InsufficientBalance();
+    }
+    // Carry the billable owner forward to postOp. validationData 0 == valid, no time bounds.
+    return (abi.encode(owner), 0);
   }
 
-  // EntryPoint post-execution callback: phase 1 is a no-op — the platform absorbs the gas.
-  // Subproject 5 replaces this body with _chargeGas(abi.decode(context,(address)), actualGasCost).
   function postOp(
     IPaymaster.PostOpMode /* mode */,
-    bytes calldata /* context */,
-    uint256 /* actualGasCost */,
+    bytes calldata context,
+    uint256 actualGasCost,
     uint256 /* actualUserOpFeePerGas */
-  ) external override onlyEntryPoint {}
+  ) external override onlyEntryPoint {
+    address owner = abi.decode(context, (address));
+    chargeGas(owner, actualGasCost);
+  }
 
   // Decode Simple7702Account.execute(target, value, data) out of a UserOp's callData, returning
   // the wrapped engine target, the ETH value, and the inner call's selector. Uses the same

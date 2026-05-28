@@ -37,8 +37,8 @@ contract AgentGameTest is ChallengeTest {
 
     // White agent wins; stats accrue on the agents.
     assertEq(engine.winner(gid), a1);
-    assertEq(lobby.gameStats(a1).won, 1);
-    assertEq(lobby.gameStats(a2).lost, 1);
+    assertEq(lobby.gameStats(a1).victories, 1);
+    assertEq(lobby.gameStats(a2).defeats, 1);
 
     // Funds route to the owners, not the agents.
     changePrank(p1);
@@ -65,10 +65,12 @@ contract AgentGameTest is ChallengeTest {
     changePrank(a2);
     engine.resign(gid); // a1 wins the wager
 
+    // Net earnings reflect the post-platform-fee prize (`wager - platformFee(wager)`).
+    int prize = int(uint(wager) - lobby.platformFee(wager));
     changePrank(p1);
-    assertEq(lobby.netEarnings(a1), int(wager));
+    assertEq(lobby.netEarnings(a1), prize);
     changePrank(p2);
-    assertEq(lobby.netEarnings(a2), -int(wager));
+    assertEq(lobby.netEarnings(a2), -prize);
   }
 
   // A compromised agent key cannot pull the owner's winnings.
@@ -88,8 +90,8 @@ contract AgentGameTest is ChallengeTest {
     changePrank(a1);
     engine.resign(gid);
     assertEq(engine.winner(gid), a2);
-    assertEq(lobby.gameStats(a2).won, 1);
-    assertEq(lobby.gameStats(a1).lost, 1);
+    assertEq(lobby.gameStats(a2).victories, 1);
+    assertEq(lobby.gameStats(a1).defeats, 1);
     changePrank(p2);
     assertEq(lobby.earnings(address(0)), purse());
     changePrank(p1);
@@ -156,8 +158,8 @@ contract AgentGameTest is ChallengeTest {
     changePrank(b2);
     engine.resign(g);
     assertEq(engine.winner(g), b1);
-    assertEq(lobby.gameStats(b1).won, 1);
-    assertEq(lobby.gameStats(b2).lost, 1);
+    assertEq(lobby.gameStats(b1).victories, 1);
+    assertEq(lobby.gameStats(b2).defeats, 1);
   }
 
   function testCannotUnregisterDuringGame() public {

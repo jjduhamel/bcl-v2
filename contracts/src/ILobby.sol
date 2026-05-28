@@ -2,33 +2,17 @@
 pragma solidity >=0.4.22 <0.9.0;
 
 interface ILobby {
-  struct GameStats {
+  struct AccountStats {
     uint created;
     uint received;
     uint started;
     uint finished;
-    uint won;
-    uint lost;
+    uint victories;
+    uint defeats;
     uint draws;
-  }
-
-  struct WagerStats {
-    uint total;
-    uint won;
-    uint lost;
-  }
-
-  struct DisputeStats {
-    uint created;
-    uint received;
-    uint won;
-    uint lost;
-  }
-
-  struct AccountStats {
-    GameStats games;
-    WagerStats wagers;
-    DisputeStats disputes;
+    uint disputes;
+    uint disputesWon;
+    uint disputesLost;
   }
 
   event TouchRecord(uint indexed gameId

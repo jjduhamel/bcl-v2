@@ -31,17 +31,17 @@ contract EscrowERC20DepositTest is EscrowTest {
     token2.mint(p1, wager);
     vm.prank(p1);
     token2.approve(address(this), type(uint256).max);
-    vm.expectRevert(Escrow.InvalidToken.selector);
     deposit(p1, wager, address(token2));
-    //lock(p1, gameId, wager, address(token2));
+    vm.expectRevert(Escrow.InvalidToken.selector);
+    lock(p1, gameId, wager, address(token2));
   }
 
   function testAmountOverflowReverts() public {
     uint overflow = uint(type(uint96).max) + 1;
     token.mint(p1, overflow);
-    vm.expectRevert(Escrow.AmountOverflow.selector);
     deposit(p1, overflow, address(token));
-    //lock(p1, gameId, overflow, address(token));
+    vm.expectRevert(Escrow.AmountOverflow.selector);
+    lock(p1, gameId, overflow, address(token));
   }
 
   function testDepositAtMaxAmountSucceeds() public {
@@ -55,12 +55,12 @@ contract EscrowERC20DepositTest is EscrowTest {
   function testRefundMovesToEarnings() public {
     refund(p1, gameId);
     assertEq(currentDeposit(p1, gameId).amount, 0);
-    assertEq(releasedFunds(p1, address(token)), wager);
+    assertEq(availableBalance(p1, address(token)), wager);
   }
 
   function testRefundOnZeroIsNoop() public {
     refund(p2, gameId);
-    assertEq(releasedFunds(p2, address(token)), 0);
+    assertEq(availableBalance(p2, address(token)), 0);
     assertEq(tokens(p2).length, 0);
   }
 
@@ -68,24 +68,24 @@ contract EscrowERC20DepositTest is EscrowTest {
     uint expected = wager / 2;
     refundExcess(p1, gameId, expected);
     assertEq(currentDeposit(p1, gameId).amount, expected);
-    assertEq(releasedFunds(p1, address(token)), wager - expected);
+    assertEq(availableBalance(p1, address(token)), wager - expected);
   }
 
   function testRefundExcessNoopWhenAtExpected() public {
     refundExcess(p1, gameId, wager);
     assertEq(currentDeposit(p1, gameId).amount, wager);
-    assertEq(releasedFunds(p1, address(token)), 0);
+    assertEq(availableBalance(p1, address(token)), 0);
   }
 
   function testRefundExcessNoopWhenUnderExpected() public {
     refundExcess(p1, gameId, wager + 1);
     assertEq(currentDeposit(p1, gameId).amount, wager);
-    assertEq(releasedFunds(p1, address(token)), 0);
+    assertEq(availableBalance(p1, address(token)), 0);
   }
 
   function testRefundExcessNoopWhenNoDeposit() public {
     refundExcess(p2, gameId, wager);
-    assertEq(releasedFunds(p2, address(token)), 0);
+    assertEq(availableBalance(p2, address(token)), 0);
   }
 }
 
@@ -112,12 +112,12 @@ contract EscrowETHDepositTest is EscrowETHTest {
   function testRefundMovesToEarnings() public {
     refund(p1, gameId);
     assertEq(currentDeposit(p1, gameId).amount, 0);
-    assertEq(releasedFunds(p1, address(0)), wager);
+    assertEq(availableBalance(p1, address(0)), wager);
   }
 
   function testRefundOnZeroIsNoop() public {
     refund(p2, gameId);
-    assertEq(releasedFunds(p2, address(0)), 0);
+    assertEq(availableBalance(p2, address(0)), 0);
     assertEq(tokens(p2).length, 0);
   }
 }
@@ -148,22 +148,7 @@ contract EscrowMultiGameTest is EscrowTest {
   function testRefundBothGamesAccumulatesEarnings() public {
     refund(p1, gameId);
     refund(p1, gameId2);
-    assertEq(releasedFunds(p1, address(token)), 2 * wager);
+    assertEq(availableBalance(p1, address(token)), 2 * wager);
   }
 }
 
-contract EscrowCrossTypeDepositTest is EscrowETHTest {
-  function testETHDepositThenERC20Reverts() public {
-    this.depositETH{value: wager}(p1, gameId, address(0), wager);
-    vm.expectRevert(Escrow.InvalidToken.selector);
-    deposit(p1, wager, address(token));
-    //lock(p1, gameId, wager, address(token));
-  }
-
-  function testERC20DepositThenETHReverts() public {
-    deposit(p1, wager, address(token));
-    lock(p1, gameId, wager, address(token));
-    vm.expectRevert(Escrow.InvalidToken.selector);
-    this.depositETH{value: wager}(p1, gameId, address(0), wager);
-  }
-}

@@ -4,63 +4,7 @@ import '@oz/token/ERC20/IERC20.sol';
 import '@oz/token/ERC20/utils/SafeERC20.sol';
 import '@oz/utils/structs/EnumerableMap.sol';
 import '../IChessEngine.sol';
-
-// token (160 bits) | amount (96 bits) packed into bytes32
-struct TokenDeposit {
-  address token;
-  uint96 amount;
-}
-
-library TokenDepositMap {
-  using EnumerableMap for EnumerableMap.UintToBytes32Map;
-
-  struct GameIDTokenDepositMap {
-    EnumerableMap.UintToBytes32Map _inner;
-  }
-
-  error NoDeposit();
-  error AmountOverflow();
-
-  function _encode(address token, uint96 amount) private pure returns (bytes32) {
-    return bytes32((uint256(uint160(token)) << 96) | uint256(amount));
-  }
-
-  function _decode(bytes32 val) private pure returns (TokenDeposit memory) {
-    return TokenDeposit(
-      address(uint160(uint256(val) >> 96)),
-      uint96(uint256(val))
-    );
-  }
-
-  function set(GameIDTokenDepositMap storage map, uint gameId, address token, uint amount) internal {
-    if (amount > type(uint96).max) revert AmountOverflow();
-    map._inner.set(gameId, _encode(token, uint96(amount)));
-  }
-
-  function get(GameIDTokenDepositMap storage map, uint gameId) internal view returns (TokenDeposit memory) {
-    (bool exists, bytes32 val) = map._inner.tryGet(gameId);
-    if (!exists) revert NoDeposit();
-    return _decode(val);
-  }
-
-  function tryGet(GameIDTokenDepositMap storage map, uint gameId) internal view returns (bool, TokenDeposit memory) {
-    (bool exists, bytes32 val) = map._inner.tryGet(gameId);
-    return (exists, exists ? _decode(val) : TokenDeposit(address(0), 0));
-  }
-
-  function remove(GameIDTokenDepositMap storage map, uint gameId) internal returns (bool) {
-    return map._inner.remove(gameId);
-  }
-
-  function length(GameIDTokenDepositMap storage map) internal view returns (uint) {
-    return map._inner.length();
-  }
-
-  function at(GameIDTokenDepositMap storage map, uint index) internal view returns (uint, TokenDeposit memory) {
-    (uint gameId, bytes32 val) = map._inner.at(index);
-    return (gameId, _decode(val));
-  }
-}
+import './TokenDeposit.sol';
 
 // Escrow accounting + custody as an external (linked) library: heavy EnumerableMap machinery is
 // deployed once and delegatecall-linked out of the calling contract's bytecode. Every function runs
@@ -79,6 +23,17 @@ library Escrow {
   error InsufficientBalance();
   error TransferFailed();
 
+  struct EscrowStats {
+    uint deposits;
+    uint withdrawals;
+    uint wagers;
+    uint earnings;
+    uint losses;
+    uint platformFees;
+    uint gasFees;
+    uint gas;
+  }
+
   struct EscrowAccount {
     // gameId -> per-game locked deposit
     TokenDepositMap.GameIDTokenDepositMap __accounts;
@@ -86,24 +41,25 @@ library Escrow {
     EnumerableMap.AddressToUintMap __restricted;
     // token -> withdrawable balance
     EnumerableMap.AddressToUintMap __available;
+    mapping(address => EscrowStats) __gross;
   }
 
-  function account(EscrowAccount storage escrow, uint gameId) public view returns (TokenDeposit memory) {
+  function account(EscrowAccount storage escrow, uint gameId) internal view returns (TokenDeposit memory) {
     (bool exists, TokenDeposit memory d) = escrow.__accounts.tryGet(gameId);
     return exists ? d : TokenDeposit(address(0), 0);
   }
 
   // TODO: Should merge with escrow.__restricted.keys()
-  function tokens(EscrowAccount storage escrow) public view returns (address[] memory) {
+  function tokens(EscrowAccount storage escrow) internal view returns (address[] memory) {
     return escrow.__available.keys();
   }
 
-  function available(EscrowAccount storage escrow, address token) public view returns (uint) {
+  function available(EscrowAccount storage escrow, address token) internal view returns (uint) {
     (bool exists, uint out) = escrow.__available.tryGet(token);
     return exists ? out : 0;
   }
 
-  function restricted(EscrowAccount storage escrow, address token) public view returns (uint) {
+  function restricted(EscrowAccount storage escrow, address token) internal view returns (uint) {
     (bool exists, uint out) = escrow.__restricted.tryGet(token);
     return exists ? out : 0;
   }
@@ -114,13 +70,13 @@ library Escrow {
    */
 
   // Debit increases this account's available balance.
-  function debit(EscrowAccount storage escrow, uint amount, address token) public {
+  function debit(EscrowAccount storage escrow, uint amount, address token) internal {
     uint avail = available(escrow, token);
     escrow.__available.set(token, avail + amount);
   }
 
   // Credit reduces this account's available balance.
-  function credit(EscrowAccount storage escrow, uint amount, address token) public {
+  function credit(EscrowAccount storage escrow, uint amount, address token) internal {
     uint avail = available(escrow, token);
     if (amount > avail) revert InsufficientBalance();
     escrow.__available.set(token, avail - amount);
@@ -134,16 +90,16 @@ library Escrow {
     TokenDeposit memory d = account(escrow, gameId);
     uint avail = available(escrow, token);
     uint locked = restricted(escrow, token);
+    uint total = d.amount + amount;
     if (avail < amount) revert InsufficientBalance();
     if (d.amount > 0 && d.token != token) revert InvalidToken();
-    uint total = d.amount + amount;
     if (total > type(uint96).max) revert AmountOverflow();
     escrow.__accounts.set(gameId, token, total);
     escrow.__available.set(token, avail - amount);
     escrow.__restricted.set(token, locked + amount);
   }
 
-  function release(EscrowAccount storage escrow, uint gameId, uint amount) public {
+  function release(EscrowAccount storage escrow, uint gameId, uint amount) internal {
     TokenDeposit memory d = account(escrow, gameId);
     if (amount > d.amount) revert InsufficientBalance();
     uint avail = available(escrow, d.token);
@@ -157,7 +113,7 @@ library Escrow {
     escrow.__restricted.set(d.token, locked - amount);
   }
 
-  function release(EscrowAccount storage escrow, uint gameId) public {
+  function release(EscrowAccount storage escrow, uint gameId) internal {
     TokenDeposit memory d = account(escrow, gameId);
     release(escrow, gameId, d.amount);
   }
@@ -172,18 +128,24 @@ abstract contract EscrowWrapper {
 
   mapping(address => Escrow.EscrowAccount) internal __escrow;
   uint internal __platformFeePerc;
+  uint internal __gasSponsorFeePerc;
 
   function currentDeposit(address player, uint gameId) internal view returns (TokenDeposit memory) {
     return __escrow[player].account(gameId);
+  }
+
+  // TODO Phase 1 #(naming): rename to availableFunds; this is the withdrawable balance.
+  function availableBalance(address player, address token) internal view returns (uint) {
+    return __escrow[player].available(token);
   }
 
   function tokens(address player) internal view returns (address[] memory) {
     return __escrow[player].tokens();
   }
 
-  // TODO Phase 1 #(naming): rename to availableFunds; this is the withdrawable balance.
-  function releasedFunds(address player, address token) internal view returns (uint) {
-    return __escrow[player].available(token);
+  function escrowStats(address player, address token) public view
+  returns (Escrow.EscrowStats memory) {
+    return __escrow[player].__gross[token];
   }
 
   // TODO Phase 1 #7: shape decision pending — currently refund+withdraw, should be ledger-only.
@@ -222,6 +184,8 @@ abstract contract EscrowWrapper {
       IERC20(token).safeTransferFrom(player, address(this), amount);
     }
     __escrow[player].debit(amount, token);
+    __escrow[player].__gross[token].deposits += amount;
+    __escrow[address(0)].__gross[token].deposits += amount;
   }
 
   function withdraw(address player, uint amount, address token) internal {
@@ -229,19 +193,22 @@ abstract contract EscrowWrapper {
     if (amount > avail) revert Escrow.InsufficientBalance();
     _transfer(player, amount, token);
     __escrow[player].credit(amount, token);
+    __escrow[player].__gross[token].withdrawals += amount;
+    __escrow[address(0)].__gross[token].withdrawals += amount;
   }
 
   function withdraw(address player, address token) internal {
     uint avail = __escrow[player].available(token);
     if (avail == 0) revert Escrow.InsufficientBalance();
-    _transfer(player, avail, token);
-    __escrow[player].credit(avail, token);
+    withdraw(player, avail, token);
   }
 
   function lock(address player, uint gameId, uint amount, address token) internal {
     uint avail = __escrow[player].available(token);
     if (amount > avail) revert Escrow.InsufficientBalance();
     __escrow[player].lock(gameId, amount, token);
+    __escrow[player].__gross[token].wagers += amount;
+    __escrow[address(0)].__gross[token].wagers += amount;
   }
 
   // TODO Phase 1 #7: same auto-withdraw shape concern as refund.
@@ -265,10 +232,16 @@ abstract contract EscrowWrapper {
       // Transfer black's stake -> white
       __escrow[white].debit(bPrize.amount, bPrize.token);
       __escrow[black].credit(bPrize.amount, bPrize.token);
+      // Update player stats
+      __escrow[white].__gross[bPrize.token].earnings += bPrize.amount;
+      __escrow[black].__gross[bPrize.token].losses += bPrize.amount;
     } else if (outcome == IChessEngine.GameOutcome.BlackWon) {
       // Transfer white's stake -> black
       __escrow[black].debit(wPrize.amount, wPrize.token);
       __escrow[white].credit(wPrize.amount, wPrize.token);
+      // Update player stats
+      __escrow[black].__gross[wPrize.token].earnings += wPrize.amount;
+      __escrow[white].__gross[wPrize.token].losses += wPrize.amount;
     } else if (outcome == IChessEngine.GameOutcome.Draw) {
       // Each side keeps its own stake — already released into their __available above.
     } else {
@@ -288,7 +261,7 @@ abstract contract EscrowWrapper {
     return __platformFeePerc;
   }
 
-  function _platformFee(uint wager) internal view returns (uint96) {
+  function platformFee(uint wager) public view returns (uint96) {
     return uint96(wager * __platformFeePerc / 100);
   }
 
@@ -296,10 +269,47 @@ abstract contract EscrowWrapper {
     TokenDeposit memory d = __escrow[player].account(gameId);
     // No fees on zero-wager games
     if (d.amount == 0) return;
-    uint96 fee = _platformFee(d.amount);
+    uint96 fee = platformFee(d.amount);
     __escrow[player].release(gameId, fee);             // restricted -> available
     __escrow[player].credit(fee, d.token);             // available -> (move out)
     __escrow[address(0)].debit(fee, d.token);          // (move into) platform pot
+    // Update escrow stats
+    __escrow[player].__gross[token].platformFees += fee;
+    __escrow[address(0)].__gross[token].platformFees += fee;
+  }
+
+  /*
+   * Gas Fee
+   */
+
+  function _setGasFee(uint perc) internal {
+    __gasSponsorFeePerc = perc;
+  }
+
+  function gasFeePerc() public view returns (uint) {
+    return __gasSponsorFeePerc;
+  }
+
+  function gasFee(uint wager) public view returns (uint96) {
+    return uint96(wager * __gasSponsorFeePerc / 100);
+  }
+
+  // Saturating: never reverts. Moves min(cost + fee, avail) ETH from owner.available → platform
+  // pot. Saturation is required because postOp must not revert under ERC-4337.
+  function chargeGas(address owner, uint cost) internal returns (uint charged) {
+    uint avail = __escrow[owner].available(address(0));
+    uint fee = gasFee(cost);
+    uint total = cost + fee;
+    charged = total < avail ? total : avail;
+    if (charged > 0) {
+      __escrow[owner].credit(charged, address(0));
+      __escrow[address(0)].debit(charged, address(0));
+      // Update escrow stats
+      __escrow[owner].__gross[address(0)].gasFees += fee;
+      __escrow[owner].__gross[address(0)].gas += cost;
+      __escrow[address(0)].__gross[address(0)].gasFees += fee;
+      __escrow[address(0)].__gross[address(0)].gas += cost;
+    }
   }
 
   function releasePlatformFunds(uint amount, address token, address receiver) internal {
@@ -307,6 +317,7 @@ abstract contract EscrowWrapper {
     if (amount > balance) revert Escrow.InsufficientBalance();
     _transfer(receiver, amount, token);
     __escrow[address(0)].credit(amount, token);
+    __escrow[address(0)].__gross[token].withdrawals += amount;
   }
 
   function releasePlatformFunds(address token, address receiver) internal {

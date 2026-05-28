@@ -43,25 +43,29 @@ abstract contract ChessGameTest is ChallengeTest {
   }
 
   modifier testWinner(address player) {
-    uint wins = lobby.gameStats(player).won;
+    uint wins = lobby.gameStats(player).victories;
     uint winnings = totalWinnings(player);
     _;
     GameData memory gameData = engine.game(gameId);
     assertTrue(gameData.state == GameState.Finished);
     assertEq(engine.winner(gameId), player);
-    assertEq(lobby.gameStats(player).won, wins+1);
-    assertEq(totalWinnings(player), winnings+gameData.wagerAmount);
+    assertEq(lobby.gameStats(player).victories, wins+1);
+    // Earnings record the *net* prize transferred (post-platform-fee).
+    uint prize = gameData.wagerAmount - lobby.platformFee(gameData.wagerAmount);
+    assertEq(totalWinnings(player), winnings + prize);
   }
 
   modifier testLoser(address player) {
-    uint lost = lobby.gameStats(player).lost;
+    uint defeats = lobby.gameStats(player).defeats;
     uint losses = totalLosses(player);
     _;
     GameData memory gameData = engine.game(gameId);
     assertTrue(gameData.state == GameState.Finished);
     assertEq(engine.loser(gameId), player);
-    assertEq(lobby.gameStats(player).lost, lost+1);
-    assertEq(totalLosses(player), lost+gameData.wagerAmount);
+    assertEq(lobby.gameStats(player).defeats, defeats+1);
+    // Losses record the *net* prize forfeited (post-platform-fee).
+    uint prize = gameData.wagerAmount - lobby.platformFee(gameData.wagerAmount);
+    assertEq(totalLosses(player), losses + prize);
   }
 
   modifier testDraw(address player) {

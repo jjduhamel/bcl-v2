@@ -73,10 +73,10 @@ contract ResolveDisputeTest is ChessGameTest {
   function testResolveDrawMarksAsWin() public {
     engine.resolveDispute(gameId, GameOutcome.Draw);
     changePrank(p1);
-    assertEq(lobby.disputeStats(p1).won, 1);
-    assertEq(lobby.disputeStats(p1).lost, 0);
+    assertEq(lobby.gameStats(p1).disputesWon, 1);
+    assertEq(lobby.gameStats(p1).disputesLost, 0);
     changePrank(p2);
-    assertEq(lobby.disputeStats(p2).won, 1);
-    assertEq(lobby.disputeStats(p2).lost, 0);
+    assertEq(lobby.gameStats(p2).disputesWon, 1);
+    assertEq(lobby.gameStats(p2).disputesLost, 0);
   }
 }
