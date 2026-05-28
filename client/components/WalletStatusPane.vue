@@ -30,7 +30,7 @@ const props = defineProps({
 
 <template lang='pug'>
 div(id='wallet-status' class='py-0.5')
-  div(id='account' class='py-0.5 flex items-center cursor-pointer' @click='copyAddress')
+  div(id='account' class='py-0.5 flex items-center cursor-pointer gap-2' @click='copyAddress')
     img(class='h-4' src='~assets/icons/bytesize/user.svg')
     div(class='flex-1')
       div(v-if='connected') {{ truncAddress(address, 4) }}
@@ -41,7 +41,7 @@ div(id='wallet-status' class='py-0.5')
       @click.stop='emit("disconnect")'
     )
       img(class='h-4' src='~assets/icons/bytesize/lock.svg')
-  div(id='network' class='py-0.5 flex items-center')
+  div(id='network' class='py-0.5 flex items-center gap-2')
     img(class='h-4' src='~assets/icons/bytesize/link.svg')
     div(class='flex-1')
       div(v-if='connected') {{ network }}

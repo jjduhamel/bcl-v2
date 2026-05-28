@@ -27,27 +27,61 @@ export default async function() {
     GameFinished
   } = lobbyContract.filters;
 
+  async function isAgent(address) {
+    const { owner } = await lobbyContract.agent(address);
+    return owner !== constants.AddressZero;
+  }
+
+  async function fetchAgents(address) {
+    const agentAddresses = await lobbyContract.agents(address);
+    const [profiles, codes] = await Promise.all([
+      Promise.all(_.map(agentAddresses, addr => lobbyContract.agent(addr))),
+      Promise.all(_.map(agentAddresses, addr => signer.provider.getCode(addr)))
+    ]);
+    return _.map(_.zip(agentAddresses, profiles, codes), ([agentAddress, p, code]) => ({
+      address: agentAddress,
+      delegated: code.startsWith('0xef0100'),
+      ..._.pick(p, [ 'active', 'owner', 'nickname', 'avatar' ]),
+      wins: p.stats.games.won.toNumber(),
+      losses: p.stats.games.lost.toNumber(),
+      draws: p.stats.games.draws.toNumber(),
+      games: p.stats.games.finished.toNumber()
+    }));
+  }
+
   async function initPlayerLobby() {
     console.log('Initialize player lobby', lobby.address);
 
-    const [ challenges, games, history ] = await Promise.all([
+    const [ challenges, games, history, agents ] = await Promise.all([
       lobbyContract.challenges(wallet.address),
       lobbyContract.games(wallet.address),
-      lobbyContract.history(wallet.address)
+      lobbyContract.history(wallet.address),
+      fetchAgents(wallet.address)
     ]);
+
+    const [ agentChallenges, agentGames, agentHistory ] = (await Promise.all([
+      Promise.all(_.map(agents, agent => lobbyContract.challenges(agent.address))),
+      Promise.all(_.map(agents, agent => lobbyContract.games(agent.address))),
+      Promise.all(_.map(agents, agent => lobbyContract.history(agent.address)))
+    ])).map(_.flatten);
 
     await Promise.all(_.map([
       ...challenges,
       ...games,
-      ...history
+      ...history,
+      ...agentChallenges,
+      ...agentGames,
+      ...agentHistory
     ], initGameData));
 
-    lobby.pending = _.map(challenges, gameId => gameId.toNumber());
-    console.log('Synced', challenges.length, 'challenges');
-    lobby.current = _.map(games, gameId => gameId.toNumber());
-    console.log('Synced', games.length, 'games');
-    lobby.finished = _.map(history, gameId => gameId.toNumber());
-    console.log('Synced', history.length, 'finished games');
+    lobby.agents = agents;
+    console.log('Synced', agents.length, 'agents');
+    lobby.pending = _.map([ ...challenges, ...agentChallenges ], gameId => gameId.toNumber());
+    console.log('Synced', lobby.challenges.length, 'challenges');
+    lobby.current = _.map([ ...games, ...agentGames ], gameId => gameId.toNumber());
+    console.log('Synced', lobby.games.length, 'games');
+    lobby.finished = _.map([ ...history, ...agentHistory ], gameId => gameId.toNumber());
+    console.log('Synced', lobby.history.length, 'finished games');
 
     lobby.initialized = true;
   };
@@ -103,7 +137,8 @@ export default async function() {
   }
 
   const didSendChallenge = ref(false);
-  const sendChallenge = (opponent
+  const sendChallenge = (sender
+                       , opponent
                        , startAsWhite
                        , timePerMove
                        , wagerAmount) =>
@@ -111,12 +146,14 @@ export default async function() {
     try {
       didSendChallenge.value = true;
       $amplitude.track('SendChallenge', {
+        sender,
         opponent,
         startAsWhite,
         timePerMove,
         wagerAmount
       });
-      await lobbyContract.challenge(opponent
+      await lobbyContract.challenge(sender
+                                  , opponent
                                   , startAsWhite
                                   , timePerMove
                                   , wagerAmount
@@ -129,7 +166,7 @@ export default async function() {
     }
 
     const eventFilter = NewChallenge(null
-                                   , wallet.address
+                                   , sender
                                    , opponent);
     lobbyContract.once(eventFilter, async id => {
       const gameId = BN.from(id).toNumber();
@@ -247,78 +284,182 @@ export default async function() {
     });
   });
 
+  const didUpdateAgent = ref(false);
+  const updateAgent = (robot, nickname, avatar) => new Promise(async (resolve, reject) => {
+    try {
+      didUpdateAgent.value = true;
+      await lobbyContract.updateAgent(robot, nickname, avatar, '', '', '');
+      console.log('Updating agent', robot);
+    } catch(err) {
+      didUpdateAgent.value = false;
+      return reject(err);
+    }
+
+    const eventFilter = lobbyContract.filters.AgentUpdated(wallet.address, robot);
+    lobbyContract.once(eventFilter, async (owner, agent) => {
+      console.log('Agent updated', agent);
+      didUpdateAgent.value = false;
+      lobby.agents = await fetchAgents(wallet.address);
+      return resolve(agent);
+    });
+  });
+
+  const didSuspendAgent = ref(false);
+  const suspendAgent = robot => new Promise(async (resolve, reject) => {
+    try {
+      didSuspendAgent.value = true;
+      await lobbyContract.suspendAgent(robot);
+      console.log('Suspending agent', robot);
+    } catch(err) {
+      didSuspendAgent.value = false;
+      return reject(err);
+    }
+
+    const eventFilter = lobbyContract.filters.AgentSuspended(wallet.address, robot);
+    lobbyContract.once(eventFilter, async (owner, agent) => {
+      console.log('Agent suspended', agent);
+      didSuspendAgent.value = false;
+      lobby.agents = await fetchAgents(wallet.address);
+      return resolve(agent);
+    });
+  });
+
+  const didUnregisterAgent = ref(false);
+  const unregisterAgent = robot => new Promise(async (resolve, reject) => {
+    try {
+      didUnregisterAgent.value = true;
+      await lobbyContract.unregisterAgent(robot);
+      console.log('Unregistering agent', robot);
+    } catch(err) {
+      didUnregisterAgent.value = false;
+      return reject(err);
+    }
+
+    const eventFilter = lobbyContract.filters.AgentUnregistered(wallet.address, robot);
+    lobbyContract.once(eventFilter, async (owner, agent) => {
+      console.log('Agent unregistered', agent);
+      didUnregisterAgent.value = false;
+      lobby.agents = await fetchAgents(wallet.address);
+      return resolve(agent);
+    });
+  });
+
+  const didRegisterAgent = ref(false);
+  const registerAgent = (robot, nickname, avatar) => new Promise(async (resolve, reject) => {
+    try {
+      didRegisterAgent.value = true;
+      await lobbyContract.registerAgent(robot, nickname, avatar, '', '', '');
+      console.log('Registering agent', robot);
+    } catch(err) {
+      didRegisterAgent.value = false;
+      return reject(err);
+    }
+
+    const eventFilter = lobbyContract.filters.AgentRegistered(wallet.address, robot);
+    lobbyContract.once(eventFilter, async (owner, agent) => {
+      console.log('Agent registered', agent);
+      didRegisterAgent.value = false;
+      lobby.agents = await fetchAgents(wallet.address);
+      return resolve(agent);
+    });
+  });
+
   const txPending = computed(() => {
     return didSendChallenge.value
         || didAcceptChallenge.value
         || didDeclineChallenge.value
-        || didModifyChallenge.value;
+        || didModifyChallenge.value
+        || didRegisterAgent.value
+        || didUpdateAgent.value
+        || didSuspendAgent.value
+        || didUnregisterAgent.value;
   });
 
-  // Incoming Events
-  const recordUpdated = TouchRecord(null, null, wallet.address);
-  const createdChallenge = NewChallenge(null, null, wallet.address);
-  const declinedChallenge = ChallengeDeclined(null, null, wallet.address);
-  const acceptedChallenge = ChallengeAccepted(null, null, wallet.address);
-  const gameFinished = GameFinished(null, null, wallet.address);
+  // Incoming Events. Handlers are stable consts so off(filter, handler) can
+  // remove them, and because each is bound to more than one filter below.
+  const onCreatedChallenge = async (id, opponent) => {
+    const gameId = BN.from(id).toNumber();
+    console.log('Received new challenge from', opponent);
+    $amplitude.track('ChallengeCreated', { gameId, opponent });
+    await initGameData(gameId);
+    lobby.newChallenge(gameId);
+    playAudioClip('nes/NewChallenge');
+  };
+
+  const onAcceptedChallenge = async (id, opponent) => {
+    const gameId = BN.from(id).toNumber();
+    console.log('Challenge', gameId, 'was accepted by', opponent);
+    $amplitude.track('ChallengeAccepted', { gameId, opponent });
+    await fetchGameData(gameId);
+    lobby.newGame(gameId);
+    await refreshBalance();
+    playAudioClip('nes/Berserk');
+  };
+
+  const onDeclinedChallenge = async (id, opponent) => {
+    const gameId = BN.from(id).toNumber();
+    console.log('Challenge', gameId, 'was declined by', opponent);
+    $amplitude.track('ChallengeDeclined', { gameId, opponent });
+    await fetchGameData(gameId);
+    lobby.popChallenge(gameId);
+    await refreshBalance();
+    playAudioClip('nes/Explosion');
+  };
+
+  const onGameFinished = async id => {
+    const gameId = BN.from(id).toNumber();
+    console.log('Game', gameId, 'finished');
+    $amplitude.track('GameFinished', { gameId });
+    await fetchGameData(gameId);
+    lobby.finishGame(id);
+    await refreshBalance();
+    playAudioClip('nes/Explosion');
+  };
+
+  const onRecordUpdated = async (id, opponent) => {
+    const gameId = BN.from(id).toNumber();
+    console.log('Game', gameId, 'was touched by', opponent);
+    $amplitude.track('ChallengeModified', { gameId, opponent });
+    await fetchGameData(gameId);
+    playAudioClip('nes/Explosion');
+  };
+
+  const activeListeners = [];
 
   function createListeners() {
     console.log('Register listeners for incoming lobby events');
+    const agents = _.map(lobby.agents, 'address');
+    const recv = [ wallet.address, ...agents ];
+    const add = (filter, handler) => {
+      lobbyContract.on(filter, handler);
+      activeListeners.push({ filter, handler });
+    };
 
-    lobbyContract.on(createdChallenge, async (id, opponent) => {
-      const gameId = BN.from(id).toNumber();
-      console.log('Received new challenge from', opponent);
-      $amplitude.track('ChallengeCreated', { gameId, opponent });
-      await initGameData(gameId);
-      lobby.newChallenge(gameId);
-      playAudioClip('nes/NewChallenge');
-    });
+    // Receiver side: events targeting the wallet or any owned agent.
+    add(NewChallenge(null, null, recv), onCreatedChallenge);
+    add(ChallengeAccepted(null, null, recv), onAcceptedChallenge);
+    add(ChallengeDeclined(null, null, recv), onDeclinedChallenge);
+    add(TouchRecord(null, null, recv), onRecordUpdated);
 
-    lobbyContract.on(acceptedChallenge, async (id, opponent) => {
-      const gameId = BN.from(id).toNumber();
-      console.log('Challenge', gameId, 'was accepted by', opponent);
-      $amplitude.track('ChallengeAccepted', { gameId, opponent });
-      await fetchGameData(gameId);
-      lobby.newGame(gameId);
-      await refreshBalance();
-      playAudioClip('nes/Berserk');
-    });
+    // GameFinished is color-keyed (white, black) with no once() handler, so
+    // match wallet + agents on both seats.
+    add(GameFinished(null, null, recv), onGameFinished);
+    add(GameFinished(null, recv, null), onGameFinished);
 
-    lobbyContract.on(declinedChallenge, async (id, opponent) => {
-      const gameId = BN.from(id).toNumber();
-      console.log('Challenge', gameId, 'was declined by', opponent);
-      $amplitude.track('ChallengeDeclined', { gameId, opponent });
-      await fetchGameData(gameId);
-      lobby.popChallenge(gameId);
-      await refreshBalance();
-      playAudioClip('nes/Explosion');
-    });
-
-    lobbyContract.on(gameFinished, async id => {
-      const gameId = BN.from(id).toNumber();
-      console.log('Game', gameId, 'finished');
-      $amplitude.track('GameFinished', { gameId });
-      await fetchGameData(gameId);
-      lobby.finishGame(id);
-      await refreshBalance();
-      playAudioClip('nes/Explosion');
-    });
-
-    // TouchedRecord Listener
-    lobbyContract.on(recordUpdated, async (id, opponent) => {
-      const gameId = BN.from(id).toNumber();
-      console.log('Game', gameId, 'was touched by', opponent);
-      $amplitude.track('ChallengeModified', { gameId, opponent });
-      await fetchGameData(gameId);
-      playAudioClip('nes/Explosion');
-    });
+    // Sender side, agents only: agents act from the MCP server with no local
+    // once(); the wallet's own actions are covered by the per-action once()s.
+    if (agents.length) {
+      add(NewChallenge(null, agents, null), onCreatedChallenge);
+      add(ChallengeAccepted(null, agents, null), onAcceptedChallenge);
+      add(ChallengeDeclined(null, agents, null), onDeclinedChallenge);
+      add(TouchRecord(null, agents, null), onRecordUpdated);
+    }
   }
 
   function destroyListeners() {
-    lobbyContract.off(recordUpdated);
-    lobbyContract.off(createdChallenge);
-    lobbyContract.off(declinedChallenge);
-    lobbyContract.off(acceptedChallenge);
-    lobbyContract.off(gameFinished);
+    for (const { filter, handler } of activeListeners)
+      lobbyContract.off(filter, handler);
+    activeListeners.length = 0;
   }
 
   return {
@@ -330,10 +471,16 @@ export default async function() {
     initGameData,
     fetchGameData,
     fetchChessEngine,
+    fetchAgents,
+    isAgent,
     sendChallenge,
     acceptChallenge,
     declineChallenge,
     modifyChallenge,
+    registerAgent,
+    updateAgent,
+    suspendAgent,
+    unregisterAgent,
     createListeners,
     destroyListeners
   };

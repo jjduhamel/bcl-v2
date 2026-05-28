@@ -1,12 +1,16 @@
+<script>
+// In a plain <script> so defineProps (hoisted) can reference it for a default.
+const GameOutcome = { Undecided: 0, WhiteWon: 1, BlackWon: 2, Draw: 3 };
+</script>
+
 <script setup>
 import humanizeDuration from 'humanize-duration';
 import { formatEther } from 'ethers/lib/utils';
 const { truncAddress } = useEthUtils();
 
 const props = defineProps({
-  gameOver:            { type: Boolean, default: false },
-  isWinner:            { type: Boolean, default: false },
-  isLoser:             { type: Boolean, default: false },
+  gameOutcome:         { type: Number, default: GameOutcome.Undecided },
+  isWhitePlayer:       { type: Boolean, default: false },
   isDisputed:          { type: Boolean, default: false },
   inCheck:             { type: Boolean, default: false },
   inCheckmate:         { type: Boolean, default: false },
@@ -17,10 +21,24 @@ const props = defineProps({
   timerExpired:        { type: Boolean, default: false },
   timeUntilExpiry:     { type: Number, required: true },
   wagerAmount:         { type: [ String, Number ], default: '0' },
-  opponent:            { type: String, required: true },
+  opponent:            { type: String, default: '' },
+  isSpectator:         { type: Boolean, default: false },
+  whitePlayer:         { type: String, default: '' },
+  blackPlayer:         { type: String, default: '' },
+  currentMove:         { type: String, default: '' },
+  statusText:          { type: String, default: '' },
 });
 
 const { timeUntilExpiry } = toRefs(props);
+
+const gameOver = computed(() => props.gameOutcome !== GameOutcome.Undecided);
+const whiteWon = computed(() => props.gameOutcome === GameOutcome.WhiteWon);
+const blackWon = computed(() => props.gameOutcome === GameOutcome.BlackWon);
+const isDraw = computed(() => props.gameOutcome === GameOutcome.Draw);
+const isWinner = computed(() => !props.isSpectator
+  && ((props.isWhitePlayer && whiteWon.value) || (!props.isWhitePlayer && blackWon.value)));
+const isLoser = computed(() => !props.isSpectator
+  && gameOver.value && !isDraw.value && !isWinner.value);
 
 // Built once at module-eval time; the computed below just calls it.
 const humanize = humanizeDuration.humanizer({
@@ -52,13 +70,18 @@ const displayTimer = computed(() => {
 <template lang='pug'>
 div(id='caption')
   div(v-if='gameOver' class='text-lg font-bold')
-    div(v-if='isWinner' class='text-green-600') You Won!
+    template(v-if='isSpectator')
+      div(v-if='whiteWon') White Won
+      div(v-else-if='blackWon') Black Won
+      div(v-else) Draw
+    div(v-else-if='isWinner' class='text-green-600') You Won!
     div(v-else-if='isLoser' class='text-red-600') You Lost
     div(v-else) Draw
   div(v-else-if='isDisputed' class='text-lg font-bold') Under Review
   div(v-else class='text-lg font-bold')
-    div(v-if='inCheckmate' class='text-red-600') Checkmate!
-    div(v-if='opponentInCheckmate' class='text-green-600') Checkmate!
+    div(v-if='isSpectator') {{ currentMove === whitePlayer ? "White's Move" : "Black's Move" }}
+    div(v-else-if='inCheckmate' class='text-red-600') Checkmate!
+    div(v-else-if='opponentInCheckmate' class='text-green-600') Checkmate!
     div(v-else-if='inCheck') Check!
     div(v-else-if='didSendMove') Pending...
     div(v-else-if='didChooseMove') Submit Move

@@ -21,6 +21,10 @@ const props = defineProps({
   isCurrentMove: {
     type: Boolean,
     default: true
+  },
+  viewOnly: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -35,6 +39,7 @@ const chessground = ref(null);
 function reloadBoard() {
   chessground.value.set({
     fen: unref(fen),
+    viewOnly: props.viewOnly,
     turnColor: isCurrentMove.value ? playerColor : opponentColor,
     movable: {
       dests: unref(legalMoves)
@@ -48,6 +53,7 @@ onMounted(() => {
   chessground.value = new Chessground(unref(board), {
     animation: { enabled: false },
     orientation: playerColor,
+    viewOnly: props.viewOnly,
     movable: {
       free: false,
       color: playerColor,

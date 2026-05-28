@@ -16,8 +16,8 @@ div(id='app')
     div(id='sidebar')
       div(id='container')
         div(id='brand')
-          div The Blockchain
-          div Chess Lounge
+          div(class='text-md font-thin italic tracking-widest') The Blockchain
+          div(class='text-2xl font-bold italic tracking-wide') Chess Lounge
         div(id='wallet')
           WalletStatusPane(
             :connected='wallet.connected'
@@ -42,7 +42,7 @@ div(id='app')
       slot
 
   div(id='footer')
-    div This site is protected from bots by algoz.xyz
+    div Please report bugs on Github
     div(id='links')
       a(href='https://twitter.com/TheChessLounge')
         img(class='w-3' src='~assets/icons/bytesize/twitter.svg')
@@ -59,6 +59,7 @@ div(id='app')
 <style lang='sass'>
 html, body, #__nuxt, #app
   height: 100%
+  background-color: #fbfaf6
 
 #app
   @apply px-2 max-w-4xl flex flex-col
@@ -78,14 +79,20 @@ html, body, #__nuxt, #app
     //box-sizing: border-box
     @apply h-8 px-2 py-1 mx-1 my-0
     @apply bg-transparent
+
     @extend .bordered
+    &.border-none
+      @apply m-0 p-0
+  
+    &:hover
+      @apply .bg-black
 
-  button:disabled
-    @apply text-gray-400 border-gray-400
-    filter: invert(40%)
+    &:disabled
+      @apply text-gray-400 border-gray-400
+      filter: invert(40%)
 
-  button:disabled.unbordered
-    @extend .unbordered
+    &:disabled.unbordered
+      @extend .unbordered
 
   #body
     @apply mt-2 p-2 flex flex-grow
@@ -97,7 +104,7 @@ html, body, #__nuxt, #app
         @apply p-2 border border-2 border-black rounded-2xl
 
       #brand
-        @apply mx-1 mt-2 text-center text-2xl font-bold
+        @apply my-4 mx-6 text-center
 
       #wallet
         @apply px-2 py-1 mx-1 my-4

@@ -13,8 +13,10 @@ const {
   moves,
   illegalMoves,
   fetchMoves,
+  gameData,
   opponent,
   wagerAmount,
+  isSpectator,
   isCurrentMove,
   isOpponentsTurn,
   isWhitePlayer,
@@ -51,6 +53,10 @@ const {
   registerListeners,
   destroyListeners,
 } = await useChessEngine(gameId);
+
+// Orient the board from the side the viewer controls (own seat or an owned
+// agent); a spectator with no seat defaults to white on bottom.
+const whiteOnBottom = computed(() => !lobby.controls(gameData.value.blackPlayer));
 
 const disputedMove = ref(null);
 watch(illegalMoves, () => {
@@ -227,7 +233,7 @@ function isIllegalMove(j) {
 // White moves at even indices, black at odd. Position by player so the
 // active player's moves are always on the left.
 function isPlayerMove(j) {
-  return (j % 2 === 0) === isWhitePlayer.value;
+  return (j % 2 === 0) === whiteOnBottom.value;
 }
 
 
@@ -247,12 +253,20 @@ onUnmounted(() => {
 NuxtLayout(name='game')
   template(v-slot:board)
     ChessBoard(
-      v-bind='{ fen, legalMoves, isWhitePlayer, isCurrentMove }'
+      v-bind='{ fen, legalMoves, isCurrentMove }'
+      :isWhitePlayer='whiteOnBottom'
+      :viewOnly='isSpectator'
       @moved='chooseMove'
     )
 
   template(v-slot:info)
-    GameCaption(v-bind='{ gameOver, isWinner, isLoser, isDisputed, inCheck, inCheckmate, opponentInCheckmate, isCurrentMove, didChooseMove, didSendMove, timerExpired, timeUntilExpiry, wagerAmount, opponent }')
+    GameCaption(
+      v-bind='{ isDisputed, inCheck, inCheckmate, opponentInCheckmate, isCurrentMove, didChooseMove, didSendMove, timerExpired, timeUntilExpiry, wagerAmount, opponent, isSpectator, isWhitePlayer }'
+      :gameOutcome='gameData.outcome'
+      :whitePlayer='gameData.whitePlayer'
+      :blackPlayer='gameData.blackPlayer'
+      :currentMove='gameData.currentMove'
+    )
 
     div(id='moves' class='my-4 text-sm')
       div(
@@ -261,114 +275,115 @@ NuxtLayout(name='game')
         :style='isIllegalMove(j) && { color: "red" }'
       ) {{ move.san ?? move.uci }}
 
-    GameControls(
-      v-bind='{ didChooseMove, didSendMove, didWithdrawWinnings, gameOver, isDisputed, isWinner, isCurrentMove, inDrawOffer, checkmatePending, playerTimeExpired, opponentTimeExpired, canCaptureKing }'
-      @undo='undoMove'
-      @offer-draw='() => offerStalemateModal = true'
-      @resign='() => confirmResignModal = true'
-      @resign-now='doResign'
-      @submit='doSendMove'
-      @claim-victory='doClaimVictory'
-      @claim-king-capture='doClaimKingCapture'
-      @claim-winnings='doWithdrawWinnings'
-    )
+    template(v-if='!isSpectator')
+      GameControls(
+        v-bind='{ didChooseMove, didSendMove, didWithdrawWinnings, gameOver, isDisputed, isWinner, isCurrentMove, inDrawOffer, checkmatePending, playerTimeExpired, opponentTimeExpired, canCaptureKing }'
+        @undo='undoMove'
+        @offer-draw='() => offerStalemateModal = true'
+        @resign='() => confirmResignModal = true'
+        @resign-now='doResign'
+        @submit='doSendMove'
+        @claim-victory='doClaimVictory'
+        @claim-king-capture='doClaimKingCapture'
+        @claim-winnings='doWithdrawWinnings'
+      )
 
-    ConfirmModal(
-      title='Resign?'
-      v-if='confirmResignModal'
-      :loading='didSendResign'
-      @confirm='() => doResign()\
-          .then(() => confirmResignModal = false)'
-      @close='() => confirmResignModal = false'
-    )
-      div Please confirm you wish to resign by clicking "Confirm".
+      ConfirmModal(
+        title='Resign?'
+        v-if='confirmResignModal'
+        :loading='didSendResign'
+        @confirm='() => doResign()\
+            .then(() => confirmResignModal = false)'
+        @close='() => confirmResignModal = false'
+      )
+        div Please confirm you wish to resign by clicking "Confirm".
 
-    ConfirmModal(
-      title='Offer Stalemate'
-      v-if='offerStalemateModal'
-      :loading='didOfferStalemate'
-      @confirm='() => doOfferStalemate()\
-          .then(() => offerStalemateModal = false)'
-      @close='() => offerStalemateModal = false'
-    )
-      div By clicking "Confirm", you'll offer your opponent the opportunity to end in a draw.  Both players will receive their wagers back.
+      ConfirmModal(
+        title='Offer Stalemate'
+        v-if='offerStalemateModal'
+        :loading='didOfferStalemate'
+        @confirm='() => doOfferStalemate()\
+            .then(() => offerStalemateModal = false)'
+        @close='() => offerStalemateModal = false'
+      )
+        div By clicking "Confirm", you'll offer your opponent the opportunity to end in a draw.  Both players will receive their wagers back.
 
-    Modal(
-      title='Checkmate!'
-      v-if='inCheckmateModal'
-      @close='() => inCheckmateModal = false'
-    )
-      div(class='text-center') Oh no!  You're in checkmate.  Please resign before the timer expires.
-      div(id='form-controls' class='flex items-center')
-        button(
-          @click='() => doResign()\
-            .then(() => inCheckmateModal = false)'
-          :disabled='didSendResign'
-        ) Resign
+      Modal(
+        title='Checkmate!'
+        v-if='inCheckmateModal'
+        @close='() => inCheckmateModal = false'
+      )
+        div(class='text-center') Oh no!  You're in checkmate.  Please resign before the timer expires.
+        div(id='form-controls' class='flex items-center')
+          button(
+            @click='() => doResign()\
+              .then(() => inCheckmateModal = false)'
+            :disabled='didSendResign'
+          ) Resign
 
-    Modal(
-      title='Time Expired'
-      v-if='!gameOver && playerTimeExpiredModal'
-      @close='() => playerTimeExpiredModal = false'
-    )
-      div(class='text-center') You ran out of time to make a move!  Please resign now.
-      div(id='form-controls' class='flex items-center')
-        button(
-          @click='() => doResign()\
-            .then(() => playerTimeExpiredModal = false)'
-          :disabled='didSendResign'
-        ) Resign
+      Modal(
+        title='Time Expired'
+        v-if='!gameOver && playerTimeExpiredModal'
+        @close='() => playerTimeExpiredModal = false'
+      )
+        div(class='text-center') You ran out of time to make a move!  Please resign now.
+        div(id='form-controls' class='flex items-center')
+          button(
+            @click='() => doResign()\
+              .then(() => playerTimeExpiredModal = false)'
+            :disabled='didSendResign'
+          ) Resign
 
-    Modal(
-      title='You Won!'
-      v-if='!gameOver && opponentTimeExpiredModal'
-      @close='() => opponentTimeExpiredModal = false'
-    )
-      div(class='text-center') Your opponent ran out of time.  In order to finish the game, you can claim victory.
-      div(id='form-controls' class='flex items-center')
-        button(
-          @click='() => doClaimVictory()\
-            .then(() => opponentTimeExpiredModal = false)'
-          :disabled='didSendResign'
-        ) Victory
+      Modal(
+        title='You Won!'
+        v-if='!gameOver && opponentTimeExpiredModal'
+        @close='() => opponentTimeExpiredModal = false'
+      )
+        div(class='text-center') Your opponent ran out of time.  In order to finish the game, you can claim victory.
+        div(id='form-controls' class='flex items-center')
+          button(
+            @click='() => doClaimVictory()\
+              .then(() => opponentTimeExpiredModal = false)'
+            :disabled='didSendResign'
+          ) Victory
 
-    Modal(
-      title='Illegal Move'
-      v-if='!gameOver && !isDisputed && !opponentInCheckmate && illegalMoveModal'
-      @close='() => illegalMoveModal = false'
-    )
-      div(class='text-center') Your opponent submitted an illegal move.  Please send a dispute before your move expires and an arbiter will review the game.
-      div(id='form-controls' class='flex items-center')
-        button(
-          @click='() => doDisputeGame()\
-            .then(() => illegalMoveModal = false)'
-          :disabled='didDisputeGame'
-        ) Dispute
+      Modal(
+        title='Illegal Move'
+        v-if='!gameOver && !isDisputed && !opponentInCheckmate && illegalMoveModal'
+        @close='() => illegalMoveModal = false'
+      )
+        div(class='text-center') Your opponent submitted an illegal move.  Please send a dispute before your move expires and an arbiter will review the game.
+        div(id='form-controls' class='flex items-center')
+          button(
+            @click='() => doDisputeGame()\
+              .then(() => illegalMoveModal = false)'
+            :disabled='didDisputeGame'
+          ) Dispute
 
-    Modal(
-      title='Draw Offer'
-      v-if='drawOfferReceived && respondDrawModal'
-      @close='() => respondDrawModal = false'
-    )
-      div(class='text-center') Your opponent has offered a draw.  If you accept, both players will receive their wagers back.
-      div(id='form-controls' class='flex items-center')
-        button(
-          @click='() => doRespondDraw(true)\
-            .then(() => respondDrawModal = false)'
-          :disabled='didRespondDraw'
-        ) Accept
-        button(
-          @click='() => doRespondDraw(false)\
-            .then(() => respondDrawModal = false)'
-          :disabled='didRespondDraw'
-        ) Decline
+      Modal(
+        title='Draw Offer'
+        v-if='drawOfferReceived && respondDrawModal'
+        @close='() => respondDrawModal = false'
+      )
+        div(class='text-center') Your opponent has offered a draw.  If you accept, both players will receive their wagers back.
+        div(id='form-controls' class='flex items-center')
+          button(
+            @click='() => doRespondDraw(true)\
+              .then(() => respondDrawModal = false)'
+            :disabled='didRespondDraw'
+          ) Accept
+          button(
+            @click='() => doRespondDraw(false)\
+              .then(() => respondDrawModal = false)'
+            :disabled='didRespondDraw'
+          ) Decline
 
-    Modal(
-      title='Draw Offered'
-      v-if='drawOfferSent && drawOfferSentModal'
-      @close='() => drawOfferSentModal = false'
-    )
-      div(class='text-center') Waiting for your opponent to respond to your draw offer.
+      Modal(
+        title='Draw Offered'
+        v-if='drawOfferSent && drawOfferSentModal'
+        @close='() => drawOfferSentModal = false'
+      )
+        div(class='text-center') Waiting for your opponent to respond to your draw offer.
 </template>
 
 <style lang='sass'>

@@ -91,12 +91,16 @@ export default async function(gameId) {
     lobbyContract,
     chessEngine,
     initGameData,
-    fetchGameData
+    fetchGameData,
+    fetchAgents
   } = await useLobby();
 
   const { playAudioClip } = useAudioUtils();
 
   if (!lobby.has(gameId)) await initGameData(gameId);
+  // A refresh skips initPlayerLobby; load the viewer's agents so opponent
+  // resolution recognises an owned agent seat instead of falling through to null.
+  if (!lobby.initialized && wallet.address) lobby.agents = await fetchAgents(wallet.address);
 
   const gameContract = chessEngine(gameId);
   const {
@@ -407,17 +411,13 @@ export default async function(gameId) {
     return lobby.gameData(gameId).blackPlayer == wallet.address;
   });
 
-  const isPlayer = computed(() => isWhitePlayer || isBlackPlayer);
+  const isPlayer = computed(() => isWhitePlayer.value || isBlackPlayer.value);
+  const isSpectator = computed(() => !isPlayer.value);
 
-  const playerColor = computed(() => {
-    if (!isPlayer) throw Error('Not a player');
-    return isWhitePlayer.value ? 'w' : 'b';
-  });
-
-  const opponentColor = computed(() => {
-    if (!isPlayer) throw Error('Not a player');
-    return isWhitePlayer.value ? 'b' : 'w';
-  });
+  // A spectator has no seat, so frame them as white (the board orients white for
+  // them). Player-only computeds below still evaluate but are hidden in the page.
+  const playerColor = computed(() => isBlackPlayer.value ? 'b' : 'w');
+  const opponentColor = computed(() => isBlackPlayer.value ? 'w' : 'b');
 
 
   const isCurrentMove = computed(() =>  lobby.isCurrentMove(gameId));
@@ -673,6 +673,7 @@ export default async function(gameId) {
     //playerColor,
     //opponentColor,
     isPlayer,
+    isSpectator,
     isWhitePlayer,
     isBlackPlayer,
     isCurrentMove,

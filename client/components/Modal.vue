@@ -37,6 +37,7 @@ div(id='shadow')
       @apply mt-8 p-3
       @apply rounded-2xl
       @apply bg-white
+      //@apply shadow-lg shadow-black shadow-[4px_4px_0px]
 
       #head
         @apply px-2 pb-1 border-b border-black
@@ -48,8 +49,9 @@ div(id='shadow')
         @apply px-2 mt-4
 
         #form-controls
-          @apply mt-4 mb-2 flex justify-center
+          @apply mt-4 mb-2 pt-3 flex justify-center gap-2
+          @apply border-t
 
           button
-            @apply min-w-[5rem] px-4
+            @apply min-w-[6rem] px-4
 </style>
