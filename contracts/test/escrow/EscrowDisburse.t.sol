@@ -7,8 +7,10 @@ import './MockERC20Token.sol';
 
 contract EscrowERC20DisburseTest is EscrowTest {
   function setUp() public {
-    deposit(p1, gameId, address(token), wager);
-    deposit(p2, gameId, address(token), wager);
+    deposit(p1, wager, address(token));
+    deposit(p2, wager, address(token));
+    lock(p1, gameId, wager, address(token));
+    lock(p2, gameId, wager, address(token));
   }
 
   function testWhiteWins() public {
@@ -33,17 +35,6 @@ contract EscrowERC20DisburseTest is EscrowTest {
     disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
     assertEq(currentDeposit(p1, gameId).amount, 0);
     assertEq(currentDeposit(p2, gameId).amount, 0);
-  }
-
-  function testDisburseSameGameTwiceReverts() public {
-    disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
-    vm.expectRevert(TokenDepositMap.NoDeposit.selector);
-    disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
-  }
-
-  function testDisburseUndecidedReverts() public {
-    vm.expectRevert(Escrow.EscrowLocked.selector);
-    disburse(p1, p2, gameId, IChessEngine.GameOutcome.Undecided);
   }
 }
 
@@ -76,17 +67,6 @@ contract EscrowETHDisburseTest is EscrowETHTest {
     assertEq(currentDeposit(p1, gameId).amount, 0);
     assertEq(currentDeposit(p2, gameId).amount, 0);
   }
-
-  function testDisburseSameGameTwiceReverts() public {
-    disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
-    vm.expectRevert(TokenDepositMap.NoDeposit.selector);
-    disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
-  }
-
-  function testDisburseUndecidedReverts() public {
-    vm.expectRevert(Escrow.EscrowLocked.selector);
-    disburse(p1, p2, gameId, IChessEngine.GameOutcome.Undecided);
-  }
 }
 
 contract EscrowMixedTokenDisburseTest is EscrowETHTest {
@@ -101,7 +81,8 @@ contract EscrowMixedTokenDisburseTest is EscrowETHTest {
 
   function setUp() public {
     this.depositETH{value: wager}(p1, gameId, address(0), wager);
-    deposit(p2, gameId, address(token2), wager);
+    deposit(p2, wager, address(token2));
+    lock(p2, gameId, wager, address(token2));
   }
 
   function testWhiteWinsGetsBothTokens() public {

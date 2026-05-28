@@ -285,8 +285,10 @@ contract Lobby is
     return releasedFunds(player, token);
   }
 
-  function withdraw(address token) public {
-    release(msg.sender, token);
+  function withdraw(address token) public
+    isRegistered(msg.sender)
+  {
+    withdraw(msg.sender, token);
   }
 
   modifier isRegistered(address account) {
@@ -373,10 +375,10 @@ contract Lobby is
     string calldata agentFramework,
     string calldata baseModel,
     string calldata modelVersion
-  ) external
+  )
     isRegistered(msg.sender)
     isUnregistered(robot)
-  {
+  public {
     RobotProfile storage r = __robots[robot];
     r.owner = msg.sender;
     r.active = true;
@@ -528,7 +530,8 @@ contract Lobby is
 
     // Hold sender's wager in lobby escrow
     if (wagerAmount > 0) {
-      deposit(ownerOf(player), gameId, wagerToken, wagerAmount);
+      deposit(ownerOf(player), wagerAmount, wagerToken);
+      lock(ownerOf(player), gameId, wagerAmount, wagerToken);
     }
 
     // Add to pending challenges
@@ -578,7 +581,8 @@ contract Lobby is
     if (wagerAmount > 0) {
       uint balance = currentDeposit(msg.sender, gameId).amount;
       if (balance < wagerAmount) {
-        deposit(ownerOf(player), gameId, gameData.wagerToken, wagerAmount - balance);
+        deposit(ownerOf(player), wagerAmount-balance, gameData.wagerToken);
+        lock(ownerOf(player), gameId, wagerAmount-balance, gameData.wagerToken);
       }
     }
 
@@ -601,7 +605,8 @@ contract Lobby is
       // The player may already have made a partial deposit if the challenge was modified.
       uint balance = currentDeposit(msg.sender, gameId).amount;
       if (balance < gameData.wagerAmount) {
-        deposit(ownerOf(player), gameId, gameData.wagerToken, gameData.wagerAmount - balance);
+        deposit(ownerOf(player), gameData.wagerAmount-balance, gameData.wagerToken);
+        lock(ownerOf(player), gameId, gameData.wagerAmount-balance, gameData.wagerToken);
       }
 
       // Refund any excess deposits.  This can occur if the wager amount is modified.

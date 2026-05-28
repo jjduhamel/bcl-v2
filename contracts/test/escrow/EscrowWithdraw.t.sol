@@ -5,25 +5,27 @@ import './Escrow.t.sol';
 
 contract EscrowERC20WithdrawTest is EscrowTest {
   function setUp() public {
-    deposit(p1, gameId, address(token), wager);
-    deposit(p2, gameId, address(token), wager);
+    deposit(p1, wager, address(token));
+    deposit(p2, wager, address(token));
+    lock(p1, gameId, wager, address(token));
+    lock(p2, gameId, wager, address(token));
     disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
   }
 
   function testTransfersTokensToPlayer() public {
     uint before = token.balanceOf(p1);
-    release(p1, address(token));
+    withdraw(p1, address(token));
     assertEq(token.balanceOf(p1), before + 2 * wager);
   }
 
   function testClearsEarnings() public {
-    release(p1, address(token));
+    withdraw(p1, address(token));
     assertEq(releasedFunds(p1, address(token)), 0);
   }
 
   function testZeroEarningsReverts() public {
     vm.expectRevert(Escrow.InsufficientBalance.selector);
-    release(p2, address(token));
+    this.ext_withdraw(p2, address(token));
   }
 }
 
@@ -36,17 +38,17 @@ contract EscrowETHWithdrawTest is EscrowETHTest {
 
   function testTransfersETHToPlayer() public {
     uint before = p1.balance;
-    release(p1, address(0));
+    withdraw(p1, address(0));
     assertEq(p1.balance, before + 2 * wager);
   }
 
   function testClearsEarnings() public {
-    release(p1, address(0));
+    withdraw(p1, address(0));
     assertEq(releasedFunds(p1, address(0)), 0);
   }
 
   function testZeroEarningsReverts() public {
     vm.expectRevert(Escrow.InsufficientBalance.selector);
-    release(p2, address(0));
+    this.ext_withdraw(p2, address(0));
   }
 }

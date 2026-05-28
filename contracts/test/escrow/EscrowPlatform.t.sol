@@ -5,8 +5,10 @@ import './Escrow.t.sol';
 
 contract EscrowERC20PlatformTest is EscrowTest {
   function setUp() public {
-    deposit(p1, gameId, address(token), wager);
-    deposit(p2, gameId, address(token), wager);
+    deposit(p1, wager, address(token));
+    deposit(p2, wager, address(token));
+    lock(p1, gameId, wager, address(token));
+    lock(p2, gameId, wager, address(token));
     chargeFee(p1, gameId, address(token));
     chargeFee(p2, gameId, address(token));
   }

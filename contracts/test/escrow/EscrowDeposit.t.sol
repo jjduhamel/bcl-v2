@@ -5,7 +5,8 @@ import './Escrow.t.sol';
 
 contract EscrowERC20DepositTest is EscrowTest {
   function setUp() public {
-    deposit(p1, gameId, address(token), wager);
+    deposit(p1, wager, address(token));
+    lock(p1, gameId, wager, address(token));
   }
 
   function testTransfersTokensToContract() public {
@@ -19,7 +20,8 @@ contract EscrowERC20DepositTest is EscrowTest {
   }
 
   function testDoubleDepositAccumulates() public {
-    deposit(p1, gameId, address(token), wager);
+    deposit(p1, wager, address(token));
+    lock(p1, gameId, wager, address(token));
     assertEq(currentDeposit(p1, gameId).token, address(token));
     assertEq(currentDeposit(p1, gameId).amount, 2 * wager);
   }
@@ -30,20 +32,23 @@ contract EscrowERC20DepositTest is EscrowTest {
     vm.prank(p1);
     token2.approve(address(this), type(uint256).max);
     vm.expectRevert(Escrow.InvalidToken.selector);
-    deposit(p1, gameId, address(token2), wager);
+    deposit(p1, wager, address(token2));
+    //lock(p1, gameId, wager, address(token2));
   }
 
   function testAmountOverflowReverts() public {
     uint overflow = uint(type(uint96).max) + 1;
     token.mint(p1, overflow);
     vm.expectRevert(Escrow.AmountOverflow.selector);
-    deposit(p1, gameId, address(token), overflow);
+    deposit(p1, overflow, address(token));
+    //lock(p1, gameId, overflow, address(token));
   }
 
   function testDepositAtMaxAmountSucceeds() public {
     uint remaining = uint(type(uint96).max) - wager;
     token.mint(p1, remaining);
-    deposit(p1, gameId, address(token), remaining);
+    deposit(p1, remaining, address(token));
+    lock(p1, gameId, remaining, address(token));
     assertEq(currentDeposit(p1, gameId).amount, type(uint96).max);
   }
 
@@ -121,8 +126,10 @@ contract EscrowMultiGameTest is EscrowTest {
   uint gameId2 = gameId + 1;
 
   function setUp() public {
-    deposit(p1, gameId, address(token), wager);
-    deposit(p1, gameId2, address(token), wager);
+    deposit(p1, wager, address(token));
+    deposit(p1, wager, address(token));
+    lock(p1, gameId, wager, address(token));
+    lock(p1, gameId2, wager, address(token));
   }
 
   function testBalancesAreIndependent() public {
@@ -149,11 +156,13 @@ contract EscrowCrossTypeDepositTest is EscrowETHTest {
   function testETHDepositThenERC20Reverts() public {
     this.depositETH{value: wager}(p1, gameId, address(0), wager);
     vm.expectRevert(Escrow.InvalidToken.selector);
-    deposit(p1, gameId, address(token), wager);
+    deposit(p1, wager, address(token));
+    //lock(p1, gameId, wager, address(token));
   }
 
   function testERC20DepositThenETHReverts() public {
-    deposit(p1, gameId, address(token), wager);
+    deposit(p1, wager, address(token));
+    lock(p1, gameId, wager, address(token));
     vm.expectRevert(Escrow.InvalidToken.selector);
     this.depositETH{value: wager}(p1, gameId, address(0), wager);
   }
