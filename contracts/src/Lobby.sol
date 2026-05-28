@@ -200,7 +200,8 @@ contract Lobby is
   // runs the agent, or the human playing as themselves — is authorized to manage the game.
   modifier isPlayersGame(uint gameId) {
     IChessEngine.GameData memory game = chessEngine(gameId).game(gameId);
-    if (msg.sender != ownerOf(game.whitePlayer) && msg.sender != ownerOf(game.blackPlayer)) revert IChessEngine.PlayerOnly();
+    if (msg.sender != ownerOf(game.whitePlayer) &&
+        msg.sender != ownerOf(game.blackPlayer)) revert IChessEngine.PlayerOnly();
     _;
   }
 
@@ -210,12 +211,8 @@ contract Lobby is
     _;
   }
 
-  modifier allowChallenge() {
+  modifier allowChallenge(uint wagerAmount, address wagerToken) {
     if (!__allowChallenges) revert ChallengingDisabled();
-    _;
-  }
-
-  modifier allowWager(uint wagerAmount, address wagerToken) {
     if (wagerAmount > 0) {
       if (!__allowWagers) revert WageringDisabled();
       if (wagerToken == address(0) && msg.value < wagerAmount) revert InvalidDepositAmount();
@@ -293,10 +290,13 @@ contract Lobby is
   }
 
   modifier isRegistered(address account) {
-    if (hasRole(BANNED_ROLE, account)) revert UserBanned();
-    if (__players[account].createdAt == 0 &&
-        __robots[account].createdAt == 0
-    ) revert Unregistered();
+    // address(0) is a special case and can be assumed as registered
+    if (account != address(0)) {
+      if (hasRole(BANNED_ROLE, account)) revert UserBanned();
+      if (__players[account].createdAt == 0 &&
+          __robots[account].createdAt == 0
+      ) revert Unregistered();
+    }
     _;
   }
 
@@ -420,7 +420,7 @@ contract Lobby is
   function unregisterAgent(address robot) external
     isOwner(robot)
   {
-    if (__robots[robot].owner != msg.sender) revert NotAgentOwner();
+    // Disallow unregistering agent during a game to prevent loss of funds
     if (__lobby[robot].currentGames.length() > 0) revert AgentInGame();
     __lobby[msg.sender].robots.remove(robot);
     delete __robots[robot];
@@ -456,22 +456,67 @@ contract Lobby is
     emit TouchRecord(gameId, sender, receiver);
   }
 
+  function createTable(
+    address player,
+    bool startAsWhite,
+    uint timePerMove,
+    uint wagerAmount,
+    address wagerToken
+  ) external payable
+    isOwner(player)
+  returns (uint) {
+    return _create(player, address(0), startAsWhite, timePerMove, wagerAmount, wagerToken);
+  }
+
+  // Join an open table (opponent == address(0)): seat the joiner in their chosen colour and
+  // hand the turn back to the creator to accept/decline. Terms are the table's; colour is the
+  // joiner's. Not isPlayersGame — the joiner isn't a seat yet, only the owner of the seat-to-be.
+  function joinTable(uint gameId, address player, bool startAsWhite) external payable
+    isOwner(player)
+  returns (uint) {
+    IChessEngine.GameData memory game = chessEngine(gameId).game(gameId);
+
+    // Block self -> self and agent -> owner
+    address opponent = game.whitePlayer == address(0) ? game.blackPlayer
+                                                      : game.whitePlayer;
+    if (ownerOf(player) == ownerOf(opponent)) revert InvalidPlayer();
+
+    _modify(gameId, player, startAsWhite, game.timePerMove, game.wagerAmount);
+
+    // Move the table out of the global open registry into the joiner's pending set.
+    __lobby[address(0)].pendingChallenges.remove(gameId);
+    __lobby[player].pendingChallenges.add(gameId);
+
+    return gameId;
+  }
+
   function challenge(
-    address sender,
+    address player,
     address opponent,
     bool startAsWhite,
     uint timePerMove,
     uint wagerAmount,
     address wagerToken
   ) external payable
-    allowChallenge
-    allowWager(wagerAmount, wagerToken)
-    isOwner(sender)
+    isOwner(player)
     isRegistered(opponent)
+  returns (uint) {
+    return _create(player, opponent, startAsWhite, timePerMove, wagerAmount, wagerToken);
+  }
+
+  function _create(
+    address player,
+    address opponent,
+    bool startAsWhite,
+    uint timePerMove,
+    uint wagerAmount,
+    address wagerToken
+  ) internal
+    allowChallenge(wagerAmount, wagerToken)
   returns (uint) {
     // Create a new challenge on the current game engine
     uint gameId = __currentEngine.createChallenge(__platform.games.created++
-                                                 , sender
+                                                 , player 
                                                  , opponent
                                                  , startAsWhite
                                                  , timePerMove
@@ -483,20 +528,61 @@ contract Lobby is
 
     // Hold sender's wager in lobby escrow
     if (wagerAmount > 0) {
-      deposit(msg.sender, gameId, wagerToken, wagerAmount);
+      deposit(ownerOf(player), gameId, wagerToken, wagerAmount);
     }
 
     // Add to pending challenges
-    __lobby[sender].pendingChallenges.add(gameId);
+    __lobby[player].pendingChallenges.add(gameId);
     __lobby[opponent].pendingChallenges.add(gameId);
 
     // Update challenges sent/received
-    _stats(sender).games.created++;
+    _stats(player).games.created++;
     _stats(opponent).games.received++;
 
-    emit NewChallenge(gameId, sender, opponent);
+    emit NewChallenge(gameId, player, opponent);
 
     return gameId;
+  }
+
+  // TODO support changing wagerToken (requires refunding existing escrow and re-depositing)
+  function modifyChallenge(
+    uint gameId,
+    address player,
+    bool startAsWhite,
+    uint timePerMove,
+    uint wagerAmount
+  ) external payable
+    isOwner(player)
+    isPlayersGame(gameId)
+  {
+    _modify(gameId, player, startAsWhite, timePerMove, wagerAmount);
+  }
+
+  function _modify(
+    uint gameId,
+    address player,
+    bool startAsWhite,
+    uint timePerMove,
+    uint wagerAmount
+  ) internal {
+    if (wagerAmount > 0 && !__allowWagers) revert WageringDisabled();
+    ChessEngine engine = chessEngine(gameId);
+
+    // Engine validates state + applies seat/timePerMove/wagerAmount updates,
+    // and bumps currentMove to the opponent so they can accept the modified challenge.
+    engine.modifyChallenge(gameId, player, startAsWhite, timePerMove, wagerAmount);
+    IChessEngine.GameData memory gameData = engine.game(gameId);
+
+    // Top up the caller's escrow if needed. Any over-deposit from a wager decrease stays in
+    // escrow and is trimmed at game start (acceptChallenge) or returned on cancel.
+    if (wagerAmount > 0) {
+      uint balance = currentDeposit(msg.sender, gameId).amount;
+      if (balance < wagerAmount) {
+        deposit(ownerOf(player), gameId, gameData.wagerToken, wagerAmount - balance);
+      }
+    }
+
+    emit TouchRecord(gameId, player, gameData.currentMove);
   }
 
   function acceptChallenge(uint gameId) external payable
@@ -515,7 +601,7 @@ contract Lobby is
       // The player may already have made a partial deposit if the challenge was modified.
       uint balance = currentDeposit(msg.sender, gameId).amount;
       if (balance < gameData.wagerAmount) {
-        deposit(msg.sender, gameId, gameData.wagerToken, gameData.wagerAmount - balance);
+        deposit(ownerOf(player), gameId, gameData.wagerToken, gameData.wagerAmount - balance);
       }
 
       // Refund any excess deposits.  This can occur if the wager amount is modified.
@@ -537,6 +623,7 @@ contract Lobby is
     // Populate current games
     __lobby[player].currentGames.add(gameId);
     __lobby[opponent].currentGames.add(gameId);
+    __lobby[address(0)].currentGames.add(gameId);
 
     _stats(player).games.started++;
     _stats(opponent).games.started++;
@@ -547,36 +634,6 @@ contract Lobby is
     __platform.wagers.total += 2*gameData.wagerAmount;
 
     emit ChallengeAccepted(gameId, player, opponent);
-  }
-
-  // TODO support changing wagerToken (requires refunding existing escrow and re-depositing)
-  function modifyChallenge(uint gameId, bool startAsWhite, uint timePerMove, uint wagerAmount) external payable
-    //isRegistered(msg.sender)
-    isPlayersGame(gameId)
-  {
-    if (wagerAmount > 0 && !__allowWagers) revert WageringDisabled();
-    ChessEngine engine = chessEngine(gameId);
-    IChessEngine.GameData memory gameData = engine.game(gameId);
-    address player = (msg.sender == ownerOf(gameData.whitePlayer)) ? gameData.whitePlayer
-                                                                   : gameData.blackPlayer;
-    address opponent = (player == gameData.whitePlayer) ? gameData.blackPlayer
-                                                        : gameData.whitePlayer;
-    address token = gameData.wagerToken;
-
-    // Engine validates state + applies seat/timePerMove/wagerAmount updates,
-    // and bumps currentMove to receiver so they can accept the modified challenge.
-    engine.modifyChallenge(gameId, player, startAsWhite, timePerMove, wagerAmount);
-
-    // Top up sender if needed. Any over-deposit from a wager decrease stays in
-    // escrow and is trimmed at game start (acceptChallenge) or returned on cancel.
-    if (wagerAmount > 0) {
-      uint balance = currentDeposit(msg.sender, gameId).amount;
-      if (balance < wagerAmount) {
-        deposit(msg.sender, gameId, token, wagerAmount - balance);
-      }
-    }
-
-    emit TouchRecord(gameId, player, opponent);
   }
 
   function declineChallenge(uint gameId) external
@@ -620,10 +677,12 @@ contract Lobby is
     // Remove from current games
     __lobby[white].currentGames.remove(gameId);
     __lobby[black].currentGames.remove(gameId);
+    __lobby[address(0)].currentGames.remove(gameId);
 
     // Add to finished games
     __lobby[white].finishedGames.add(gameId);
     __lobby[black].finishedGames.add(gameId);
+    __lobby[address(0)].finishedGames.add(gameId);
 
     if (outcome == IChessEngine.GameOutcome.Draw) {
       _stats(white).games.draws++;

@@ -78,8 +78,8 @@ contract AgentChallengeTest is ChallengeTest {
   function testAgentCantModifyChallenge() public {
     uint gid = _challenge();
     changePrank(a1);
-    vm.expectRevert(PlayerOnly.selector);
-    lobby.modifyChallenge(gid, true, timePerMove, wager);
+    vm.expectRevert(NotAgentOwner.selector);
+    lobby.modifyChallenge(gid, a1, true, timePerMove, wager);
   }
 
   function testOwnerCanDeclineAgentChallenge() public {
@@ -93,7 +93,7 @@ contract AgentChallengeTest is ChallengeTest {
 
   function testOwnerCanModifyAgentChallenge() public {
     uint gid = _challenge();
-    lobby.modifyChallenge(gid, true, timePerMove + 60, wager);
+    lobby.modifyChallenge(gid, a1, true, timePerMove + 60, wager);
     GameData memory g = engine.game(gid);
     assertEq(g.timePerMove, timePerMove + 60);
   }
@@ -118,7 +118,7 @@ contract AgentChallengeTest is ChallengeTest {
 
   function testOwnerModifyUpToppedFromOwner() public {
     uint gid = _challenge();
-    lobby.modifyChallenge{ value: wager }(gid, true, timePerMove, wager * 2);
+    lobby.modifyChallenge{ value: wager }(gid, a1, true, timePerMove, wager * 2);
     changePrank(arbiter);
     assertEq(lobby.checkPlayerDeposit(gid, p1), wager * 2);
     assertEq(lobby.checkPlayerDeposit(gid, a1), 0);
@@ -132,7 +132,7 @@ contract AgentChallengeTest is ChallengeTest {
     uint gid = lobby.challenge{ value: wager }(a1, a2, true, timePerMove, wager, address(0));
     // p2 funds the a2 seat via modify so both owners hold escrow.
     changePrank(p2);
-    lobby.modifyChallenge{ value: wager }(gid, false, timePerMove, wager);
+    lobby.modifyChallenge{ value: wager }(gid, a2, false, timePerMove, wager);
 
     changePrank(p1);
     lobby.declineChallenge(gid);

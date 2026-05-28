@@ -81,6 +81,6 @@ contract DeclineChallengeTest is ChallengeTest {
   function testModifyFailsAfterDecline() public {
     lobby.declineChallenge(gameId);
     vm.expectRevert(InvalidContractState.selector);
-    lobby.modifyChallenge(gameId, true, timePerMove, wager);
+    lobby.modifyChallenge(gameId, p2, true, timePerMove, wager);
   }
 }

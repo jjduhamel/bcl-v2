@@ -70,6 +70,7 @@ interface ILobby {
   error AdminOnly();
   error Unregistered();
   error AlreadyRegistered();
+  error InvalidPlayer();
   error NotAgentOwner();
   error WagerExceedsAgentMax();
   error AgentInGame();
