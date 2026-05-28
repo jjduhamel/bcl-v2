@@ -5,7 +5,7 @@ import '@lib/Escrow.sol';
 import '@src/IChessEngine.sol';
 import './MockERC20Token.sol';
 
-abstract contract EscrowTest is EscrowContract, Test {
+abstract contract EscrowTest is EscrowWrapper, Test {
   MockERC20Token token;
   address p1;
   address p2;
@@ -28,6 +28,8 @@ abstract contract EscrowTest is EscrowContract, Test {
 }
 
 abstract contract EscrowETHTest is EscrowTest {
+  using Escrow for Escrow.EscrowData;
+
   // In real-life, deposit would be called by some payable function (i.e. acceptChallenge)
   function depositETH(address player, uint gameId, address token, uint amount)
   public payable {

@@ -43,7 +43,7 @@ contract CreateChallengeTest is ChallengeTest {
   }
 
   function testChallengeRevertsOnExcessDeposit() public {
-    vm.expectRevert(EscrowContract.InvalidDeposit.selector);
+    vm.expectRevert(Escrow.InvalidDeposit.selector);
     lobby.challenge{ value: wager+1 }(p1, p2, true, timePerMove, wager, address(0));
   }
 }

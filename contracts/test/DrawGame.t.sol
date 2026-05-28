@@ -56,4 +56,35 @@ contract DrawGameTest is ChessGameTest {
     vm.expectRevert(PlayerOnly.selector);
     engine.respondDraw(gameId, true);
   }
+
+  // Once the timer expires, the responder can no longer accept the draw...
+  function testRespondDrawFailsAfterTimeout() public {
+    skip(timePerMove+1);
+    vm.expectRevert(TimerExpired.selector);
+    engine.respondDraw(gameId, true);
+  }
+
+  // ...but not before it expires, or a draw offer would be a free win.
+  function testClaimVictoryBeforeDrawTimeout() public {
+    changePrank(p1);
+    assertFalse(engine.timeDidExpire(gameId));
+    vm.expectRevert(TimerActive.selector);
+    engine.claimVictory(gameId);
+  }
+
+  // ...so the offerer must be able to claim the win, or the game (and its
+  // escrow) deadlocks in the Draw state forever.
+  function testClaimVictoryAfterDrawTimeout() public
+    testOutcome(GameOutcome.WhiteWon)
+    testWinner(p1)
+    testLoser(p2)
+    testEarnings(p1, purse())
+    testEarnings(p2, 0)
+    expectGameOver(p1, p2)
+  {
+    changePrank(p1);
+    skip(timePerMove+1);
+    assertTrue(engine.timeDidExpire(gameId));
+    engine.claimVictory(gameId);
+  }
 }

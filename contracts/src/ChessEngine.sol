@@ -73,6 +73,14 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
     _;
   }
 
+  modifier isLiveGame(uint gameId) {
+    if (
+      __games[gameId].state != GameState.Started &&
+      __games[gameId].state != GameState.Draw
+   ) revert InvalidContractState();
+    _;
+  }
+
   modifier inDraw(uint gameId) {
     if (__games[gameId].state != GameState.Draw) revert InvalidContractState();
     _;
@@ -202,8 +210,8 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
       true,
       GameState.Pending,
       GameOutcome.Undecided,
-      payable(white),
-      payable(black),
+      white,
+      black,
       receiver,
       timePerMove,
       0,
@@ -344,7 +352,7 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
   }
 
   function claimVictory(uint gameId) external
-    inProgress(gameId)
+    isLiveGame(gameId)
     isOpponentsMove(gameId)
     timerExpired(gameId)
   {
@@ -366,11 +374,7 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
     isArbiter
   {
     GameData storage gameData = __games[gameId];
-    address winner = outcome == GameOutcome.WhiteWon ? gameData.whitePlayer
-                                                     : gameData.blackPlayer;
-    address loser = outcome == GameOutcome.BlackWon ? gameData.whitePlayer
-                                                    : gameData.blackPlayer;
-    __lobby.resolveDispute(gameId, winner, loser);
+    __lobby.resolveDispute(gameId, gameData.whitePlayer, gameData.blackPlayer, outcome);
     finishGame(gameId, outcome);
     emit ArbiterAction(gameId, msg.sender, outcome);
   }
