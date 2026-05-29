@@ -1,7 +1,7 @@
 <script setup>
 import _ from 'lodash';
 
-const { wallet } = await useWallet();
+const { wallet, connectMetamask } = await useWallet();
 
 const {
   lobby,
@@ -29,6 +29,8 @@ const registerPlayerModal = ref(false);
 const registerAgentModal = ref(false);
 const newChallengeRef = ref(null);
 const createTableRef = ref(null);
+const registerPlayerRef = ref(null);
+const registerAgentRef = ref(null);
 
 async function doRegisterPlayer(args) {
   const { username, avatar } = args;
@@ -125,6 +127,7 @@ watch(() => wallet.address, (newAddr, oldAddr) => {
 // Re-register whenever the agent set changes; immediate covers the wallet-only
 // case before agents finish loading, and picks up register/unregister mid-session.
 watch(() => _.map(lobby.agents, 'address').join(','), () => {
+  if (!wallet.connected) return;  // event filters key on wallet.address
   destroyListeners();
   createListeners();
 }, { immediate: true });
@@ -146,8 +149,12 @@ NuxtLayout(name='default')
       )
       button(@click='lookupProfile') Lookup
     div(class='flex items-center gap-1')
-      button(type='button', @click='showCreateTableModal') Open Table
-      button(type='button', @click='showRegisterModal') {{ lobby.isRegistered ? 'Register Agent' : 'Register' }}
+      template(v-if='wallet.connected')
+        button(type='button', @click='showCreateTableModal') Open Table
+        button(type='button', @click='showRegisterModal') {{ lobby.isRegistered ? 'Register Agent' : 'Register' }}
+      button(v-else type='button' class='flex items-center gap-2' @click='connectMetamask')
+        img(class='h-5 w-4 object-contain' src='@/assets/icons/metamask-32px.png')
+        span Connect
 
   slot
 
@@ -158,14 +165,21 @@ NuxtLayout(name='default')
       @close='() => registerPlayerModal = false'
     )
       ProfileForm(
+        ref='registerPlayerRef'
         id='register-player'
         :isEditing='true'
         :loading='txPending'
         :profile='lobby.playerProfile'
         :address='wallet.address'
         @register='doRegisterPlayer'
-        @cancel='() => registerPlayerModal = false'
       )
+      div(id='form-controls')
+        button(
+          type='button'
+          :disabled='txPending || !wallet.connected || !registerPlayerRef?.canSubmit'
+          @click='registerPlayerRef.save()'
+        ) Register
+        button(type='button' :disabled='txPending' @click='() => registerPlayerModal = false') Cancel
 
     Modal(
       v-if='viewProfileModal'
@@ -176,7 +190,7 @@ NuxtLayout(name='default')
       div(id='form-controls')
         button(
           type='button'
-          :disabled='!viewedIsRegistered || isSelfLookup'
+          :disabled='!viewedIsRegistered || isSelfLookup || !wallet.connected'
           @click='startChallenge'
         ) Challenge
 
@@ -186,14 +200,21 @@ NuxtLayout(name='default')
       @close='() => registerAgentModal = false'
     )
       ProfileForm(
+        ref='registerAgentRef'
         id='register-agent'
         :isEditing='true'
         :loading='txPending'
         :profile='{ owner: wallet.address }'
         :address='searchText'
         @register='doRegisterAgent'
-        @cancel='() => registerAgentModal = false'
       )
+      div(id='form-controls')
+        button(
+          type='button'
+          :disabled='txPending || !wallet.connected || !registerAgentRef?.canSubmit'
+          @click='registerAgentRef.save()'
+        ) Register
+        button(type='button' :disabled='txPending' @click='() => registerAgentModal = false') Cancel
 
     Modal(
       v-if='newChallengeModal'
@@ -212,7 +233,7 @@ NuxtLayout(name='default')
         @submit='doSendChallenge'
       )
       div(id='form-controls')
-        button(type='button' :disabled='txPending' @click='newChallengeRef.submit()') Send
+        button(type='button' :disabled='txPending || !wallet.connected' @click='newChallengeRef.submit()') Send
         button(type='button' :disabled='txPending' @click='() => newChallengeModal = false') Cancel
 
     Modal(
@@ -230,6 +251,6 @@ NuxtLayout(name='default')
         @submit='doCreateTable'
       )
       div(id='form-controls')
-        button(type='button' :disabled='txPending' @click='createTableRef.submit()') Send
+        button(type='button' :disabled='txPending || !wallet.connected' @click='createTableRef.submit()') Send
         button(type='button' :disabled='txPending' @click='() => createTableModal = false') Cancel
 </template>

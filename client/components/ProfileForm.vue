@@ -5,7 +5,7 @@ import robotIcon from '~/assets/icons/robot.svg';
 import editIcon from '~/assets/icons/bytesize/edit.svg';
 const { truncAddress, isAddress } = useEthUtils();
 
-const emit = defineEmits([ 'register', 'update', 'suspend', 'resume', 'unregister', 'cancel' ]);
+const emit = defineEmits([ 'register', 'update', 'cancel' ]);
 
 const props = defineProps({
   // Either a PlayerProfile ({ username, avatar, createdAt }) or a RobotProfile
@@ -98,6 +98,10 @@ const isWhiteAgent = computed(() => {
   const firstByte = parseInt(hash.slice(2, 4), 16);
   return firstByte % 2 === 0;
 });
+
+// Action buttons live in the parent (it owns the wallet/connection gating);
+// expose the form's mode + actions so the parent can drive them.
+defineExpose({ editing, canSubmit, save, cancelEdit });
 </script>
 
 <template lang='pug'>
@@ -145,15 +149,4 @@ div
     div(class='flex-1 flex items-center justify-end gap-2')
       div(class='w-2 h-2 rounded-full' :style='{ backgroundColor: statusColor }')
       span {{ status }}
-  div(id='form-controls')
-    template(v-if='editing')
-      button(type='button' :disabled='loading || !canSubmit' @click='save') {{ isEditing ? 'Register' : 'Save' }}
-      button(type='button' :disabled='loading' @click='cancelEdit') Cancel
-    template(v-else-if='isAgent && editable')
-      button(
-        type='button'
-        :disabled='loading'
-        @click='emit(profile.active ? "suspend" : "resume")'
-      ) {{ profile.active ? 'Suspend' : 'Resume' }}
-      button(type='button' :disabled='loading' @click='emit("unregister")') Unregister
 </template>

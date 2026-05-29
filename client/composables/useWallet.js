@@ -80,6 +80,10 @@ export default async function() {
   }
   wallet.initialized = true;
 
+  function fetchProvider() {
+    return getProvider({ chainId: Number(config.spectatorChainId) });
+  }
+
   async function fetchCurrentBalance(player) {
     if (!player) player = wallet.address;
     const bal = await fetchBalance({
@@ -236,6 +240,7 @@ export default async function() {
     chains,
     //provider,
     signer,
+    fetchProvider,
     currentNetwork,
     currentBalance,
     fetchBalance,

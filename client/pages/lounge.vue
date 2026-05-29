@@ -2,7 +2,6 @@
 import { constants } from 'ethers';
 
 definePageMeta({
-  middleware: [ 'auth' ],
   layout: 'searchbar'
 });
 
@@ -116,7 +115,7 @@ section
         template(v-if='!isOwnTable')
           button(
             type='button'
-            :disabled='txPending'
+            :disabled='txPending || !wallet.connected'
             @click='doJoinTable({ sender: wallet.address, startAsWhite: openTable.whitePlayer === constants.AddressZero })'
           ) Join
           button(type='button' @click='joinTableModal = false') Cancel

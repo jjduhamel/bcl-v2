@@ -23,6 +23,7 @@ const {
 
 const editAgent = ref(null);
 const editAgentModal = ref(false);
+const editAgentRef = ref(null);
 
 function showEditAgent(agent) {
   editAgent.value = agent;
@@ -134,14 +135,23 @@ section
       @close='() => editAgentModal = false'
     )
       ProfileForm(
+        ref='editAgentRef'
         :profile='editAgent'
         :editable='true'
         :loading='txPending'
         @update='({ nickname, avatar }) => updateAgent(editAgent.address, nickname, avatar)'
-        @suspend='doSuspendAgent'
-        @resume='doResumeAgent'
-        @unregister='doUnregisterAgent'
       )
+      div(id='form-controls')
+        template(v-if='editAgentRef?.editing')
+          button(type='button' :disabled='txPending || !editAgentRef?.canSubmit' @click='editAgentRef.save()') Save
+          button(type='button' :disabled='txPending' @click='editAgentRef.cancelEdit()') Cancel
+        template(v-else)
+          button(
+            type='button'
+            :disabled='txPending'
+            @click='editAgent.active ? doSuspendAgent() : doResumeAgent()'
+          ) {{ editAgent.active ? 'Suspend' : 'Resume' }}
+          button(type='button' :disabled='txPending' @click='doUnregisterAgent') Unregister
 
     Modal(
       title='Pending Challenge'

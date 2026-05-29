@@ -8,17 +8,16 @@ import useLoungeStore from '../store/lounge';
 
 export default async function() {
   const { $amplitude } = useNuxtApp();
-  const { wallet, refreshBalance } = await useWallet();
+  const { wallet, refreshBalance, fetchProvider } = await useWallet();
   const { playAudioClip } = useAudioUtils();
   const lobby = useLobbyStore();
   const lounge = useLoungeStore();
 
-  if (!wallet.connected) throw Error('Wallet isn\'t connected');
-  const signer = await fetchSigner();
+  const signer = wallet.connected ? await fetchSigner() : null;
   const lobbyContract = getContract({
     address: lobby.address,
     abi: LobbyContract.abi,
-    signerOrProvider: signer
+    signerOrProvider: signer ?? fetchProvider()
   });
 
   const {
@@ -183,7 +182,7 @@ export default async function() {
     return getContract({
       address: lobby.engineAddress(gameId),
       abi: EngineContract.abi,
-      signerOrProvider: signer
+      signerOrProvider: signer ?? fetchProvider()
     });
   }
 

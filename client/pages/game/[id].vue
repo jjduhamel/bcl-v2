@@ -1,10 +1,6 @@
 <script setup>
 import _ from 'lodash';
 
-definePageMeta({
-  middleware: [ 'auth' ]
-});
-
 const { params } = useRoute();
 const gameId = params.id;
 const { wallet } = await useWallet();
