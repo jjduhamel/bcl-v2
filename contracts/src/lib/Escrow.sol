@@ -130,6 +130,9 @@ abstract contract EscrowWrapper {
   uint internal __platformFeePerc;
   uint internal __gasSponsorFeePerc;
 
+  // Reserved slots — decrement when adding state above to preserve layout across upgrades.
+  uint256[47] private __gap;
+
   function currentDeposit(address player, uint gameId) internal view returns (TokenDeposit memory) {
     return __escrow[player].account(gameId);
   }

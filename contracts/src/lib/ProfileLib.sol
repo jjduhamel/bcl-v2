@@ -10,29 +10,6 @@ import '@oz/utils/structs/EnumerableSet.sol';
 // maps and never cross the ABI boundary. Library functions take the wrapper by storage ref and
 // reach into `__profile` for field updates.
 library ProfileLib {
-  using EnumerableSet for EnumerableSet.AddressSet;
-
-  struct PlayerLobby {
-    EnumerableSet.UintSet pendingChallenges;
-    EnumerableSet.UintSet currentGames;
-    EnumerableSet.UintSet finishedGames;
-    EnumerableSet.AddressSet robots;
-  }
-
-  // Game / wager / dispute counters; address(0)'s entry doubles as the platform-wide rollup.
-  struct AccountStats {
-    uint created;
-    uint received;
-    uint started;
-    uint finished;
-    uint victories;
-    uint defeats;
-    uint draws;
-    uint disputes;
-    uint disputesWon;
-    uint disputesLost;
-  }
-
   struct PlayerProfile {
     string username;
     string avatar;            // Avatar URI
@@ -51,6 +28,19 @@ library ProfileLib {
     uint40  createdAt;
   }
 
+  struct AccountStats {
+    uint created;
+    uint received;
+    uint started;
+    uint finished;
+    uint victories;
+    uint defeats;
+    uint draws;
+    uint disputes;
+    uint disputesWon;
+    uint disputesLost;
+  }
+
   // Wrapper structs holding mapping-bearing state. Stay inside Lobby's storage maps; never
   // returned across the external ABI.
   struct PlayerData {
@@ -67,11 +57,11 @@ library ProfileLib {
    * Player Profile
    */
 
-  function profile(PlayerData storage data) internal view returns (PlayerProfile storage) {
+  function profile(PlayerData storage data) public view returns (PlayerProfile storage) {
     return data.__profile;
   }
 
-  function statistics(PlayerData storage data) internal view returns (AccountStats storage) {
+  function statistics(PlayerData storage data) public view returns (AccountStats storage) {
     return data.__stats;
   }
 
@@ -97,11 +87,11 @@ library ProfileLib {
    * Agent Profile
    */
 
-  function profile(RobotData storage data) internal view returns (RobotProfile storage) {
+  function profile(RobotData storage data) public view returns (RobotProfile storage) {
     return data.__profile;
   }
 
-  function statistics(RobotData storage data) internal view returns (AccountStats storage) {
+  function statistics(RobotData storage data) public view returns (AccountStats storage) {
     return data.__stats;
   }
 
@@ -136,31 +126,105 @@ library ProfileLib {
   }
 
   // value = true → suspend (active=false); value = false → resume (active=true).
-  function suspend(RobotProfile storage profile, bool value) internal {
+  function suspend(RobotProfile storage profile, bool value) public {
     profile.active = !value;
   }
 }
 
-abstract contract ProfileWrapper {
+library PlayerLobby {
   using EnumerableSet for EnumerableSet.UintSet;
   using EnumerableSet for EnumerableSet.AddressSet;
+
+  struct PlayerLobby {
+    EnumerableSet.UintSet __pendingChallenges;
+    EnumerableSet.UintSet __currentGames;
+    EnumerableSet.UintSet __finishedGames;
+    EnumerableSet.UintSet __disputes;
+    EnumerableSet.AddressSet __robots;
+  }
+
+  function hassChallenge(PlayerLobby storage lobby, uint gameId) internal view returns (bool) {
+    return lobby.__pendingChallenges.contains(gameId);
+  }
+
+  function challenges(PlayerLobby storage lobby) internal view returns (uint[] memory) {
+    return lobby.__pendingChallenges.values();
+  }
+
+  function games(PlayerLobby storage lobby) internal view returns (uint[] memory) {
+    return lobby.__currentGames.values();
+  }
+
+  function history(PlayerLobby storage lobby) internal view returns (uint[] memory) {
+    return lobby.__finishedGames.values();
+  }
+
+  function challenge(PlayerLobby storage lobby, uint gameId) internal {
+    lobby.__pendingChallenges.add(gameId);
+  }
+
+  function accept(PlayerLobby storage lobby, uint gameId) internal {
+    lobby.__pendingChallenges.remove(gameId);
+    lobby.__currentGames.add(gameId);
+  }
+
+  // Used by address(0) to track all games
+  function track(PlayerLobby storage lobby, uint gameId) internal {
+    lobby.__currentGames.add(gameId);
+  }
+
+  function decline(PlayerLobby storage lobby, uint gameId) internal {
+    lobby.__pendingChallenges.remove(gameId);
+  }
+
+  function finish(PlayerLobby storage lobby, uint gameId) internal {
+    lobby.__currentGames.remove(gameId);
+    lobby.__finishedGames.add(gameId);
+  }
+
+  function agents(PlayerLobby storage lobby) internal view returns (address[] memory) {
+    return lobby.__robots.values();
+  }
+
+  function register(PlayerLobby storage lobby, address robot) internal {
+    lobby.__robots.add(robot);
+  }
+
+  function unregister(PlayerLobby storage lobby, address robot) internal {
+    lobby.__robots.remove(robot);
+  }
+
+  function disputes(PlayerLobby storage lobby) internal view returns (uint[] memory) {
+    return lobby.__disputes.values();
+  }
+
+  function dispute(PlayerLobby storage lobby, uint gameId) internal {
+    lobby.__disputes.add(gameId);
+  }
+
+  function resolve(PlayerLobby storage lobby, uint gameId) internal {
+    lobby.__disputes.remove(gameId);
+  }
+}
+
+abstract contract ProfileWrapper {
+  using PlayerLobby for PlayerLobby.PlayerLobby;
   using ProfileLib for ProfileLib.PlayerProfile;
   using ProfileLib for ProfileLib.RobotProfile;
 
-  // Owns agent role assignment because _registerAgent / _unregisterAgent here grant/revoke it.
-  bytes32 public constant ROBOT_ROLE = keccak256('ROBOT_ROLE');
-
   // Player Lobby
-  mapping(address => ProfileLib.PlayerLobby) private __lobby;
+  mapping(address => PlayerLobby.PlayerLobby) private __lobby;
   mapping(address => ProfileLib.PlayerData) private __players;
   mapping(address => ProfileLib.RobotData) private __robots;
   // Map account -> role -> status
   mapping(address => mapping(bytes32 => bool)) __roles;
-  // Disputed game ids
-  EnumerableSet.UintSet private __disputes;
+
+  // Reserved slots — decrement when adding state above to preserve layout across upgrades.
+  // __disputes (EnumerableSet.UintSet) consumes 2 slots, so this contract uses 6 of 50.
+  uint256[44] private __gap;
 
   function _lobby(address account) internal view
-  returns (ProfileLib.PlayerLobby storage) {
+  returns (PlayerLobby.PlayerLobby storage) {
     return __lobby[account];
   }
 
@@ -174,13 +238,18 @@ abstract contract ProfileWrapper {
     return ProfileLib.profile(__robots[account]);
   }
 
+  function _agents(address account) internal view
+  returns (address[] memory) {
+    return _lobby(account).agents();
+  }
+
   function _stats(address account) internal view
   returns (ProfileLib.AccountStats storage) {
     return _agent(account).owner == address(0) ? ProfileLib.statistics(__players[account])
                                                : ProfileLib.statistics(__robots[account]);
   }
 
-  function _registerPlayer(
+  function _register(
     address player,
     string calldata username,
     string calldata avatar
@@ -188,7 +257,7 @@ abstract contract ProfileWrapper {
     _player(player).register(username, avatar);
   }
 
-  function _registerAgent(
+  function _register(
     address robot,
     address owner,
     string calldata nickname,
@@ -197,6 +266,7 @@ abstract contract ProfileWrapper {
     string calldata baseModel,
     string calldata modelVersion
   ) internal {
+    _lobby(msg.sender).register(robot);
     _agent(robot).register(
       owner,
       nickname,
@@ -205,25 +275,28 @@ abstract contract ProfileWrapper {
       baseModel,
       modelVersion
     );
-    _lobby(msg.sender).robots.add(robot);
-    _grantRole(robot, ROBOT_ROLE);
   }
 
-  function _unregisterAgent(address robot) internal {
-    _revokeRole(robot, ROBOT_ROLE);
+  function _unregister(address owner, address robot) internal {
+    _lobby(owner).unregister(robot);
     delete __robots[robot];
   }
 
-  function _disputes() internal view returns (uint[] memory) {
-    return __disputes.values();
+  function _isOpenTable(uint gameId) internal view returns (bool) {
+    if (_lobby(address(0)).hassChallenge(gameId)) return true;
+    return false;
   }
 
-  function _dispute(uint gameId) internal {
-    __disputes.add(gameId);
+  function _challenges(address player) internal view returns (uint[] memory) {
+    return _lobby(player).challenges();
   }
 
-  function _resolve(uint gameId) internal {
-    __disputes.remove(gameId);
+  function _games(address player) internal view returns (uint[] memory) {
+    return _lobby(player).games();
+  }
+
+  function _history(address player) internal view returns (uint[] memory) {
+    return _lobby(player).history();
   }
 
   function _hasRole(address account, bytes32 role) internal view

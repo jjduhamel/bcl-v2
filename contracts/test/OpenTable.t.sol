@@ -239,4 +239,109 @@ contract OpenTableTest is ChallengeTest {
     assertEq(lobby.challenges(address(0)).length, 0);
     assertEq(lobby.challenges(p1).length, 0);
   }
+
+  // revokeTable: dedicated cancel path for open (un-joined) tables.
+  function testRevokeRefundsAndDeregisters() public {
+    uint balBefore = p1.balance;
+    uint id = _open(wager);
+    assertEq(p1.balance, balBefore - wager);
+
+    lobby.revokeTable(id);
+    lobby.withdraw(address(0));
+    assertEq(p1.balance, balBefore);
+
+    assertEq(lobby.challenges(address(0)).length, 0);
+    assertEq(lobby.challenges(p1).length, 0);
+  }
+
+  function testRevokeEmitsTableClosed() public {
+    uint id = _open(0);
+    vm.expectEmit(false, true, true, true, address(lobby));
+    emit TableClosed(0, p1);
+    lobby.revokeTable(id);
+  }
+
+  // join() removes the table from challenges(address(0)); the registry guard then closes revoke.
+  function testRevokeAfterJoinReverts() public {
+    uint id = _open(0);
+    changePrank(p2);
+    lobby.joinTable(id, p2, false);
+    changePrank(p1);
+    vm.expectRevert(NotAnOpenTable.selector);
+    lobby.revokeTable(id);
+  }
+
+  // A named challenge was never in challenges(address(0)).
+  function testRevokeNamedChallengeReverts() public {
+    uint id = lobby.challenge(p1, p2, true, timePerMove, 0, address(0));
+    vm.expectRevert(NotAnOpenTable.selector);
+    lobby.revokeTable(id);
+  }
+
+  function testRevokeBySpectatorReverts() public {
+    uint id = _open(0);
+    changePrank(p3);
+    vm.expectRevert(PlayerOnly.selector);
+    lobby.revokeTable(id);
+  }
+
+  function testRevokeUnregisteredReverts() public {
+    uint id = _open(0);
+    address stranger = makeAddr('stranger');
+    changePrank(stranger);
+    vm.expectRevert(Unregistered.selector);
+    lobby.revokeTable(id);
+  }
+
+  // closeTable: arbiter-elevated teardown of any open table. Refund still goes to the creator.
+  function testCloseByArbiterRefundsCreator() public {
+    uint balBefore = p1.balance;
+    uint id = _open(wager);
+    assertEq(p1.balance, balBefore - wager);
+
+    changePrank(arbiter);
+    lobby.closeTable(id);
+
+    changePrank(p1);
+    lobby.withdraw(address(0));
+    assertEq(p1.balance, balBefore);
+
+    assertEq(lobby.challenges(address(0)).length, 0);
+    assertEq(lobby.challenges(p1).length, 0);
+
+    IChessEngine.GameData memory g = engine.game(id);
+    assertTrue(g.state == IChessEngine.GameState.Declined);
+  }
+
+  function testCloseEmitsTableClosed() public {
+    uint id = _open(0);
+    changePrank(arbiter);
+    vm.expectEmit(false, true, true, true, address(lobby));
+    emit TableClosed(0, p1);
+    lobby.closeTable(id);
+  }
+
+  function testCloseByNonArbiterReverts() public {
+    uint id = _open(0);
+    changePrank(p2);
+    vm.expectRevert(ArbiterOnly.selector);
+    lobby.closeTable(id);
+  }
+
+  // Once joined, the table leaves challenges(address(0)) — the registry guard then closes close.
+  function testCloseAfterJoinReverts() public {
+    uint id = _open(0);
+    changePrank(p2);
+    lobby.joinTable(id, p2, false);
+    changePrank(arbiter);
+    vm.expectRevert(NotAnOpenTable.selector);
+    lobby.closeTable(id);
+  }
+
+  function testCloseNamedChallengeReverts() public {
+    uint id = lobby.challenge(p1, p2, true, timePerMove, 0, address(0));
+    changePrank(arbiter);
+    vm.expectRevert(NotAnOpenTable.selector);
+    lobby.closeTable(id);
+  }
 }

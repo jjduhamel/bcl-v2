@@ -14,6 +14,8 @@ interface ILobby {
   event ChallengeDeclined(uint indexed gameId
                         , address indexed sender
                         , address indexed receiver);
+  event TableClosed(uint indexed gameId
+                  , address indexed creator);
   event GameFinished(uint indexed gameId
                    , address indexed sender
                    , address indexed receiver);
@@ -44,6 +46,7 @@ interface ILobby {
   error Unregistered();
   error AlreadyRegistered();
   error InvalidPlayer();
+  error NotAnOpenTable();
   error NotAgentOwner();
   error WagerExceedsAgentMax();
   error AgentInGame();

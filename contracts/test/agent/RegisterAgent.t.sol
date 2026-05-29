@@ -19,7 +19,7 @@ contract RegisterAgentTest is LobbyTest {
     lobby.registerAgent(a1, 'deepblue', 'ipfs://avatar', 'Hermes', 'Claude Opus', '4.7');
 
     assertEq(lobby.agentProfile(a1).owner, p1);
-    assertTrue(lobby.hasRole(lobby.ROBOT_ROLE(), a1));
+    assertTrue(lobby.hasRole(lobby.AGENT_ROLE(), a1));
 
     address[] memory list = lobby.agents(p1);
     assertEq(list.length, 1);
@@ -70,7 +70,7 @@ contract RegisterAgentTest is LobbyTest {
     lobby.unregisterAgent(a1);
 
     // a1 is unregistered now (agentProfile would revert isRegistered), so verify via role + set.
-    assertFalse(lobby.hasRole(lobby.ROBOT_ROLE(), a1));
+    assertFalse(lobby.hasRole(lobby.AGENT_ROLE(), a1));
     assertEq(lobby.agents(p1).length, 0);
   }
 
@@ -166,7 +166,7 @@ contract RegisterAgentTest is LobbyTest {
     // The same owner can register it again.
     lobby.registerAgent(a1, 'bot2', '', '', '', '');
     assertEq(lobby.agentProfile(a1).owner, p1);
-    assertTrue(lobby.hasRole(lobby.ROBOT_ROLE(), a1));
+    assertTrue(lobby.hasRole(lobby.AGENT_ROLE(), a1));
 
     // After releasing it, a different owner can claim it.
     lobby.unregisterAgent(a1);
