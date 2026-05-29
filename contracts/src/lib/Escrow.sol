@@ -191,10 +191,12 @@ abstract contract EscrowWrapper {
   function withdraw(address player, uint amount, address token) internal {
     uint avail = __escrow[player].available(token);
     if (amount > avail) revert Escrow.InsufficientBalance();
-    _transfer(player, amount, token);
+    // CEI: state updates before the external transfer so a reentrant receiver
+    // can't observe stale balance and double-spend.
     __escrow[player].credit(amount, token);
     __escrow[player].__gross[token].withdrawals += amount;
     __escrow[address(0)].__gross[token].withdrawals += amount;
+    _transfer(player, amount, token);
   }
 
   function withdraw(address player, address token) internal {
@@ -315,9 +317,10 @@ abstract contract EscrowWrapper {
   function releasePlatformFunds(uint amount, address token, address receiver) internal {
     uint balance = __escrow[address(0)].available(token);
     if (amount > balance) revert Escrow.InsufficientBalance();
-    _transfer(receiver, amount, token);
+    // CEI: see `withdraw` above.
     __escrow[address(0)].credit(amount, token);
     __escrow[address(0)].__gross[token].withdrawals += amount;
+    _transfer(receiver, amount, token);
   }
 
   function releasePlatformFunds(address token, address receiver) internal {

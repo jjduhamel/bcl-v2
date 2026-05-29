@@ -24,7 +24,7 @@ contract RegisterPlayerTest is LobbyTest {
     changePrank(u);
     lobby.registerPlayer(u, 'neo', 'ipfs://avatar');
 
-    Lobby.PlayerProfile memory p = lobby.playerProfile(u);
+    ProfileLib.PlayerProfile memory p = lobby.playerProfile(u);
     assertEq(p.username, 'neo');
     assertEq(p.avatar, 'ipfs://avatar');
     assertTrue(p.createdAt != 0);

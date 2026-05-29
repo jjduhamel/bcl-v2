@@ -2,19 +2,6 @@
 pragma solidity >=0.4.22 <0.9.0;
 
 interface ILobby {
-  struct AccountStats {
-    uint created;
-    uint received;
-    uint started;
-    uint finished;
-    uint victories;
-    uint defeats;
-    uint draws;
-    uint disputes;
-    uint disputesWon;
-    uint disputesLost;
-  }
-
   event TouchRecord(uint indexed gameId
                   , address indexed sender
                   , address indexed receiver);
@@ -44,6 +31,8 @@ interface ILobby {
                    , address indexed agent);
   event AgentSuspended(address indexed owner
                      , address indexed agent);
+  event AgentResumed(address indexed owner
+                   , address indexed agent);
 
   error ChessEngineOnly();
   error GameEngineOnly();
