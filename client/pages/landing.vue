@@ -7,7 +7,7 @@ const {
 } = await useWallet();
 
 if (wallet.connected) {
-  await navigateTo('/lounge');
+  await navigateTo('/lobby');
 }
 
 const showWCModal = ref(false);
@@ -39,7 +39,7 @@ watch(() => wallet.connected, (isCon, wasCon) => {
       showCBModal.value = false;
       cbIsConnecting.value = false;
     }
-    navigateTo('/lounge');
+    navigateTo('/lobby');
   }
 });
 </script>

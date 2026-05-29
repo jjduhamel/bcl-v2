@@ -34,14 +34,13 @@ section
       img(
         v-if='isWhitePlayer'
         class='h-12'
-        src='~assets/pieces/merida/wP.svg'
+        src='~assets/pieces/merida/wR.svg'
       )
       img(
         v-else
         class='h-12'
-        src='~assets/pieces/merida/bP.svg'
+        src='~assets/pieces/merida/bR.svg'
       )
-
     div {{ truncAddress(opponent) }}
     div {{ formatEther(wagerAmount) }} ETH
 </template>

@@ -27,6 +27,8 @@ const props = defineProps({
   blackPlayer:         { type: String, default: '' },
   currentMove:         { type: String, default: '' },
   statusText:          { type: String, default: '' },
+  isAgentMoveTurn:     { type: Boolean, default: false },
+  agentNickname:       { type: String, default: '' },
 });
 
 const { timeUntilExpiry } = toRefs(props);
@@ -85,6 +87,7 @@ div(id='caption')
     div(v-else-if='inCheck') Check!
     div(v-else-if='didSendMove') Pending...
     div(v-else-if='didChooseMove') Submit Move
+    div(v-else-if='isAgentMoveTurn') Thinking...
     div(v-else-if='isCurrentMove') Your Move
     div(v-else) Opponent's Move
   div(class='text-lg')

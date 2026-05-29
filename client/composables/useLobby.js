@@ -4,12 +4,14 @@ import { fetchSigner, getContract } from '@wagmi/core';
 import LobbyContract from '../contracts/Lobby.sol/Lobby.json';
 import EngineContract from '../contracts/ChessEngine.sol/ChessEngine.json';
 import useLobbyStore from '../store/lobby';
+import useLoungeStore from '../store/lounge';
 
 export default async function() {
   const { $amplitude } = useNuxtApp();
   const { wallet, refreshBalance } = await useWallet();
   const { playAudioClip } = useAudioUtils();
   const lobby = useLobbyStore();
+  const lounge = useLoungeStore();
 
   if (!wallet.connected) throw Error('Wallet isn\'t connected');
   const signer = await fetchSigner();
@@ -36,25 +38,104 @@ export default async function() {
     }
   }
 
+  // The lobby's per-player views (challenges/games/history) double as global
+  // enumerators when called with address(0): the contract adds every gameId to
+  // address(0)'s sets too. Reuse that surface for the public Lounge feeds.
+  async function fetchOpenTables() {
+    const ids = await lobbyContract.challenges(constants.AddressZero);
+    await Promise.all(_.map(ids, initGameData));
+    lounge.tables = _.map(ids, id => id.toNumber());
+    console.log('Synced', lounge.tables.length, 'open tables');
+    return lounge.tables;
+  }
+
+  async function fetchActiveGames() {
+    const ids = await lobbyContract.games(constants.AddressZero);
+    await Promise.all(_.map(ids, initGameData));
+    lounge.games = _.map(ids, id => id.toNumber());
+    console.log('Synced', lounge.games.length, 'active games');
+    return lounge.games;
+  }
+
+  // playerProfile reverts Unregistered() until registerPlayer is called; surface
+  // that as null so the page can gate the challenge form before submitting.
+  // ethers v5 returns uint ≤ 48 bits as a plain number, not BigNumber, so coerce
+  // with Number() rather than .toNumber() — createdAt is uint40.
+  async function fetchPlayerProfile() {
+    try {
+      const p = await lobbyContract.playerProfile(wallet.address);
+      lobby.playerProfile = {
+        username: p.username,
+        avatar: p.avatar,
+        createdAt: Number(p.createdAt)
+      };
+    } catch {
+      lobby.playerProfile = null;
+    }
+    return lobby.playerProfile;
+  }
+
+  // Resolve an arbitrary address to whichever profile shape the contract holds —
+  // agent first (its `owner` field is the discriminator ProfileForm reads), then
+  // player. Falls back to an empty player shape (createdAt=0) for unregistered
+  // addresses so the view can render Status: Unregistered. `agentProfile`
+  // doesn't revert for a registered human (its isRegistered guard passes on
+  // either profile), so check owner != address(0) before treating it as agent.
+  async function fetchProfile(address) {
+    try {
+      const p = await lobbyContract.agentProfile(address);
+      if (p.owner !== constants.AddressZero) return {
+        address,
+        owner: p.owner,
+        active: p.active,
+        nickname: p.nickname,
+        avatar: p.avatar,
+        createdAt: Number(p.createdAt)
+      };
+    } catch {}
+    try {
+      const p = await lobbyContract.playerProfile(address);
+      return {
+        address,
+        username: p.username,
+        avatar: p.avatar,
+        createdAt: Number(p.createdAt)
+      };
+    } catch {}
+    return { address, username: '', avatar: '', createdAt: 0 };
+  }
+
   async function fetchAgents(address) {
     const agentAddresses = await lobbyContract.agents(address);
-    const [profiles, codes] = await Promise.all([
+    // Stats moved off RobotProfile in M2; gameStats(addr) is the new accessor.
+    const [profiles, stats, codes] = await Promise.all([
       Promise.all(_.map(agentAddresses, addr => lobbyContract.agentProfile(addr))),
+      Promise.all(_.map(agentAddresses, addr => lobbyContract.gameStats(addr))),
       Promise.all(_.map(agentAddresses, addr => signer.provider.getCode(addr)))
     ]);
-    return _.map(_.zip(agentAddresses, profiles, codes), ([agentAddress, p, code]) => ({
+    return _.map(_.zip(agentAddresses, profiles, stats, codes), ([agentAddress, p, s, code]) => ({
       address: agentAddress,
       delegated: code.startsWith('0xef0100'),
       ..._.pick(p, [ 'active', 'owner', 'nickname', 'avatar' ]),
-      wins: p.stats.games.won.toNumber(),
-      losses: p.stats.games.lost.toNumber(),
-      draws: p.stats.games.draws.toNumber(),
-      games: p.stats.games.finished.toNumber()
+      wins: s.victories.toNumber(),
+      losses: s.defeats.toNumber(),
+      draws: s.draws.toNumber(),
+      games: s.finished.toNumber()
     }));
   }
 
   async function initPlayerLobby() {
     console.log('Initialize player lobby', lobby.address);
+
+    // Lobby reads (challenges/games/history/agents) all gate on isRegistered,
+    // so probe the profile first and short-circuit when the wallet hasn't
+    // registered yet — the page surfaces the registration prompt.
+    await fetchPlayerProfile();
+    if (!lobby.playerProfile) {
+      console.log('Wallet not registered; lobby reads skipped');
+      lobby.initialized = true;
+      return;
+    }
 
     const [ challenges, games, history, agents ] = await Promise.all([
       lobbyContract.challenges(wallet.address),
@@ -126,7 +207,7 @@ export default async function() {
       , wagerAmount
     ] = await chessEngine(gameId).game(gameId);
 
-    lobby.metadata[gameId] = {
+    lounge.metadata[gameId] = {
       id: BN.from(gameId).toNumber(),
       state,
       outcome,
@@ -187,6 +268,39 @@ export default async function() {
     });
   });
 
+  const didCreateTable = ref(false);
+  const createTable = (sender, startAsWhite, timePerMove, wagerAmount) =>
+  new Promise(async (resolve, reject) => {
+    try {
+      didCreateTable.value = true;
+      $amplitude.track('CreateTable', { sender, startAsWhite, timePerMove, wagerAmount });
+      await lobbyContract.createTable(sender
+                                    , startAsWhite
+                                    , timePerMove
+                                    , wagerAmount
+                                    , constants.AddressZero
+                                  , { value: wagerAmount });
+      console.log('Created open table');
+    } catch(err) {
+      didCreateTable.value = false;
+      return reject(err);
+    }
+
+    // Open tables emit NewChallenge with opponent = address(0).
+    const eventFilter = NewChallenge(null, sender, constants.AddressZero);
+    lobbyContract.once(eventFilter, async id => {
+      const gameId = BN.from(id).toNumber();
+      console.log('Created open table', gameId);
+      $amplitude.track('TableCreated', { gameId });
+      didCreateTable.value = false;
+      await Promise.all([initGameData(gameId), refreshBalance()]);
+      lobby.newChallenge(gameId);
+      lounge.tables = _.union(lounge.tables, [ gameId ]);
+      playAudioClip('nes/NewChallenge');
+      return resolve(gameId);
+    });
+  });
+
   const didAcceptChallenge = ref(false);
   const acceptChallenge = gameId => new Promise(async (resolve, reject) => {
     const gameContract = chessEngine(gameId);
@@ -221,6 +335,37 @@ export default async function() {
     });
   });
 
+  const didJoinTable = ref(false);
+  const joinTable = (gameId, sender, startAsWhite) => new Promise(async (resolve, reject) => {
+    const gameContract = chessEngine(gameId);
+    // currentDeposit is gated by isPlayersGame and the joiner isn't a player
+    // yet; they have no prior deposit on this game so just pay the full wager.
+    const { wagerAmount } = await gameContract.game(gameId);
+
+    try {
+      didJoinTable.value = true;
+      $amplitude.track('JoinTable', { gameId, sender, startAsWhite, wagerAmount });
+      await lobbyContract.joinTable(gameId, sender, startAsWhite, { value: wagerAmount });
+      console.log('Joined table', gameId);
+    } catch(err) {
+      didJoinTable.value = false;
+      return reject(err);
+    }
+
+    // joinTable runs through _modify and fires TouchRecord(gameId, sender, creator).
+    const eventFilter = TouchRecord(gameId, sender);
+    lobbyContract.once(eventFilter, async (id, addr, creator) => {
+      console.log('Joined table', gameId, 'opened by', creator);
+      $amplitude.track('TableJoined', { gameId, creator });
+      didJoinTable.value = false;
+      await Promise.all([fetchGameData(gameId), refreshBalance()]);
+      lounge.tables = _.without(lounge.tables, gameId);
+      lobby.newChallenge(gameId);
+      playAudioClip('nes/NewChallenge');
+      return resolve(gameId, creator);
+    });
+  });
+
   const didDeclineChallenge = ref(false);
   const declineChallenge = gameId => new Promise(async (resolve, reject) => {
     try {
@@ -249,7 +394,7 @@ export default async function() {
   });
 
   const didModifyChallenge = ref(false);
-  const modifyChallenge = (gameId, startAsWhite, timePerMove, wagerAmount) => new Promise(async (resolve, reject) => {
+  const modifyChallenge = (gameId, sender, startAsWhite, timePerMove, wagerAmount) => new Promise(async (resolve, reject) => {
     const deposited = await lobbyContract.currentDeposit(gameId);
     let deposit = BN.from(wagerAmount).sub(deposited);
     if (deposit.lt(0)) deposit = BN.from(0);
@@ -258,12 +403,14 @@ export default async function() {
       didModifyChallenge.value = true;
       $amplitude.track('ModifyChallenge', {
         gameId,
+        sender,
         startAsWhite,
         timePerMove,
         wager: wagerAmount,
         deposit
       });
       await lobbyContract.modifyChallenge(gameId
+                                        , sender
                                         , startAsWhite
                                         , timePerMove
                                         , wagerAmount
@@ -328,6 +475,26 @@ export default async function() {
     });
   });
 
+  const didResumeAgent = ref(false);
+  const resumeAgent = robot => new Promise(async (resolve, reject) => {
+    try {
+      didResumeAgent.value = true;
+      await lobbyContract.resumeAgent(robot);
+      console.log('Resuming agent', robot);
+    } catch(err) {
+      didResumeAgent.value = false;
+      return reject(err);
+    }
+
+    const eventFilter = lobbyContract.filters.AgentResumed(wallet.address, robot);
+    lobbyContract.once(eventFilter, async (owner, agent) => {
+      console.log('Agent resumed', agent);
+      didResumeAgent.value = false;
+      lobby.agents = await fetchAgents(wallet.address);
+      return resolve(agent);
+    });
+  });
+
   const didUnregisterAgent = ref(false);
   const unregisterAgent = robot => new Promise(async (resolve, reject) => {
     try {
@@ -346,6 +513,24 @@ export default async function() {
       lobby.agents = await fetchAgents(wallet.address);
       return resolve(agent);
     });
+  });
+
+  const didRegisterPlayer = ref(false);
+  const registerPlayer = (username, avatar) => new Promise(async (resolve, reject) => {
+    try {
+      didRegisterPlayer.value = true;
+      // No PlayerRegistered event; await the receipt and re-read the profile.
+      const tx = await lobbyContract.registerPlayer(wallet.address, username, avatar);
+      await tx.wait();
+      console.log('Registered player', wallet.address);
+      $amplitude.track('PlayerRegistered', { username });
+      await fetchPlayerProfile();
+      didRegisterPlayer.value = false;
+      return resolve(lobby.playerProfile);
+    } catch(err) {
+      didRegisterPlayer.value = false;
+      return reject(err);
+    }
   });
 
   const didRegisterAgent = ref(false);
@@ -370,12 +555,16 @@ export default async function() {
 
   const txPending = computed(() => {
     return didSendChallenge.value
+        || didCreateTable.value
+        || didJoinTable.value
         || didAcceptChallenge.value
         || didDeclineChallenge.value
         || didModifyChallenge.value
+        || didRegisterPlayer.value
         || didRegisterAgent.value
         || didUpdateAgent.value
         || didSuspendAgent.value
+        || didResumeAgent.value
         || didUnregisterAgent.value;
   });
 
@@ -468,6 +657,7 @@ export default async function() {
 
   return {
     lobby,
+    lounge,
     txPending,
     lobbyContract,
     chessEngine,
@@ -476,14 +666,22 @@ export default async function() {
     fetchGameData,
     fetchChessEngine,
     fetchAgents,
+    fetchOpenTables,
+    fetchActiveGames,
+    fetchPlayerProfile,
+    fetchProfile,
     isAgent,
     sendChallenge,
+    createTable,
+    joinTable,
     acceptChallenge,
     declineChallenge,
     modifyChallenge,
+    registerPlayer,
     registerAgent,
     updateAgent,
     suspendAgent,
+    resumeAgent,
     unregisterAgent,
     createListeners,
     destroyListeners

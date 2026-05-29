@@ -29,14 +29,14 @@ div(id='app')
           )
         div(id='navigation')
           NuxtLink(to='/lounge')
-            img(src='@/assets/icons/bytesize/star.svg')
+            img(src='@/assets/icons/pawn.svg')
             div Lounge
+          NuxtLink(to='/lobby')
+            img(src='@/assets/icons/bytesize/star.svg')
+            div Lobby
           NuxtLink(to='/about')
             img(src='@/assets/icons/bytesize/info.svg')
             div About
-          NuxtLink(to='/marketplace')
-            img(src='@/assets/icons/bytesize/tag.svg')
-            div Market
 
     div(id='content')
       slot
@@ -88,6 +88,10 @@ html, body, #__nuxt, #app
       @apply text-gray-400 border-gray-400
       filter: invert(40%)
 
+  button
+    @apply items-center justify-center
+    @apply leading-none
+
     &:disabled.unbordered
       @extend .unbordered
 
@@ -104,7 +108,7 @@ html, body, #__nuxt, #app
         @apply my-4 mx-6 text-center
 
       #wallet
-        @apply px-2 py-1 mx-1 my-4 bg-white
+        @apply px-2 py-1 mx-1 my-4
         @extend .bordered
 
       #navigation
@@ -115,7 +119,7 @@ html, body, #__nuxt, #app
           @extend .bordered
 
           img
-            @apply h-4
+            @apply h-4 w-4 object-contain
 
           div
             @apply flex-1 text-center

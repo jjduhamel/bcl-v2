@@ -31,12 +31,12 @@ section
       img(
         v-if='isWhitePlayer'
         class='h-12'
-        src='~assets/pieces/merida/wK.svg'
+        src='~assets/pieces/merida/wQ.svg'
       )
       img(
         v-else
         class='h-12'
-        src='~assets/pieces/merida/bK.svg'
+        src='~assets/pieces/merida/bQ.svg'
       )
     div(class='font-bold')
       div(v-if='isWinner') Victory

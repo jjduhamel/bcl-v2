@@ -45,8 +45,8 @@ section
   Card(:indicator='indicator')
     div(class='mb-1 flex justify-center')
       img(v-if='avatar' class='h-12' :src='avatar')
-      img(v-else-if='isWhiteAgent' class='h-12' src='~assets/pieces/merida/wN.svg')
-      img(v-else class='h-12' src='~assets/pieces/merida/bN.svg')
+      img(v-else-if='isWhiteAgent' class='h-12' src='~assets/pieces/merida/wB.svg')
+      img(v-else class='h-12' src='~assets/pieces/merida/bB.svg')
     div {{ nickname }}
     div {{ truncAddress(address) }}
 </template>
