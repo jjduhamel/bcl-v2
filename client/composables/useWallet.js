@@ -211,7 +211,7 @@ export default async function() {
       if (isConnected) wallet.address = address;
       else {
         _disconnected();
-        navigateTo('/landing');
+        navigateTo('/lounge');
       }
     });
 

@@ -31,12 +31,15 @@ div(id='app')
           NuxtLink(to='/lounge')
             img(src='@/assets/icons/pawn.svg')
             div Lounge
-          NuxtLink(to='/lobby')
+          NuxtLink(to='/lobby' v-if='wallet.connected')
             img(src='@/assets/icons/bytesize/star.svg')
             div Lobby
+          NuxtLink(to='/agents')
+            img(src='@/assets/icons/robot.svg')
+            div Tutorial
           NuxtLink(to='/about')
             img(src='@/assets/icons/bytesize/info.svg')
-            div About
+            div Rules
 
     div(id='content')
       slot

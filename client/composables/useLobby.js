@@ -26,7 +26,8 @@ export default async function() {
     NewChallenge,
     ChallengeDeclined,
     ChallengeAccepted,
-    GameFinished
+    GameFinished,
+    TableClosed
   } = lobbyContract.filters;
 
   async function isAgent(address) {
@@ -308,7 +309,7 @@ export default async function() {
     const deposited = await lobbyContract.currentDeposit(gameId);
     let deposit = BN.from(wagerAmount).sub(deposited);
     if (deposit.lt(0)) deposit = BN.from(0);
-    console.log('Accept', gameId, deposit);
+    console.log('Accept', gameId);
 
     try {
       didAcceptChallenge.value = true;
@@ -390,6 +391,34 @@ export default async function() {
       lobby.popChallenge(gameId);
       playAudioClip('nes/Explosion');
       return resolve(gameId, opponent);
+    });
+  });
+
+  const didRevokeTable = ref(false);
+  const revokeTable = gameId => new Promise(async (resolve, reject) => {
+    try {
+      didRevokeTable.value = true;
+      $amplitude.track('RevokeTable', { gameId });
+      await lobbyContract.revokeTable(gameId);
+      console.log('Revoked open table', gameId);
+    } catch(err) {
+      didRevokeTable.value = false;
+      return reject(err);
+    }
+
+    const eventFilter = TableClosed(gameId);
+    lobbyContract.once(eventFilter, async (id, creator) => {
+      console.log('Open table', gameId, 'closed');
+      $amplitude.track('TableClosed', { gameId });
+      didRevokeTable.value = false;
+      await Promise.all([
+        fetchGameData(gameId),
+        refreshBalance()
+      ]);
+      lobby.popChallenge(gameId);
+      lounge.tables = _.without(lounge.tables, gameId);
+      playAudioClip('nes/Explosion');
+      return resolve(gameId, creator);
     });
   });
 
@@ -559,6 +588,7 @@ export default async function() {
         || didJoinTable.value
         || didAcceptChallenge.value
         || didDeclineChallenge.value
+        || didRevokeTable.value
         || didModifyChallenge.value
         || didRegisterPlayer.value
         || didRegisterAgent.value
@@ -676,6 +706,7 @@ export default async function() {
     joinTable,
     acceptChallenge,
     declineChallenge,
+    revokeTable,
     modifyChallenge,
     registerPlayer,
     registerAgent,

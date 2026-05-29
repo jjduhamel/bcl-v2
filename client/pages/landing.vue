@@ -7,7 +7,7 @@ const {
 } = await useWallet();
 
 if (wallet.connected) {
-  await navigateTo('/lobby');
+  await navigateTo('/lounge');
 }
 
 const showWCModal = ref(false);

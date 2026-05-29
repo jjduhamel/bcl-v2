@@ -1,5 +1,4 @@
 <script setup>
-import _ from 'lodash';
 import { constants } from 'ethers';
 
 definePageMeta({
@@ -15,7 +14,7 @@ const {
   txPending,
   joinTable,
   modifyChallenge,
-  declineChallenge,
+  revokeTable,
   fetchOpenTables,
   fetchActiveGames
 } = await useLobby();
@@ -63,9 +62,7 @@ async function doModifyTable(args) {
 }
 
 async function doRevokeTable() {
-  const id = openTable.value.id;
-  await declineChallenge(id);
-  lounge.tables = _.without(lounge.tables, id);
+  await revokeTable(openTable.value.id);
   joinTableModal.value = false;
 }
 </script>
