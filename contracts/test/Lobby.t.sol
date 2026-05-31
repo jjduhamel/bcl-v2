@@ -214,6 +214,23 @@ contract PlatformFeeTest is LobbyTest {
   }
 }
 
+contract GasFeeTest is LobbyTest {
+  function testInitialGasFeeIsTenPercent() public {
+    assertEq(lobby.gasFeePerc(), 10);
+  }
+
+  function testAdminCanSetGasFee() public {
+    lobby.setGasFee(15);
+    assertEq(lobby.gasFeePerc(), 15);
+  }
+
+  function testNonAdminCannotSetGasFee() public {
+    changePrank(p1);
+    vm.expectRevert(AdminOnly.selector);
+    lobby.setGasFee(15);
+  }
+}
+
 contract EngineGetterPermissionsTest is LobbyTest {
   function testPlayerCantQueryAnotherDeposit() public {
     changePrank(p1);

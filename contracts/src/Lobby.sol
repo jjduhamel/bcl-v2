@@ -212,6 +212,10 @@ contract Lobby is
     if (_agent(account).owner == address(0)) revert NotAnAgent();
   }
 
+  function _assertOpenTable(uint gameId) internal view {
+    if (!_isOpenTable(gameId)) revert NotAnOpenTable();
+  }
+
   // TODO: no agent consent yet. Any owner can claim an unregistered address as their agent,
   // including a third party's EOA that hasn't onboarded yet — `ownerOf(victim)` then resolves
   // to the attacker. The victim is permanently locked out of registering, and any wager sent
@@ -301,12 +305,13 @@ contract Lobby is
     return _create(player, address(0), startAsWhite, timePerMove, wagerAmount, wagerToken);
   }
 
-  // Join an open table (opponent == address(0)): seat the joiner in their chosen colour and
-  // hand the turn back to the creator to accept/decline. Terms are the table's; colour is the
-  // joiner's. Not _assertPlayersGame — the joiner isn't a seat yet, only the owner of the seat-to-be.
-  function joinTable(uint gameId, address player, bool startAsWhite) external payable
+  // Join an open table (opponent == address(0)): seat the joiner in the colour the creator left
+  // open and hand the turn back to the creator to accept/decline. Terms are the table's.
+  // Not _assertPlayersGame — the joiner isn't a seat yet, only the owner of the seat-to-be.
+  function joinTable(uint gameId, address player) external payable
   returns (uint) {
     _assertOwner(player);
+    _assertOpenTable(gameId);
     IChessEngine.GameData memory game = chessEngine(gameId).game(gameId);
 
     // Block self -> self and agent -> owner
@@ -314,7 +319,12 @@ contract Lobby is
                                                       : game.whitePlayer;
     if (ownerOf(player) == ownerOf(opponent)) revert InvalidPlayer();
 
-    _modify(gameId, player, startAsWhite, game.timePerMove, game.wagerAmount);
+    // The joiner fills the open seat — they can't pick a colour and flip the creator.
+    _modify(gameId,
+            player,
+            game.whitePlayer == address(0),
+            game.timePerMove,
+            game.wagerAmount);
 
     // Move the table out of the global open registry into the joiner's pending set.
     _lobby(player).challenge(gameId);
@@ -475,8 +485,8 @@ contract Lobby is
 
   function revokeTable(uint gameId) external {
     _assertRegistered(msg.sender);
+    _assertOpenTable(gameId);
     _assertPlayersGame(gameId);
-    if (!_isOpenTable(gameId)) revert NotAnOpenTable();
     IChessEngine.GameData memory gameData = chessEngine(gameId).game(gameId);
     address creator = (gameData.whitePlayer == address(0)) ? gameData.blackPlayer
                                                            : gameData.whitePlayer;
@@ -493,7 +503,7 @@ contract Lobby is
   function closeTable(uint gameId) external
   {
     _assertArbiter();
-    if (!_isOpenTable(gameId)) revert NotAnOpenTable();
+    _assertOpenTable(gameId);
     IChessEngine.GameData memory gameData = chessEngine(gameId).game(gameId);
     address creator = (gameData.whitePlayer == address(0)) ? gameData.blackPlayer
                                                            : gameData.whitePlayer;
@@ -665,6 +675,11 @@ contract Lobby is
   function setPlatformFee(uint perc) external {
     _assertAdmin();
     _setPlatformFee(perc);
+  }
+
+  function setGasFee(uint perc) external {
+    _assertAdmin();
+    _setGasFee(perc);
   }
 
   function platformBalance(address token) public view returns (uint) {

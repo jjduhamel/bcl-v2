@@ -143,7 +143,7 @@ library PlayerLobby {
     EnumerableSet.AddressSet __robots;
   }
 
-  function hassChallenge(PlayerLobby storage lobby, uint gameId) internal view returns (bool) {
+  function hasChallenge(PlayerLobby storage lobby, uint gameId) internal view returns (bool) {
     return lobby.__pendingChallenges.contains(gameId);
   }
 
@@ -283,7 +283,7 @@ abstract contract ProfileWrapper {
   }
 
   function _isOpenTable(uint gameId) internal view returns (bool) {
-    if (_lobby(address(0)).hassChallenge(gameId)) return true;
+    if (_lobby(address(0)).hasChallenge(gameId)) return true;
     return false;
   }
 

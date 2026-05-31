@@ -40,7 +40,7 @@ contract OpenTableTest is ChallengeTest {
     assertEq(lobby.challenges(address(0)).length, 2);
 
     changePrank(p2);
-    lobby.joinTable(id1, p2, false);
+    lobby.joinTable(id1, p2);
 
     uint[] memory open = lobby.challenges(address(0));
     assertEq(open.length, 1);
@@ -50,7 +50,7 @@ contract OpenTableTest is ChallengeTest {
   function testJoinSeatsOpponentAndFlipsTurn() public {
     uint id = _open(0);
     changePrank(p2);
-    lobby.joinTable(id, p2, false); // p2 takes black
+    lobby.joinTable(id, p2); // p2 takes black
 
     IChessEngine.GameData memory g = engine.game(id);
     assertEq(g.whitePlayer, p1);
@@ -62,20 +62,22 @@ contract OpenTableTest is ChallengeTest {
   function testJoinLeavesOpenRegistry() public {
     uint id = _open(0);
     changePrank(p2);
-    lobby.joinTable(id, p2, false);
+    lobby.joinTable(id, p2);
 
     assertEq(lobby.challenges(address(0)).length, 0);
     assertEq(lobby.challenges(p2)[0], id);
   }
 
-  function testJoinerChoosingWhiteFlipsCreatorColor() public {
+  // The joiner can't choose a colour — they always fill the creator's open seat,
+  // so the creator keeps the colour they opened with.
+  function testJoinerCannotFlipCreatorColor() public {
     uint id = _open(0); // p1 opened as white
     changePrank(p2);
-    lobby.joinTable(id, p2, true); // p2 insists on white
+    lobby.joinTable(id, p2);
 
     IChessEngine.GameData memory g = engine.game(id);
-    assertEq(g.whitePlayer, p2);
-    assertEq(g.blackPlayer, p1);
+    assertEq(g.whitePlayer, p1);
+    assertEq(g.blackPlayer, p2);
     assertEq(g.currentMove, p1);
   }
 
@@ -87,7 +89,7 @@ contract OpenTableTest is ChallengeTest {
     assertEq(g.blackPlayer, p1);
 
     changePrank(p2);
-    lobby.joinTable(id, p2, true); // p2 takes the empty white seat
+    lobby.joinTable(id, p2); // p2 takes the empty white seat
     g = engine.game(id);
     assertEq(g.whitePlayer, p2);
     assertEq(g.blackPlayer, p1);
@@ -100,7 +102,7 @@ contract OpenTableTest is ChallengeTest {
   function testCreatorAcceptsJoinedTable() public {
     uint id = _open(0);
     changePrank(p2);
-    lobby.joinTable(id, p2, false);
+    lobby.joinTable(id, p2);
     changePrank(p1);
     lobby.acceptChallenge(id);
 
@@ -115,7 +117,7 @@ contract OpenTableTest is ChallengeTest {
   function testFinishedOpenGameEntersGlobalHistory() public {
     uint id = _open(0);
     changePrank(p2);
-    lobby.joinTable(id, p2, false);
+    lobby.joinTable(id, p2);
     changePrank(p1);
     lobby.acceptChallenge(id);
     assertEq(lobby.games(address(0))[0], id);
@@ -131,7 +133,7 @@ contract OpenTableTest is ChallengeTest {
   function testCreatorDeclinesJoinedTable() public {
     uint id = _open(0);
     changePrank(p2);
-    lobby.joinTable(id, p2, false);
+    lobby.joinTable(id, p2);
     changePrank(p1);
     lobby.declineChallenge(id);
 
@@ -144,7 +146,7 @@ contract OpenTableTest is ChallengeTest {
   function testWageredOpenJoinEscrowsBothThenChargesFees() public {
     uint id = _open(wager); // p1 escrows at open
     changePrank(p2);
-    lobby.joinTable{ value: wager }(id, p2, false); // p2 escrows at join
+    lobby.joinTable{ value: wager }(id, p2); // p2 escrows at join
 
     changePrank(arbiter);
     assertEq(lobby.checkPlayerDeposit(id, p1), wager);
@@ -170,7 +172,7 @@ contract OpenTableTest is ChallengeTest {
 
     changePrank(p2);
     token.approve(address(lobby), wager);
-    lobby.joinTable(id, p2, false);
+    lobby.joinTable(id, p2);
 
     changePrank(arbiter);
     assertEq(lobby.checkPlayerDeposit(id, p1), wager);
@@ -188,7 +190,7 @@ contract OpenTableTest is ChallengeTest {
   function testCreatorJoinsOwnTableRejects() public {
     uint id = _open(0);
     vm.expectRevert();
-    lobby.joinTable(id, p1, false);
+    lobby.joinTable(id, p1);
   }
 
   // Nor can the creator seat one of their own agents — same owner on both sides.
@@ -198,24 +200,24 @@ contract OpenTableTest is ChallengeTest {
     lobby.registerAgent(a1, 'a1', '', '', '', '');
     uint id = _open(0);
     vm.expectRevert();
-    lobby.joinTable(id, a1, false);
+    lobby.joinTable(id, a1);
   }
 
   function testJoinNonOpenReverts() public {
     uint id = lobby.challenge(p1, p2, true, timePerMove, 0, address(0)); // named challenge
     changePrank(p3);
     vm.expectRevert();
-    lobby.joinTable(id, p3, true);
+    lobby.joinTable(id, p3);
   }
 
   // Once a table is joined both seats are filled; a second joiner is rejected by the engine.
   function testSecondJoinerRejected() public {
     uint id = _open(0);
     changePrank(p2);
-    lobby.joinTable(id, p2, false);
+    lobby.joinTable(id, p2);
     changePrank(p3);
-    vm.expectRevert(PlayerOnly.selector);
-    lobby.joinTable(id, p3, true);
+    vm.expectRevert(NotAnOpenTable.selector);
+    lobby.joinTable(id, p3);
   }
 
   // join resolves the seat owner via ownerOf, which rejects an unregistered address.
@@ -224,7 +226,7 @@ contract OpenTableTest is ChallengeTest {
     address stranger = makeAddr('stranger');
     changePrank(stranger);
     vm.expectRevert(Unregistered.selector);
-    lobby.joinTable(id, stranger, false);
+    lobby.joinTable(id, stranger);
   }
 
   function testPreJoinCancelRefundsAndDeregisters() public {
@@ -265,7 +267,7 @@ contract OpenTableTest is ChallengeTest {
   function testRevokeAfterJoinReverts() public {
     uint id = _open(0);
     changePrank(p2);
-    lobby.joinTable(id, p2, false);
+    lobby.joinTable(id, p2);
     changePrank(p1);
     vm.expectRevert(NotAnOpenTable.selector);
     lobby.revokeTable(id);
@@ -332,7 +334,7 @@ contract OpenTableTest is ChallengeTest {
   function testCloseAfterJoinReverts() public {
     uint id = _open(0);
     changePrank(p2);
-    lobby.joinTable(id, p2, false);
+    lobby.joinTable(id, p2);
     changePrank(arbiter);
     vm.expectRevert(NotAnOpenTable.selector);
     lobby.closeTable(id);
