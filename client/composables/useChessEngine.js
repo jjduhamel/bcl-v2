@@ -100,7 +100,7 @@ export default async function(gameId) {
   if (!lobby.has(gameId)) await initGameData(gameId);
   // A refresh skips initPlayerLobby; load the viewer's agents so opponent
   // resolution recognises an owned agent seat instead of falling through to null.
-  if (!lobby.initialized && wallet.address) lobby.agents = await fetchAgents(wallet.address);
+  if (!lobby.initialized && wallet.address) lobby.__agents = await fetchAgents(wallet.address);
 
   const gameContract = chessEngine(gameId);
   const {

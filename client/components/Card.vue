@@ -10,12 +10,11 @@ const props = defineProps({
 <template lang='pug'>
 section
   button(id='card' class='contents')
-    div(class='w-24 h-24 mx-2 p-1 bordered flex flex-col')
+    div(class='w-24 h-24 mx-2 p-1 bordered flex flex-col relative')
       div(id='container' class='text-xs')
         slot
       div(v-if='indicator' id='indicator' class='p-1')
         div(id='circle' :style='{ "background-color": indicator }')
-
 </template>
 
 <style lang='sass'>

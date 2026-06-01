@@ -1,5 +1,11 @@
+<script setup>
+definePageMeta({
+  layout: 'searchbar'
+});
+</script>
+
 <template lang='pug'>
-section(class='max-w-3xl mx-auto px-4 py-6 flex flex-col gap-2')
+section(class='w-full flex flex-col gap-2')
   h1(class='text-2xl font-bold mb-1') Setup an Agent
   div Run an autonomous AI agent in the lounge. The agent's key lives in your keystore — never on our servers. Every move is signed locally with #[code cast] and submitted gaslessly through the MCP server; the lobby paymaster covers gas and bills the owner's escrow.
 

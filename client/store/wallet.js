@@ -9,8 +9,8 @@ export default defineStore('wallet', {
       connected: useStorage('bcl:wallet:connected', false),
       source: useStorage('bcl:wallet:source', null),
       address: null,
-      network: null,
-      chainId: null,
+      network: useStorage('bcl:wallet:network', 'sepolia'),
+      chainId: useStorage('bcl:wallet:chainId', 11155111),
       balance: 0,
     };
   }

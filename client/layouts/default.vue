@@ -16,8 +16,10 @@ div(id='app')
     div(id='sidebar')
       div(id='container')
         div(id='brand')
+          img(class='h-16 mx-auto mb-2' src='@/assets/pieces/merida/bQ.svg')
           div(class='text-md font-thin italic tracking-widest') The Blockchain
-          div(class='text-2xl font-bold italic tracking-wide') Chess Lounge
+          div(class='text-3xl font-bold') Chess Lounge
+          div(class='mt-4 border-t-2 border-black w-16 mx-auto')
         div(id='wallet')
           WalletStatusPane(
             :connected='wallet.connected'
@@ -34,18 +36,18 @@ div(id='app')
           NuxtLink(to='/lobby' v-if='wallet.connected')
             img(src='@/assets/icons/bytesize/star.svg')
             div Lobby
-          NuxtLink(to='/agents')
-            img(src='@/assets/icons/robot.svg')
-            div Tutorial
           NuxtLink(to='/about')
             img(src='@/assets/icons/bytesize/info.svg')
             div Rules
+          NuxtLink(to='/agents')
+            img(src='@/assets/icons/robot.svg')
+            div Tutorial
 
     div(id='content')
       slot
 
   div(id='footer')
-    div Built for Robots
+    div Built for Robots and Humans
     div(id='links')
       a(href='https://twitter.com/TheChessLounge')
         img(class='w-3' src='~assets/icons/bytesize/twitter.svg')
@@ -65,7 +67,7 @@ html, body, #__nuxt, #app
   background-color: #fbfaf6
 
 #app
-  @apply px-2 max-w-4xl flex flex-col
+  @apply px-2 max-w-full flex flex-col
   font-family: "Times New Roman", Times, serif
 
   /*
@@ -85,7 +87,10 @@ html, body, #__nuxt, #app
 
     @extend .bordered
     &.border-none
-      @apply m-0 p-0
+      @apply m-0 p-0 h-auto
+
+    &:focus
+      outline: 1px solid black
 
     &:disabled
       @apply text-gray-400 border-gray-400
@@ -99,26 +104,26 @@ html, body, #__nuxt, #app
       @extend .unbordered
 
   #body
-    @apply mt-2 p-2 flex flex-grow
+    @apply mt-2 p-2 flex flex-grow min-h-0 overflow-y-auto
 
     #sidebar
-      @apply min-w-fit
+      @apply min-w-fit flex flex-col
 
       #container
-        @apply p-2 border border-2 border-black rounded-2xl
+        @apply p-2 border border-2 border-black rounded-2xl flex flex-col
 
       #brand
-        @apply my-4 mx-6 text-center
+        @apply my-4 mx-4 text-center
 
       #wallet
-        @apply px-2 py-1 mx-1 my-4
+        @apply px-2 py-1 mx-1 my-2
         @extend .bordered
 
       #navigation
-        @apply mx-2 flex flex-col
+        @apply my-4 mx-2 flex-1 flex flex-col
 
         a
-          @apply m-1 px-2 py-0.5 flex-1 flex items-center
+          @apply m-1 px-2 py-1 flex items-center
           @extend .bordered
 
           img
@@ -128,7 +133,7 @@ html, body, #__nuxt, #app
             @apply flex-1 text-center
 
     #content
-      @apply ml-3 mt-2 w-full
+      @apply ml-4 mb-8 w-full
 
   #footer
     @apply p-0.5 flex-shrink flex text-xs

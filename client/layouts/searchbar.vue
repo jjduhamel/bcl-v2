@@ -8,7 +8,6 @@ const {
   initPlayerLobby,
   txPending,
   sendChallenge,
-  createTable,
   registerPlayer,
   registerAgent,
   fetchProfile,
@@ -19,16 +18,15 @@ const {
 const { isAddress, isENSDomain, lookupENS } = useEthUtils();
 
 const searchText = ref(null);
+const searchInput = ref(null);
 const lookupAddress = ref(null);
 const lookupIsAgent = ref(false);
 const viewedProfile = ref(null);
 const viewProfileModal = ref(false);
 const newChallengeModal = ref(false);
-const createTableModal = ref(false);
 const registerPlayerModal = ref(false);
 const registerAgentModal = ref(false);
 const newChallengeRef = ref(null);
-const createTableRef = ref(null);
 const registerPlayerRef = ref(null);
 const registerAgentRef = ref(null);
 
@@ -52,6 +50,7 @@ const viewedIsRegistered = computed(() => {
 });
 
 async function lookupProfile() {
+  if (!searchText.value?.trim()) return searchInput.value.focus();
   if (isAddress(searchText.value)) {
     lookupAddress.value = searchText.value;
   } else if (isENSDomain(searchText.value)) {
@@ -81,16 +80,9 @@ function showRegisterModal() {
     registerPlayerModal.value = true;
     return;
   }
+  if (!searchText.value?.trim()) return searchInput.value.focus();
   if (!isAddress(searchText.value)) throw Error('Invalid input');
   registerAgentModal.value = true;
-}
-
-function showCreateTableModal() {
-  if (!lobby.isRegistered) {
-    registerPlayerModal.value = true;
-    return;
-  }
-  createTableModal.value = true;
 }
 
 async function doRegisterAgent(args) {
@@ -105,23 +97,17 @@ async function doSendChallenge(args) {
   newChallengeModal.value = false;
 }
 
-async function doCreateTable(args) {
-  const { sender, startAsWhite, timePerMove, wagerAmount } = args;
-  await createTable(sender, startAsWhite, timePerMove, wagerAmount);
-  createTableModal.value = false;
-}
-
 if (wallet.connected && !lobby.initialized) {
   initPlayerLobby();
 }
 
-// MetaMask account switches keep the page mounted but useLobby's signer is
-// captured at mount-time. The lobby store would also stay keyed to the old
-// wallet, mis-firing the registration gate. Hard-reload — MetaMask's own
-// recommendation — is the cleanest reset.
+// useLobby captures its signer at mount-time, so both connecting from a
+// spectator session (null -> address) and switching MetaMask accounts leave
+// the lobby contract bound to the stale signer/read-provider. Hard-reload —
+// MetaMask's own recommendation — is the cleanest reset.
 watch(() => wallet.address, (newAddr, oldAddr) => {
-  if (!newAddr || !oldAddr || newAddr === oldAddr) return;
-  window.location.reload();
+  if (!newAddr || newAddr === oldAddr) return;
+  //window.location.reload();
 });
 
 // Re-register whenever the agent set changes; immediate covers the wallet-only
@@ -139,19 +125,24 @@ onUnmounted(() => {
 
 <template lang='pug'>
 NuxtLayout(name='default')
-  div(id='player-search' class='flex justify-between')
+  div(id='player-search' class='flex justify-between mb-4')
     form(@submit.prevent, class='flex-1 flex items-center gap-1')
       input(
+        ref='searchInput'
         class='flex-1'
         type='text',
         v-model='searchText',
         placeholder='ETH Address/ENS Domain'
       )
-      button(@click='lookupProfile') Lookup
+      button(class='flex items-center gap-2' @click='lookupProfile')
+        img(class='h-4 w-4 object-contain' src='@/assets/icons/bytesize/search.svg')
+        span Lookup
     div(class='flex items-center gap-1')
       template(v-if='wallet.connected')
-        button(type='button', @click='showCreateTableModal') Open Table
-        button(type='button', @click='showRegisterModal') {{ lobby.isRegistered ? 'Register Agent' : 'Register' }}
+        button(type='button' class='flex items-center gap-2' @click='showRegisterModal')
+          img(v-if='lobby.isRegistered' class='h-4 w-4 object-contain' src='@/assets/icons/robot.svg')
+          img(v-else class='h-4 w-4 object-contain' src='@/assets/icons/bytesize/user.svg')
+          span Register
       button(v-else type='button' class='flex items-center gap-2' @click='connectMetamask')
         img(class='h-5 w-4 object-contain' src='@/assets/icons/metamask-32px.png')
         span Connect
@@ -235,22 +226,4 @@ NuxtLayout(name='default')
       div(id='form-controls')
         button(type='button' :disabled='txPending || !wallet.connected' @click='newChallengeRef.submit()') Send
         button(type='button' :disabled='txPending' @click='() => newChallengeModal = false') Cancel
-
-    Modal(
-      v-if='createTableModal'
-      title='Create Open Table'
-      @close='() => createTableModal = false'
-    )
-      ChallengeForm(
-        ref='createTableRef'
-        id='create-table'
-        :isEditing='true'
-        :loading='txPending'
-        :player='wallet.address'
-        :agents='lobby.agents'
-        @submit='doCreateTable'
-      )
-      div(id='form-controls')
-        button(type='button' :disabled='txPending || !wallet.connected' @click='createTableRef.submit()') Send
-        button(type='button' :disabled='txPending' @click='() => createTableModal = false') Cancel
 </template>

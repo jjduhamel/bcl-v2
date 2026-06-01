@@ -4,14 +4,12 @@ import { fetchSigner, getContract } from '@wagmi/core';
 import LobbyContract from '../contracts/Lobby.sol/Lobby.json';
 import EngineContract from '../contracts/ChessEngine.sol/ChessEngine.json';
 import useLobbyStore from '../store/lobby';
-import useLoungeStore from '../store/lounge';
 
 export default async function() {
   const { $amplitude } = useNuxtApp();
   const { wallet, refreshBalance, fetchProvider } = await useWallet();
   const { playAudioClip } = useAudioUtils();
   const lobby = useLobbyStore();
-  const lounge = useLoungeStore();
 
   const signer = wallet.connected ? await fetchSigner() : null;
   const lobbyContract = getContract({
@@ -44,17 +42,15 @@ export default async function() {
   async function fetchOpenTables() {
     const ids = await lobbyContract.challenges(constants.AddressZero);
     await Promise.all(_.map(ids, initGameData));
-    lounge.tables = _.map(ids, id => id.toNumber());
-    console.log('Synced', lounge.tables.length, 'open tables');
-    return lounge.tables;
+    console.log('Synced', lobby.openTables.length, 'open tables');
+    return lobby.openTables;
   }
 
   async function fetchActiveGames() {
     const ids = await lobbyContract.games(constants.AddressZero);
     await Promise.all(_.map(ids, initGameData));
-    lounge.games = _.map(ids, id => id.toNumber());
-    console.log('Synced', lounge.games.length, 'active games');
-    return lounge.games;
+    console.log('Synced', lobby.activeGames.length, 'active games');
+    return lobby.activeGames;
   }
 
   // playerProfile reverts Unregistered() until registerPlayer is called; surface
@@ -64,15 +60,15 @@ export default async function() {
   async function fetchPlayerProfile() {
     try {
       const p = await lobbyContract.playerProfile(wallet.address);
-      lobby.playerProfile = {
+      lobby.__profile = {
         username: p.username,
         avatar: p.avatar,
         createdAt: Number(p.createdAt)
       };
     } catch {
-      lobby.playerProfile = null;
+      lobby.__profile = null;
     }
-    return lobby.playerProfile;
+    return lobby.__profile;
   }
 
   // Resolve an arbitrary address to whichever profile shape the contract holds —
@@ -131,7 +127,7 @@ export default async function() {
     // so probe the profile first and short-circuit when the wallet hasn't
     // registered yet — the page surfaces the registration prompt.
     await fetchPlayerProfile();
-    if (!lobby.playerProfile) {
+    if (!lobby.__profile) {
       console.log('Wallet not registered; lobby reads skipped');
       lobby.initialized = true;
       return;
@@ -159,13 +155,12 @@ export default async function() {
       ...agentHistory
     ], initGameData));
 
-    lobby.agents = agents;
+    // Category lists are derived from __games[id].state, so just sync the agent
+    // set and let the getters classify the games initGameData just loaded.
+    lobby.__agents = agents;
     console.log('Synced', agents.length, 'agents');
-    lobby.pending = _.map([ ...challenges, ...agentChallenges ], gameId => gameId.toNumber());
     console.log('Synced', lobby.challenges.length, 'challenges');
-    lobby.current = _.map([ ...games, ...agentGames ], gameId => gameId.toNumber());
     console.log('Synced', lobby.games.length, 'games');
-    lobby.finished = _.map([ ...history, ...agentHistory ], gameId => gameId.toNumber());
     console.log('Synced', lobby.history.length, 'finished games');
 
     lobby.initialized = true;
@@ -190,7 +185,7 @@ export default async function() {
     const engineAddress = await lobbyContract.chessEngine(gameId);
     console.log('Engine for game', gameId, 'is', engineAddress);
     if (!engineAddress) throw Error('MissingRecord');
-    lobby.contracts[gameId] = engineAddress;
+    lobby.__engines[gameId] = engineAddress;
     return chessEngine(gameId);
   }
 
@@ -207,7 +202,7 @@ export default async function() {
       , wagerAmount
     ] = await chessEngine(gameId).game(gameId);
 
-    lounge.metadata[gameId] = {
+    lobby.__games[gameId] = {
       id: BN.from(gameId).toNumber(),
       state,
       outcome,
@@ -258,13 +253,10 @@ export default async function() {
       console.log('Created challenge', gameId);
       $amplitude.track('ChallengeSent', { opponent, gameId });
       didSendChallenge.value = false;
-      await Promise.all([
-        initGameData(gameId),
-        refreshBalance()
-      ]);
-      lobby.newChallenge(gameId);
+      await initGameData(gameId);
+      resolve(gameId, opponent);
+      refreshBalance();
       playAudioClip('nes/NewChallenge');
-      return resolve(gameId, opponent);
     });
   });
 
@@ -293,11 +285,10 @@ export default async function() {
       console.log('Created open table', gameId);
       $amplitude.track('TableCreated', { gameId });
       didCreateTable.value = false;
-      await Promise.all([initGameData(gameId), refreshBalance()]);
-      lobby.newChallenge(gameId);
-      lounge.tables = _.union(lounge.tables, [ gameId ]);
+      await initGameData(gameId);
+      resolve(gameId);
+      refreshBalance();
       playAudioClip('nes/NewChallenge');
-      return resolve(gameId);
     });
   });
 
@@ -325,18 +316,15 @@ export default async function() {
       console.log('Game', gameId, 'started with', opponent);
       $amplitude.track('ChallengeAccepted', { gameId, opponent });
       didAcceptChallenge.value = false;
-      await Promise.all([
-        fetchGameData(gameId),
-        refreshBalance()
-      ]);
-      lobby.newGame(gameId);
+      await fetchGameData(gameId);
+      resolve(gameId, opponent);
+      refreshBalance();
       playAudioClip('nes/NewChallenge');
-      return resolve(gameId, opponent);
     });
   });
 
   const didJoinTable = ref(false);
-  const joinTable = (gameId, sender, startAsWhite) => new Promise(async (resolve, reject) => {
+  const joinTable = (gameId, sender) => new Promise(async (resolve, reject) => {
     const gameContract = chessEngine(gameId);
     // currentDeposit is gated by isPlayersGame and the joiner isn't a player
     // yet; they have no prior deposit on this game so just pay the full wager.
@@ -344,8 +332,8 @@ export default async function() {
 
     try {
       didJoinTable.value = true;
-      $amplitude.track('JoinTable', { gameId, sender, startAsWhite, wagerAmount });
-      await lobbyContract.joinTable(gameId, sender, startAsWhite, { value: wagerAmount });
+      $amplitude.track('JoinTable', { gameId, sender, wagerAmount });
+      await lobbyContract.joinTable(gameId, sender, { value: wagerAmount });
       console.log('Joined table', gameId);
     } catch(err) {
       didJoinTable.value = false;
@@ -358,11 +346,12 @@ export default async function() {
       console.log('Joined table', gameId, 'opened by', creator);
       $amplitude.track('TableJoined', { gameId, creator });
       didJoinTable.value = false;
-      await Promise.all([fetchGameData(gameId), refreshBalance()]);
-      lounge.tables = _.without(lounge.tables, gameId);
-      lobby.newChallenge(gameId);
+      // Resolve as soon as game state is fresh; a failing balance refresh must
+      // not block the caller (it leaves the join modal stuck open).
+      await fetchGameData(gameId);
+      resolve(gameId, creator);
+      refreshBalance();
       playAudioClip('nes/NewChallenge');
-      return resolve(gameId, creator);
     });
   });
 
@@ -383,13 +372,10 @@ export default async function() {
       console.log('Challenge', gameId, 'was declined');
       $amplitude.track('ChallengeDeclined', { gameId, opponent });
       didDeclineChallenge.value = false;
-      await Promise.all([
-        fetchGameData(gameId),
-        refreshBalance()
-      ]);
-      lobby.popChallenge(gameId);
+      await fetchGameData(gameId);
+      resolve(gameId, opponent);
+      refreshBalance();
       playAudioClip('nes/Explosion');
-      return resolve(gameId, opponent);
     });
   });
 
@@ -410,14 +396,10 @@ export default async function() {
       console.log('Open table', gameId, 'closed');
       $amplitude.track('TableClosed', { gameId });
       didRevokeTable.value = false;
-      await Promise.all([
-        fetchGameData(gameId),
-        refreshBalance()
-      ]);
-      lobby.popChallenge(gameId);
-      lounge.tables = _.without(lounge.tables, gameId);
+      await fetchGameData(gameId);
+      resolve(gameId, creator);
+      refreshBalance();
       playAudioClip('nes/Explosion');
-      return resolve(gameId, creator);
     });
   });
 
@@ -454,12 +436,10 @@ export default async function() {
       console.log('Challenge updated', gameId);
       didModifyChallenge.value = false;
       $amplitude.track('ChallengeModified', { gameId, opponent });
-      await Promise.all([
-        fetchGameData(gameId),
-        refreshBalance()
-      ]);
+      await fetchGameData(gameId);
+      resolve(gameId, opponent);
+      refreshBalance();
       playAudioClip('nes/NewChallenge');
-      return resolve(gameId, opponent);
     });
   });
 
@@ -478,7 +458,7 @@ export default async function() {
     lobbyContract.once(eventFilter, async (owner, agent) => {
       console.log('Agent updated', agent);
       didUpdateAgent.value = false;
-      lobby.agents = await fetchAgents(wallet.address);
+      lobby.__agents = await fetchAgents(wallet.address);
       return resolve(agent);
     });
   });
@@ -498,7 +478,7 @@ export default async function() {
     lobbyContract.once(eventFilter, async (owner, agent) => {
       console.log('Agent suspended', agent);
       didSuspendAgent.value = false;
-      lobby.agents = await fetchAgents(wallet.address);
+      lobby.__agents = await fetchAgents(wallet.address);
       return resolve(agent);
     });
   });
@@ -518,7 +498,7 @@ export default async function() {
     lobbyContract.once(eventFilter, async (owner, agent) => {
       console.log('Agent resumed', agent);
       didResumeAgent.value = false;
-      lobby.agents = await fetchAgents(wallet.address);
+      lobby.__agents = await fetchAgents(wallet.address);
       return resolve(agent);
     });
   });
@@ -538,7 +518,7 @@ export default async function() {
     lobbyContract.once(eventFilter, async (owner, agent) => {
       console.log('Agent unregistered', agent);
       didUnregisterAgent.value = false;
-      lobby.agents = await fetchAgents(wallet.address);
+      lobby.__agents = await fetchAgents(wallet.address);
       return resolve(agent);
     });
   });
@@ -554,7 +534,7 @@ export default async function() {
       $amplitude.track('PlayerRegistered', { username });
       await fetchPlayerProfile();
       didRegisterPlayer.value = false;
-      return resolve(lobby.playerProfile);
+      return resolve(lobby.__profile);
     } catch(err) {
       didRegisterPlayer.value = false;
       return reject(err);
@@ -576,7 +556,7 @@ export default async function() {
     lobbyContract.once(eventFilter, async (owner, agent) => {
       console.log('Agent registered', agent);
       didRegisterAgent.value = false;
-      lobby.agents = await fetchAgents(wallet.address);
+      lobby.__agents = await fetchAgents(wallet.address);
       return resolve(agent);
     });
   });
@@ -604,7 +584,6 @@ export default async function() {
     console.log('Received new challenge from', opponent);
     $amplitude.track('ChallengeCreated', { gameId, opponent });
     await initGameData(gameId);
-    lobby.newChallenge(gameId);
     playAudioClip('nes/NewChallenge');
   };
 
@@ -613,7 +592,6 @@ export default async function() {
     console.log('Challenge', gameId, 'was accepted by', opponent);
     $amplitude.track('ChallengeAccepted', { gameId, opponent });
     await fetchGameData(gameId);
-    lobby.newGame(gameId);
     await refreshBalance();
     playAudioClip('nes/Berserk');
   };
@@ -623,7 +601,6 @@ export default async function() {
     console.log('Challenge', gameId, 'was declined by', opponent);
     $amplitude.track('ChallengeDeclined', { gameId, opponent });
     await fetchGameData(gameId);
-    lobby.popChallenge(gameId);
     await refreshBalance();
     playAudioClip('nes/Explosion');
   };
@@ -633,7 +610,6 @@ export default async function() {
     console.log('Game', gameId, 'finished');
     $amplitude.track('GameFinished', { gameId });
     await fetchGameData(gameId);
-    lobby.finishGame(id);
     await refreshBalance();
     playAudioClip('nes/Explosion');
   };
@@ -650,7 +626,7 @@ export default async function() {
 
   function createListeners() {
     console.log('Register listeners for incoming lobby events');
-    const agents = _.map(lobby.agents, 'address');
+    const agents = _.map(lobby.__agents, 'address');
     const recv = [ wallet.address, ...agents ];
     const add = (filter, handler) => {
       lobbyContract.on(filter, handler);
@@ -686,7 +662,6 @@ export default async function() {
 
   return {
     lobby,
-    lounge,
     txPending,
     lobbyContract,
     chessEngine,

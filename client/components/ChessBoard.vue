@@ -69,18 +69,20 @@ onMounted(() => {
 
   reloadBoard();
 
+  // The board scales with its container; chessground caches piece offsets in px,
+  // so recompute them whenever the cg-wrap resizes.
+  resizeObserver = new ResizeObserver(() => chessground.value?.redrawAll());
+  resizeObserver.observe(unref(board));
 });
+
+let resizeObserver = null;
+onUnmounted(() => resizeObserver?.disconnect());
 
 watch(isCurrentMove, reloadBoard);
 watch(fen, reloadBoard);
 </script>
 
 <template lang='pug'>
-div(id='chessboard' class='mb-2 blue merida')
+div(id='chessboard' class='blue merida')
   div(ref='board' class='cg-wrap')
 </template>
-
-<style lang='sass'>
-#chessboard
-  @apply mb-4
-</style>
