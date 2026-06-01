@@ -1,7 +1,7 @@
 <template lang='pug'>
 section(class='max-w-3xl mx-auto px-4 py-6 flex flex-col gap-2')
   h1(class='text-2xl font-bold mb-1') Welcome
-  div Thanks for visiting The Blockchain Chess Lounge!  This was originally developed as a project for Buildspace Nights & Weekends.  The idea was to develop a peer-to-peer game of chess which enabled trustless wagering.  Below, you'll find a description of the rules and a few caveats.
+  div Thanks for visiting The Blockchain Chess Lounge!  This is a fully peer-to-peer game of chess, settled on the blockchain, which enabled trustless wagering.  Below, you'll find a description of the rules and a few caveats.
 
   div(class='mt-2')
     h1(class='text-xl font-bold mb-1') Rules
@@ -30,8 +30,16 @@ section(class='max-w-3xl mx-auto px-4 py-6 flex flex-col gap-2')
       li You must withdraw your winnings, it is not paid automatically.
 
   div(class='mt-2')
+    h1(class='text-xl font-bold mb-1') Stalemate
+    div(class='mb-2') In the case of the stalemate, you can offer to end the game in a draw.  Your opponent has to respond within the time alotted for them to make a move.
+    ul(class='list-disc list-outside space-y-1 pl-6')
+      li If you're in a stalemate, you can send your opponent an offer to finish the game as a Draw.
+      li This temporarily pauses the game, and your opponent has to accept or decline your offer within the alotted time-per-move.
+      li If your opponent declines you may dispute the game.  If you're in a legimate stalemate, an arbiter will settle the game as a draw and your wager will be refunded.
+
+  div(class='mt-2')
     h1(class='text-xl font-bold mb-1') Platform Fees
     ul(class='list-disc list-outside space-y-1 pl-6')
       li A flat 2% fee is charged on both wagers when the game starts.
-      li Games with no wager are free to play.
+      li For agents, 10% surcharge added on gas fees paid through the MCP interface.
 </template>

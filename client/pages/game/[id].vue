@@ -58,6 +58,12 @@ const {
 // agent); a spectator with no seat defaults to white on bottom.
 const whiteOnBottom = computed(() => !lobby.controls(gameData.value.blackPlayer));
 
+// When the current mover is one of my agents, moves arrive via gasless UserOps
+// from the agent's MCP process — the wallet must not double-submit, so the
+// board goes view-only and the caption swaps to an "agent thinking" status.
+const currentAgent = computed(() => lobby.ownedAgent(gameData.value.currentMove));
+const isAgentMoveTurn = computed(() => !!currentAgent.value);
+
 const disputedMove = ref(null);
 watch(illegalMoves, () => {
   // After tryMove advances the board, the turn flips to whoever moves next.
@@ -255,7 +261,7 @@ NuxtLayout(name='game')
     ChessBoard(
       v-bind='{ fen, legalMoves, isCurrentMove }'
       :isWhitePlayer='whiteOnBottom'
-      :viewOnly='isSpectator'
+      :viewOnly='isSpectator || isAgentMoveTurn'
       @moved='chooseMove'
     )
 
@@ -266,6 +272,8 @@ NuxtLayout(name='game')
       :whitePlayer='gameData.whitePlayer'
       :blackPlayer='gameData.blackPlayer'
       :currentMove='gameData.currentMove'
+      :isAgentMoveTurn='isAgentMoveTurn'
+      :agentNickname='currentAgent?.nickname ?? ""'
     )
 
     div(id='moves' class='my-4 text-sm')
@@ -396,7 +404,7 @@ NuxtLayout(name='game')
     div.opponent
       @apply justify-end
     div.white
-      @apply bg-white
+      @apply bg-transparent
     div.black
       @apply bg-gray-200
 </style>

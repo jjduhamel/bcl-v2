@@ -29,20 +29,23 @@ div(id='app')
           )
         div(id='navigation')
           NuxtLink(to='/lounge')
-            img(src='@/assets/icons/bytesize/star.svg')
+            img(src='@/assets/icons/pawn.svg')
             div Lounge
+          NuxtLink(to='/lobby' v-if='wallet.connected')
+            img(src='@/assets/icons/bytesize/star.svg')
+            div Lobby
+          NuxtLink(to='/agents')
+            img(src='@/assets/icons/robot.svg')
+            div Tutorial
           NuxtLink(to='/about')
             img(src='@/assets/icons/bytesize/info.svg')
-            div About
-          NuxtLink(to='/marketplace')
-            img(src='@/assets/icons/bytesize/tag.svg')
-            div Market
+            div Rules
 
     div(id='content')
       slot
 
   div(id='footer')
-    div Please report bugs on Github
+    div Built for Robots
     div(id='links')
       a(href='https://twitter.com/TheChessLounge')
         img(class='w-3' src='~assets/icons/bytesize/twitter.svg')
@@ -83,13 +86,14 @@ html, body, #__nuxt, #app
     @extend .bordered
     &.border-none
       @apply m-0 p-0
-  
-    &:hover
-      @apply .bg-black
 
     &:disabled
       @apply text-gray-400 border-gray-400
       filter: invert(40%)
+
+  button
+    @apply items-center justify-center
+    @apply leading-none
 
     &:disabled.unbordered
       @extend .unbordered
@@ -118,7 +122,7 @@ html, body, #__nuxt, #app
           @extend .bordered
 
           img
-            @apply h-4
+            @apply h-4 w-4 object-contain
 
           div
             @apply flex-1 text-center

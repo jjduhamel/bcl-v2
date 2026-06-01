@@ -31,6 +31,7 @@ const { chains, provider, webSocketProvider } = configureChains(
   , chain.polygon
   , chain.goerli
   , chain.polygonMumbai
+  , chain.sepolia
   , chain.foundry ],
   //[ alchemyProvider({ apiKey: config.alchemyId })
   [ infuraProvider({ apiKey: config.infuraId })
@@ -79,6 +80,10 @@ export default async function() {
   }
   wallet.initialized = true;
 
+  function fetchProvider() {
+    return getProvider({ chainId: Number(config.spectatorChainId) });
+  }
+
   async function fetchCurrentBalance(player) {
     if (!player) player = wallet.address;
     const bal = await fetchBalance({
@@ -102,6 +107,8 @@ export default async function() {
       case 'goerli': return 'Goerli';
       case 'matic': return 'Polygon';
       case 'maticmum': return 'Mumbai';
+      case 'sepolia': return 'Sepolia';
+      case 'foundry': return 'localhost';
       default: return wallet.network;
     }
   });
@@ -208,7 +215,7 @@ export default async function() {
       if (isConnected) wallet.address = address;
       else {
         _disconnected();
-        navigateTo('/landing');
+        navigateTo('/lounge');
       }
     });
 
@@ -233,6 +240,7 @@ export default async function() {
     chains,
     //provider,
     signer,
+    fetchProvider,
     currentNetwork,
     currentBalance,
     fetchBalance,

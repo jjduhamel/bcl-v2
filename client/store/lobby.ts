@@ -3,31 +3,33 @@ import { ethers, Contract, BigNumber as BN } from 'ethers';
 import LobbyContract from '../contracts/Lobby.sol/Lobby.json';
 import EngineContract from '../contracts/ChessEngine.sol/ChessEngine.json';
 import useWalletStore from './wallet';
+import useLoungeStore from './lounge';
 
 export default defineStore('lobby', {
   state: () => {
     return {
       initializing: false,
       initialized: false,
+      playerProfile: null as PlayerProfile | null,
       agents: [] as AgentInfo[],
       pending: [] as number,
       current: [] as number,
       finished: [] as number,
       contracts: {} as string,
-      metadata: {} as GameInfo
     }
   },
   getters: {
     address() {
-      const config = useRuntimeConfig();
-      const wallet = useWalletStore();
-      switch (wallet.network) {
-        case 'homestead': return config.lobbyAddress.ethereum;
-        case 'goerli': return config.lobbyAddress.goerli;
-        case 'matic': return config.lobbyAddress.matic;
-        case 'maticmum': return config.lobbyAddress.mumbai;
-        default: return config.lobbyAddress.local;
-      }
+      return useRuntimeConfig().lobbyAddress;
+    },
+    isRegistered(): boolean {
+      return this.playerProfile !== null;
+    },
+    // Per-game metadata lives on the lounge store (shared with the spectator
+    // feeds). Forwarding it as a getter keeps every `this.metadata[id]` site
+    // in lobby's actions unchanged.
+    metadata() {
+      return useLoungeStore().metadata;
     },
     challenges() {
       return _.map(this.pending, gameId => this.gameData(gameId));
@@ -80,6 +82,12 @@ export default defineStore('lobby', {
       const wallet = useWalletStore();
       return seat === wallet.address || _.some(this.agents, { address: seat });
     },
+    isOwnedAgent(seat: string) {
+      return _.some(this.agents, { address: seat });
+    },
+    ownedAgent(seat: string) {
+      return _.find(this.agents, { address: seat });
+    },
     opponent(gameId: number) {
       const { whitePlayer, blackPlayer } = this.metadata[gameId];
       if (this.controls(whitePlayer)) return blackPlayer;
@@ -119,6 +127,12 @@ export default defineStore('lobby', {
   }
 });
 
+interface PlayerProfile {
+  username: string,
+  avatar: string,
+  createdAt: number
+}
+
 interface AgentInfo {
   address: string,
   owner: string,
@@ -130,16 +144,4 @@ interface AgentInfo {
   losses: number,
   draws: number,
   games: number
-}
-
-interface GameInfo {
-  id: number,
-  state: number,
-  outcome: number,
-  whitePlayer: string,
-  blackPlayer: string,
-  currentMove: string,
-  timePerMove: number,
-  timeOfLastMove: number | null,
-  wagerAmount: number
 }

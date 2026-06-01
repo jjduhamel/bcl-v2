@@ -1,248 +1,133 @@
 <script setup>
-import _ from 'lodash';
+import { constants } from 'ethers';
 
 definePageMeta({
-  middleware: [ 'auth' ]
+  layout: 'searchbar'
 });
 
 const { wallet } = await useWallet();
 
 const {
   lobby,
-  initPlayerLobby,
+  lounge,
   txPending,
-  sendChallenge,
-  acceptChallenge,
-  declineChallenge,
+  joinTable,
   modifyChallenge,
-  registerAgent,
-  updateAgent,
-  suspendAgent,
-  unregisterAgent,
-  isAgent,
-  createListeners,
-  destroyListeners
+  revokeTable,
+  fetchOpenTables,
+  fetchActiveGames
 } = await useLobby();
 
-const { isAddress, isENSDomain, lookupENS } = useEthUtils();
+await Promise.all([
+  fetchOpenTables(),
+  fetchActiveGames()
+]);
 
-const searchText = ref(null);
-const lookupAddress = ref(null);
-const lookupIsAgent = ref(false);
-const newChallengeModal = ref(false);
-
-async function newChallenge() {
-  if (isAddress(searchText.value)) {
-    lookupAddress.value = searchText.value;
-  } else if (isENSDomain(searchText.value)) {
-    lookupAddress.value = await lookupENS(searchText.value);
-  } else {
-    throw Error('Invalid input');
-  }
-  const mine = [ wallet.address, ..._.map(lobby.agents, 'address') ];
-  if (mine.some(a => a?.toLowerCase() === lookupAddress.value.toLowerCase())) {
-    throw Error('Cannot challenge yourself or your own agent');
-  }
-  lookupIsAgent.value = await isAgent(lookupAddress.value);
-  newChallengeModal.value = true;
+// On open tables exactly one seat is filled (the creator). Resolve them so the
+// card shows their address instead of address(0).
+function creatorOf(table) {
+  return table.whitePlayer === constants.AddressZero ? table.blackPlayer
+                                                     : table.whitePlayer;
 }
 
-function hideNewChallenge() {
-  newChallengeModal.value = false
+const openTable = ref(null);
+const joinTableModal = ref(false);
+const joinTableEditing = ref(false);
+const joinTableRef = ref(null);
+
+// True when the active wallet owns the seat that created the table — either as
+// itself or one of its agents (lobby.controls covers both).
+const isOwnTable = computed(() =>
+  openTable.value && lobby.controls(creatorOf(openTable.value))
+);
+
+function showJoinTable(table) {
+  openTable.value = table;
+  joinTableEditing.value = false;
+  joinTableModal.value = true;
 }
 
-const registerAgentModal = ref(false);
-
-function showRegisterAgent() {
-  if (!isAddress(searchText.value)) throw Error('Invalid input');
-  registerAgentModal.value = true;
+async function doJoinTable(args) {
+  if (!lobby.isRegistered) throw Error('Register your wallet first (Register button, top bar).');
+  const { sender, startAsWhite } = args;
+  await joinTable(openTable.value.id, sender, startAsWhite);
+  joinTableModal.value = false;
 }
 
-async function doRegisterAgent(args) {
-  const { robot, nickname, avatar } = args;
-  await registerAgent(robot, nickname, avatar);
-  registerAgentModal.value = false;
+async function doModifyTable(args) {
+  const { sender, startAsWhite, timePerMove, wagerAmount } = args;
+  await modifyChallenge(openTable.value.id, sender, startAsWhite, timePerMove, wagerAmount);
+  joinTableEditing.value = false;
 }
 
-const editAgent = ref(null);
-const editAgentModal = ref(false);
-
-function showEditAgent(agent) {
-  editAgent.value = agent;
-  editAgentModal.value = true;
+async function doRevokeTable() {
+  await revokeTable(openTable.value.id);
+  joinTableModal.value = false;
 }
-
-async function doSuspendAgent() {
-  await suspendAgent(editAgent.value.address);
-  editAgentModal.value = false;
-}
-
-async function doUnregisterAgent() {
-  await unregisterAgent(editAgent.value.address);
-  editAgentModal.value = false;
-}
-
-
-const pendingChallenge = ref(null);
-const pendingChallengeModal = ref(false);
-
-async function showPendingChallenge(gameId) {
-  const data = lobby.gameData(gameId);
-  const [ playerIsAgent, opponentIsAgent ] = await Promise.all([
-    isAgent(data.player),
-    isAgent(data.opponent)
-  ]);
-  pendingChallenge.value = { ...data, playerIsAgent, opponentIsAgent };
-  pendingChallengeModal.value = true;
-}
-
-function hidePendingChallenge() {
-  pendingChallenge.value = null;
-  pendingChallengeModal.value = false;
-}
-
-async function doSendChallenge(args) {
-  const { sender, opponent, startAsWhite, timePerMove, wagerAmount } = args;
-  await sendChallenge(sender, opponent, startAsWhite, timePerMove, wagerAmount);
-  newChallengeModal.value = false;
-}
-
-async function doAcceptChallenge(gameId) {
-  await acceptChallenge(gameId);
-}
-
-async function doDeclineChallenge(gameId) {
-  await declineChallenge(gameId);
-}
-
-async function doModifyChallenge(gameId, gameData) {
-  const { startAsWhite, timePerMove, wagerAmount } = gameData;
-  await modifyChallenge(gameId, startAsWhite, timePerMove, wagerAmount);
-}
-
-if (wallet.connected && !lobby.initialized) {
-  initPlayerLobby();
-}
-
-// Re-register whenever the agent set changes; immediate covers the wallet-only
-// case before agents finish loading, and picks up register/unregister mid-session.
-watch(() => _.map(lobby.agents, 'address').join(','), () => {
-  destroyListeners();
-  createListeners();
-}, { immediate: true });
-
-onUnmounted(() => {
-  destroyListeners();
-});
 </script>
 
 <template lang='pug'>
 section
-  form(id='lookup-player', @submit.prevent)
-    input(
-      type='text',
-      v-model='searchText',
-      placeholder='ETH Address/ENS Domain'
-    )
-    button(ref='submit', @click='newChallenge') Lookup
-    button(type='button', @click='showRegisterAgent') Register Agent
+  div(class='my-4')
+    div(class='pb-2 border-b') Open Games
+    div(v-if='lounge.tables.length' class='my-2 flex')
+      div(v-for='table in lounge.tablesData' :key='table.id')
+        ChallengeCard(
+          v-bind='table'
+          :isCurrentMove='wallet.address !== creatorOf(table)'
+          :opponent='creatorOf(table)'
+          :isWhitePlayer='creatorOf(table) == table.whitePlayer ? isOwnTable : !isOwnTable'
+          @click='() => showJoinTable(table)'
+        )
+    div(v-else class='my-2 text-sm text-gray-500 italic') No open tables yet.
 
-  div(id='player-lobby')
-    div(class='mb-4 mt-2')
-      div My Agents
-      div(class='my-2 flex')
-        div(v-for='agent in lobby.agents' :key='agent.address')
-          AgentCard(v-bind='agent' @click='() => showEditAgent(agent)')
-
-    div(class='my-4')
-      div Pending Challenges
-      div(class='my-2 flex')
-        div(v-for='challenge in lobby.challenges')
-          ChallengeCard(
-            v-bind='challenge'
-            @click='() => showPendingChallenge(challenge.id)'
-          )
-
-    div(class='my-4')
-      div Active Games
-      div(class='my-2 flex')
-        div(v-for='game in lobby.games')
-          ActiveGameCard(
-            v-bind='game'
-            @click='() => navigateTo("/game/"+game.id)'
-          )
-
-    div(class='my-4') Game History
-    div(class='my-2 flex')
-      div(v-for='game in lobby.history')
-        GameOverCard(
-          v-bind='game'
+  div(class='my-4')
+    div(class='pb-2 border-b') Active Games
+    div(v-if='lounge.games.length' class='my-2 flex')
+      div(v-for='game in lounge.gamesData' :key='game.id')
+        ActiveGameCard(
+          v-bind='{ ...game, opponent: game.currentMove, isCurrentMove: true }'
+          :isWhitePlayer='game.currentMove == game.whitePlayer'
           @click='() => navigateTo("/game/"+game.id)'
         )
+    div(v-else class='my-2 text-sm text-gray-500 italic') No active games to show
 
   client-only
     Modal(
-      v-if='editAgentModal'
-      title='Agent Profile'
-      @close='() => editAgentModal = false'
-    )
-      AgentProfileForm(
-        v-bind='editAgent'
-        :loading='txPending'
-        @update='({ nickname, avatar }) => updateAgent(editAgent.address, nickname, avatar)'
-        @suspend='doSuspendAgent'
-        @unregister='doUnregisterAgent'
-      )
-
-    Modal(
-      v-if='registerAgentModal'
-      title='Register Agent'
-      @close='() => registerAgentModal = false'
-    )
-      AgentProfileForm(
-        id='register-agent'
-        :isEditing='true'
-        :loading='txPending'
-        :owner='wallet.address'
-        :address='searchText'
-        @register='doRegisterAgent'
-        @cancel='() => registerAgentModal = false'
-      )
-
-    Modal(
-      v-if='newChallengeModal'
-      title='New Challenge'
-      @close='() => newChallengeModal = false'
+      v-if='joinTableModal'
+      title='Join Table'
+      @close='() => joinTableModal = false'
     )
       ChallengeForm(
-        id='new-challenge'
-        :isEditing='true'
+        ref='joinTableRef'
+        id='join-table'
+        :isEditing='joinTableEditing'
         :loading='txPending'
-        :player='wallet.address'
+        :player='isOwnTable ? creatorOf(openTable) : wallet.address'
+        :opponent='isOwnTable ? "" : creatorOf(openTable)'
         :agents='lobby.agents'
-        :opponent='lookupAddress'
-        :opponent-is-agent='lookupIsAgent'
-        @submit='doSendChallenge'
-        @cancel='() => newChallengeModal = false'
+        :timePerMove='openTable.timePerMove'
+        :wagerAmount='openTable.wagerAmount'
+        :isWhitePlayer='isOwnTable ? (openTable.whitePlayer !== constants.AddressZero) : (openTable.whitePlayer === constants.AddressZero)'
+        @submit='doModifyTable'
       )
-
-    Modal(
-      title='Pending Challenge'
-      v-if='pendingChallengeModal'
-      @close='hidePendingChallenge'
-    )
-      ChallengeForm(
-        id='pending-challenge'
-        :isEditing='false'
-        :loading='txPending'
-        v-bind='pendingChallenge'
-        @accept='() => doAcceptChallenge(pendingChallenge.id).then(hidePendingChallenge)'
-        @decline='() => doDeclineChallenge(pendingChallenge.id).then(hidePendingChallenge)'
-        @submit='data => doModifyChallenge(pendingChallenge.id, data)'
-      )
+      div(id='form-controls')
+        template(v-if='!isOwnTable')
+          button(
+            type='button'
+            :disabled='txPending || !wallet.connected'
+            @click='doJoinTable({ sender: wallet.address, startAsWhite: openTable.whitePlayer === constants.AddressZero })'
+          ) Join
+          button(type='button' @click='joinTableModal = false') Cancel
+        template(v-else-if='joinTableEditing')
+          button(type='button' :disabled='txPending' @click='joinTableRef.submit()') Send
+          button(type='button' :disabled='txPending' @click='() => joinTableEditing = false') Cancel
+        template(v-else)
+          button(type='button' :disabled='txPending' @click='() => joinTableEditing = true') Modify
+          button(type='button' :disabled='txPending' @click='doRevokeTable') Revoke
 </template>
 
 <style lang='sass'>
-#player-lobby
+section
   @apply mx-1 my-2 text-lg
 </style>

@@ -28,8 +28,7 @@ section
         class='h-12'
         src='~assets/pieces/merida/bN.svg'
       )
-    div(class='font-bold')
-      div(v-if='isInReview') Under Review
-      div(v-else) {{ displayTPM }}
     div {{ truncAddress(opponent) }}
+    div(v-if='isInReview') Under Review
+    div(v-else) {{ displayTPM }}
 </template>

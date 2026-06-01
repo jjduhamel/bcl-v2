@@ -194,8 +194,8 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
 
   function createChallenge(
     uint gameId,
-    address sender,
-    address receiver,
+    address player,
+    address opponent,
     bool startAsWhite,
     uint timePerMove,
     uint wagerAmount,
@@ -204,20 +204,23 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
     isLobby
   returns (uint) {
     if (timePerMove < 60) revert InvalidTimePerMove();
-    address white = startAsWhite ? sender : receiver;
-    address black = startAsWhite ? receiver : sender;
+
+    address white = startAsWhite ? player : opponent;
+    address black = startAsWhite ? opponent : player;
+
     __games[gameId] = GameData(
       true,
       GameState.Pending,
       GameOutcome.Undecided,
       white,
       black,
-      receiver,
+      opponent,
       timePerMove,
       0,
       wagerAmount,
       wagerToken
     );
+
     return gameId;
   }
 
@@ -231,7 +234,7 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
   // TODO support changing wagerToken (requires refunding existing escrow and re-depositing)
   function modifyChallenge(
     uint gameId,
-    address sender,
+    address player,
     bool startAsWhite,
     uint timePerMove,
     uint wagerAmount
@@ -239,26 +242,42 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
     isLobby
     isChallenge(gameId)
   {
-    if (!_isPlayer(sender, gameId)) revert PlayerOnly();
     if (timePerMove < 60) revert InvalidTimePerMove();
     GameData storage gameData = __games[gameId];
-    address receiver = (sender == gameData.whitePlayer) ? gameData.blackPlayer
-                                                        : gameData.whitePlayer;
-    if (startAsWhite && sender == gameData.blackPlayer
-    || !startAsWhite && sender == gameData.whitePlayer) {
-      address white = startAsWhite ? sender : receiver;
-      address black = startAsWhite ? receiver : sender;
-      gameData.whitePlayer = payable(white);
-      gameData.blackPlayer = payable(black);
+
+    address opponent;
+    if (gameData.whitePlayer == address(0)) {
+      opponent = gameData.blackPlayer;
+    } else if (gameData.blackPlayer == address(0)) {
+      opponent = gameData.whitePlayer;
+    } else {
+      if (!_isPlayer(player, gameId)) revert PlayerOnly();
+      opponent = (gameData.whitePlayer == player) ? gameData.blackPlayer
+                                                  : gameData.whitePlayer;
     }
+
+    if (startAsWhite) {
+      if (player != gameData.whitePlayer) {
+        gameData.whitePlayer = player;
+        gameData.blackPlayer = opponent;
+      }
+    } else {
+      if (player != gameData.blackPlayer) {
+        gameData.whitePlayer = opponent;
+        gameData.blackPlayer = player;
+      }
+    }
+
     if (timePerMove != gameData.timePerMove) {
       gameData.timePerMove = timePerMove;
     }
+
     if (wagerAmount != gameData.wagerAmount) {
       gameData.wagerAmount = wagerAmount;
     }
+
     // Bump current move to the receiver so they can accept the modified challenge
-    gameData.currentMove = receiver;
+    gameData.currentMove = opponent;
   }
 
   /*
@@ -279,11 +298,13 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
 
   function _applyMove(uint gameId, string memory uci) private returns (GameOutcome) {
     (uint8 from, uint8 to, Piece promotion) = UCI.parse(uci);
-    Color c = isWhitePlayer(msg.sender, gameId) ? Color.White : Color.Black;
-    Piece captured = __bitboards[gameId].move(c, from, to, promotion);
+    Color color = isWhitePlayer(msg.sender, gameId) ? Color.White : Color.Black;
+    Piece captured = __bitboards[gameId].move(color, from, to, promotion);
+
     if (captured == Piece.King) {
-      return c == Color.White ? GameOutcome.WhiteWon : GameOutcome.BlackWon;
+      return color == Color.White ? GameOutcome.WhiteWon : GameOutcome.BlackWon;
     }
+
     return GameOutcome.Undecided;
   }
 

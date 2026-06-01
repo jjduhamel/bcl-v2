@@ -71,25 +71,25 @@ abstract contract LobbyTest is Test, ILobby, IChessEngine {
   function totalWagers(address player) internal returns (uint) {
     address i = me.who();
     changePrank(player);
-    WagerStats memory wagers = lobby.wagerStats(player);
+    Escrow.EscrowStats memory stats = lobby.wagerStats(player, address(0));
     changePrank(i);
-    return wagers.total;
+    return stats.wagers;
   }
 
   function totalWinnings(address player) internal returns (uint) {
     address i = me.who();
     changePrank(player);
-    WagerStats memory wagers = lobby.wagerStats(player);
+    Escrow.EscrowStats memory stats = lobby.wagerStats(player, address(0));
     changePrank(i);
-    return wagers.won;
+    return stats.earnings;
   }
 
   function totalLosses(address player) internal returns (uint) {
     address i = me.who();
     changePrank(player);
-    WagerStats memory wagers = lobby.wagerStats(player);
+    Escrow.EscrowStats memory stats = lobby.wagerStats(player, address(0));
     changePrank(i);
-    return wagers.lost;
+    return stats.losses;
   }
 }
 
@@ -211,6 +211,23 @@ contract PlatformFeeTest is LobbyTest {
     changePrank(p1);
     vm.expectRevert(AdminOnly.selector);
     lobby.setPlatformFee(5);
+  }
+}
+
+contract GasFeeTest is LobbyTest {
+  function testInitialGasFeeIsTenPercent() public {
+    assertEq(lobby.gasFeePerc(), 10);
+  }
+
+  function testAdminCanSetGasFee() public {
+    lobby.setGasFee(15);
+    assertEq(lobby.gasFeePerc(), 15);
+  }
+
+  function testNonAdminCannotSetGasFee() public {
+    changePrank(p1);
+    vm.expectRevert(AdminOnly.selector);
+    lobby.setGasFee(15);
   }
 }
 

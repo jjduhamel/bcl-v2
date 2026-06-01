@@ -34,7 +34,8 @@ contract AgentGaslessTest is LobbyTest {
 
     (a1, a1Pk) = makeAddrAndKey('agent'); // holds 0 ETH
     changePrank(p1);
-    lobby.registerAgent(a1, 'bot', '', '', '', '');
+    // S1: owner funds the in-Lobby gas pot at registerAgent; postOp will debit this.
+    lobby.registerAgent{value: 1 ether}(a1, 'bot', '', '', '', '');
     gid = lobby.challenge(a1, p2, true, timePerMove, 0, address(0));
     changePrank(p2);
     lobby.acceptChallenge(gid);
@@ -76,7 +77,11 @@ contract AgentGaslessTest is LobbyTest {
   }
 
   function testGaslessMove() public {
-    uint256 depositBefore = ep.balanceOf(address(lobby));
+    changePrank(arbiter);
+    uint depositBefore = ep.balanceOf(address(lobby));
+    uint availBefore = lobby.checkPlayerEarnings(p1, address(0));
+    uint potBefore = lobby.platformBalance(address(0));
+
     changePrank(relayer);
     ep.handleOps(_signedOp(address(engine), abi.encodeCall(ChessEngine.move, (gid, 'e2e4'))), payable(relayer));
 
@@ -85,17 +90,40 @@ contract AgentGaslessTest is LobbyTest {
     assertEq(moves[0], 'e2e4');
     assertEq(a1.balance, 0);
     assertLt(ep.balanceOf(address(lobby)), depositBefore);
+
+    // S1: owner pays exactly `actualGasCost + gasFee(actualGasCost)`; platform pot grows by the same.
+    // We recover the cost from escrowStats(...).gas (chargeGas writes this) — the UserOperationEvent's
+    // actualGasCost includes postOp's own gas and so over-counts what chargeGas actually billed.
+    changePrank(arbiter);
+    uint actualGasCost = lobby.escrowStats(p1, address(0)).gas;
+    uint expectedCharge = actualGasCost + lobby.gasFee(actualGasCost);
+    assertEq(availBefore - lobby.checkPlayerEarnings(p1, address(0)), expectedCharge);
+    assertEq(lobby.platformBalance(address(0)) - potBefore, expectedCharge);
   }
 
-  // Phase 1: the platform deposit pays; the owner is not charged.
-  function testOwnerIsNotChargedForSponsoredMove() public {
-    uint256 ownerBalanceBefore = p1.balance;
+  // S1: the owner's in-Lobby gas pot is debited; the owner's wallet (external balance) is untouched.
+  function testOwnerIsChargedForSponsoredMove() public {
+    changePrank(arbiter);
+    uint walletBefore = p1.balance;
+    uint availBefore = lobby.checkPlayerEarnings(p1, address(0));
     PackedUserOperation[] memory ops = _signedOp(address(engine), abi.encodeCall(ChessEngine.move, (gid, 'e2e4')));
     changePrank(relayer);
     ep.handleOps(ops, payable(relayer));
-    assertEq(p1.balance, ownerBalanceBefore);
+    assertEq(p1.balance, walletBefore);
+
+    changePrank(arbiter);
+    assertLt(lobby.checkPlayerEarnings(p1, address(0)), availBefore);
+  }
+
+  function testGaslessMoveRejectedWhenUnfunded() public {
+    // Drain p1's gas pot so validate rejects the next op.
     changePrank(p1);
-    assertEq(lobby.earnings(address(0)), 0);
+    lobby.withdraw(address(0));
+
+    PackedUserOperation[] memory ops = _signedOp(address(engine), abi.encodeCall(ChessEngine.move, (gid, 'e2e4')));
+    changePrank(relayer);
+    vm.expectRevert();  // EntryPoint surfaces FailedOpWithRevert wrapping InsufficientGasBalance
+    ep.handleOps(ops, payable(relayer));
   }
 
   // Validation passes but the inner move reverts (bad UCI): the op is still sponsored.

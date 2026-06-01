@@ -25,16 +25,27 @@ abstract contract EscrowTest is EscrowWrapper, Test {
     token.approve(address(this), type(uint256).max);
     _setPlatformFee(1);
   }
+
+  // External wrappers — vm.expectRevert in modern forge matches the next external call frame,
+  // and the wrapper functions kick off with a delegatecall to the linked library. Tests using
+  // expectRevert call these instead so the whole wrapper body is one external call.
+  function ext_deposit(address player, uint amount, address tok) external payable {
+    deposit(player, amount, tok);
+  }
+  function ext_withdraw(address player, address tok) external {
+    withdraw(player, tok);
+  }
 }
 
 abstract contract EscrowETHTest is EscrowTest {
-  using Escrow for Escrow.EscrowData;
+  using Escrow for Escrow.EscrowAccount;
 
   // In real-life, deposit would be called by some payable function (i.e. acceptChallenge)
   function depositETH(address player, uint gameId, address token, uint amount)
   public payable {
     require(token == address(0), 'InvalidToken');
-    deposit(player, gameId, token, amount);
+    deposit(player, amount, token);
+    lock(player, gameId, amount, token);
   }
 
   constructor() {

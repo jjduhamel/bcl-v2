@@ -2,35 +2,6 @@
 pragma solidity >=0.4.22 <0.9.0;
 
 interface ILobby {
-  struct GameStats {
-    uint created;
-    uint received;
-    uint started;
-    uint finished;
-    uint won;
-    uint lost;
-    uint draws;
-  }
-
-  struct WagerStats {
-    uint total;
-    uint won;
-    uint lost;
-  }
-
-  struct DisputeStats {
-    uint created;
-    uint received;
-    uint won;
-    uint lost;
-  }
-
-  struct AccountStats {
-    GameStats games;
-    WagerStats wagers;
-    DisputeStats disputes;
-  }
-
   event TouchRecord(uint indexed gameId
                   , address indexed sender
                   , address indexed receiver);
@@ -43,6 +14,8 @@ interface ILobby {
   event ChallengeDeclined(uint indexed gameId
                         , address indexed sender
                         , address indexed receiver);
+  event TableClosed(uint indexed gameId
+                  , address indexed creator);
   event GameFinished(uint indexed gameId
                    , address indexed sender
                    , address indexed receiver);
@@ -60,6 +33,8 @@ interface ILobby {
                    , address indexed agent);
   event AgentSuspended(address indexed owner
                      , address indexed agent);
+  event AgentResumed(address indexed owner
+                   , address indexed agent);
 
   error ChessEngineOnly();
   error GameEngineOnly();
@@ -70,6 +45,8 @@ interface ILobby {
   error AdminOnly();
   error Unregistered();
   error AlreadyRegistered();
+  error InvalidPlayer();
+  error NotAnOpenTable();
   error NotAgentOwner();
   error WagerExceedsAgentMax();
   error AgentInGame();

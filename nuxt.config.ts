@@ -1,12 +1,11 @@
-import path from 'path';
-import { NodeGlobalsPolyfillPlugin } from '@esbuild-plugins/node-globals-polyfill';
-import { NodeModulesPolyfillPlugin } from '@esbuild-plugins/node-modules-polyfill';
-import rollupNodePolyfill from 'rollup-plugin-polyfill-node';
+// https://nuxt.com/docs/api/configuration/nuxt-config
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-// https://v3.nuxtjs.org/api/configuration/nuxt.config
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 export default defineNuxtConfig({
   srcDir: 'client/',
-  target: 'static',
   ssr: false,
   css: [ '@/assets/styles/tailwind.css' ],
   app: {
@@ -15,34 +14,29 @@ export default defineNuxtConfig({
       link: [{ rel: 'icon', type: 'image/x-icon', href: '/favicon.ico?v1' }]
     }
   },
-  router: {
-    options: {
-      hashMode: 'true',
-    }
-  },
   modules: [
     [ '@pinia/nuxt',
       { autoImports: [ 'defineStore' ] }
     ],
     '@nuxtjs/tailwindcss',
-    '@vueuse/nuxt'
+    '@vueuse/nuxt',
+    //'@nuxt/content',
   ],
   runtimeConfig: {
     public: {
       amplitudeId: process.env.AMPLITUDE_API_KEY,
       bugsnagId: process.env.BUGSNAG_API_KEY,
       infuraId: process.env.INFURA_API_KEY,
+      walletconnectId: process.env.WALLETCONNECT_PROJECT_ID,
       // Dev flag: when true, the board lets the player choose pseudo-legal
       // moves (e.g. leaving their own king in check). Off by default; the
       // engine still accepts opponent illegal moves regardless.
       allowPseudoLegalMoves: process.env.ALLOW_PSEUDO_LEGAL === 'true',
-      lobbyAddress: {
-        local: process.env.LOBBY_PROXY_ADDR,
-        ethereum: process.env.HOMESTEAD_LOBBY_ADDR,
-        goerli: process.env.GOERLI_LOBBY_ADDR,
-        matic: process.env.MATIC_LOBBY_ADDR,
-        mumbai: process.env.MUMBAI_LOBBY_ADDR
-      }
+      // CREATE2 puts the Lobby proxy at the same address on every chain.
+      lobbyAddress: process.env.LOBBY_PROXY_ADDR,
+      // getProvider() with no chainId defaults to mainnet where the Lobby isn't
+      // deployed; spectator (no-wallet) reads target this chain instead.
+      spectatorChainId: process.env.SPECTATOR_CHAIN_ID || '31337'
     }
   },
   hooks: {
@@ -71,40 +65,13 @@ export default defineNuxtConfig({
     ],
     build: {
       sourcemap: true,
-      // https://github.com/blocknative/web3-onboard/issues/762#issuecomment-997246672
-      // https://stackoverflow.com/questions/71645151/cannnot-initialize-coinbasesdk-in-nuxt3-project
-      plugins: [
-        ...(process.env.NODE_ENV == 'development' ? [
-          rollupNodePolyfill({
-            include: [
-              'node_modules/**/*.js',
-              new RegExp('node_modules/.vite/.*js')
-            ]
-          })
-        ] : [])
-      ],
-      rollupOptions: {
-        plugins: [ rollupNodePolyfill() ]
-      },
-      commonjsOptions: {
-        transformMixedEsModules: true
-      }
     },
-    // https://github.com/nuxt/framework/discussions/4393
+    // Workaround for Nuxt 3.20+ regression with `ssr: false`: Vite's pre-transform
+    // import analysis fires before the dead-branch `if (false) import('#app-manifest')`
+    // gets tree-shaken, so we explicitly exclude these virtual ids from pre-bundling.
+    // See nuxt/nuxt#33606 — the fix in PR #34565 landed in 4.x only.
     optimizeDeps: {
-      esbuildOptions: {
-        define: {
-          global: 'globalThis',
-        },
-        plugins: [
-          NodeGlobalsPolyfillPlugin({
-            process: true,
-            buffer: true
-          }),
-          // Seems to be breaking rollupNodePolyfill
-          //NodeModulesPolyfillPlugin()
-        ],
-      },
+      exclude: ['#app-manifest', '#build/route-rules.mjs'],
     },
   }
 })

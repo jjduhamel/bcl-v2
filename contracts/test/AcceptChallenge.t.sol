@@ -74,7 +74,7 @@ contract AcceptChallengeTest is ChallengeTest {
     testEarnings(p1, wager/2)
   {
     lobby.modifyChallenge{ value: wager/2 }
-                          (gameId, true, timePerMove, wager/2);
+                          (gameId, p2, true, timePerMove, wager/2);
     changePrank(p1);
     // We need to do this here because otherwise modifyChallenge throws a touch event 
     vm.expectEmit(true, true, true, true, address(engine));
@@ -97,6 +97,6 @@ contract AcceptChallengeTest is ChallengeTest {
   function testModifyFailsAfterAccept() public {
     lobby.acceptChallenge{ value: wager }(gameId);
     vm.expectRevert(InvalidContractState.selector);
-    lobby.modifyChallenge(gameId, true, timePerMove, wager);
+    lobby.modifyChallenge(gameId, p2, true, timePerMove, wager);
   }
 }

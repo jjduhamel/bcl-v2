@@ -1,3 +1,3 @@
 <script setup>
-await navigateTo('/lounge');
+await navigateTo('/lobby');
 </script>

@@ -5,8 +5,10 @@ import './Escrow.t.sol';
 
 contract EscrowERC20FeeTest is EscrowTest {
   function setUp() public {
-    deposit(p1, gameId, address(token), wager);
-    deposit(p2, gameId, address(token), wager);
+    deposit(p1, wager, address(token));
+    deposit(p2, wager, address(token));
+    lock(p1, gameId, wager, address(token));
+    lock(p2, gameId, wager, address(token));
   }
 
   function testChargeFeeDeductsFromEscrow() public {
@@ -17,19 +19,19 @@ contract EscrowERC20FeeTest is EscrowTest {
 
   function testChargeFeeAddsToPlatformEarnings() public {
     chargeFee(p1, gameId, address(token));
-    assertEq(releasedFunds(address(0), address(token)), fee);
+    assertEq(availableBalance(address(0), address(token)), fee);
   }
 
   function testChargeFeeBothPlayers() public {
     chargeFee(p1, gameId, address(token));
     chargeFee(p2, gameId, address(token));
-    assertEq(releasedFunds(address(0), address(token)), 2 * fee);
+    assertEq(availableBalance(address(0), address(token)), 2 * fee);
   }
 
   function testChargeFeeZeroWagerIsNoop() public {
     uint noWagerGame = gameId + 99;
     chargeFee(p1, noWagerGame, address(token));
-    assertEq(releasedFunds(address(0), address(token)), 0);
+    assertEq(availableBalance(address(0), address(token)), 0);
     assertEq(currentDeposit(p1, noWagerGame).amount, 0);
   }
 }
@@ -48,19 +50,19 @@ contract EscrowETHFeeTest is EscrowETHTest {
 
   function testChargeFeeAddsToPlatformEarnings() public {
     chargeFee(p1, gameId, address(0));
-    assertEq(releasedFunds(address(0), address(0)), fee);
+    assertEq(availableBalance(address(0), address(0)), fee);
   }
 
   function testChargeFeeBothPlayers() public {
     chargeFee(p1, gameId, address(0));
     chargeFee(p2, gameId, address(0));
-    assertEq(releasedFunds(address(0), address(0)), 2 * fee);
+    assertEq(availableBalance(address(0), address(0)), 2 * fee);
   }
 
   function testChargeFeeZeroWagerIsNoop() public {
     uint noWagerGame = gameId + 99;
     chargeFee(p1, noWagerGame, address(0));
-    assertEq(releasedFunds(address(0), address(0)), 0);
+    assertEq(availableBalance(address(0), address(0)), 0);
     assertEq(currentDeposit(p1, noWagerGame).amount, 0);
   }
 }

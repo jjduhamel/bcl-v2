@@ -39,7 +39,7 @@ watch(() => wallet.connected, (isCon, wasCon) => {
       showCBModal.value = false;
       cbIsConnecting.value = false;
     }
-    navigateTo('/lounge');
+    navigateTo('/lobby');
   }
 });
 </script>

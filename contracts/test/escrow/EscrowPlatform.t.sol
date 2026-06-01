@@ -5,14 +5,16 @@ import './Escrow.t.sol';
 
 contract EscrowERC20PlatformTest is EscrowTest {
   function setUp() public {
-    deposit(p1, gameId, address(token), wager);
-    deposit(p2, gameId, address(token), wager);
+    deposit(p1, wager, address(token));
+    deposit(p2, wager, address(token));
+    lock(p1, gameId, wager, address(token));
+    lock(p2, gameId, wager, address(token));
     chargeFee(p1, gameId, address(token));
     chargeFee(p2, gameId, address(token));
   }
 
   function testPlatformEarningsAccumulate() public {
-    assertEq(releasedFunds(address(0), address(token)), 2 * fee);
+    assertEq(availableBalance(address(0), address(token)), 2 * fee);
   }
 
   function testWithdrawPlatformTransfersTokens() public {
@@ -24,7 +26,7 @@ contract EscrowERC20PlatformTest is EscrowTest {
   function testWithdrawPlatformClearsEarnings() public {
     address recipient = makeAddr('recipient');
     releasePlatformFunds(address(token), recipient);
-    assertEq(releasedFunds(address(0), address(token)), 0);
+    assertEq(availableBalance(address(0), address(token)), 0);
   }
 
   function testWithdrawPlatformZeroBalanceIsNoop() public {
@@ -44,7 +46,7 @@ contract EscrowETHPlatformTest is EscrowETHTest {
   }
 
   function testPlatformEarningsAccumulate() public {
-    assertEq(releasedFunds(address(0), address(0)), 2 * fee);
+    assertEq(availableBalance(address(0), address(0)), 2 * fee);
   }
 
   function testWithdrawPlatformTransfersETH() public {
@@ -57,7 +59,7 @@ contract EscrowETHPlatformTest is EscrowETHTest {
   function testWithdrawPlatformClearsEarnings() public {
     address recipient = makeAddr('recipient');
     releasePlatformFunds(address(0), recipient);
-    assertEq(releasedFunds(address(0), address(0)), 0);
+    assertEq(availableBalance(address(0), address(0)), 0);
   }
 
   function testWithdrawPlatformZeroBalanceIsNoop() public {

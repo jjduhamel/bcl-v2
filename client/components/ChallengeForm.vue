@@ -4,62 +4,24 @@ import humanizeDuration from 'humanize-duration';
 import { formatEther, parseEther } from 'ethers/lib/utils';
 import userIcon from '~/assets/icons/bytesize/user.svg';
 import robotIcon from '~/assets/icons/robot.svg';
-import editIcon from '~/assets/icons/bytesize/edit.svg';
 const { truncAddress } = useEthUtils();
 
-const emit = defineEmits([ 'submit', 'cancel', 'accept', 'decline' ]);
+const emit = defineEmits([ 'submit' ]);
 
 const props = defineProps({
-  loading: {
-    type: Boolean,
-    default: false
-  },
-  isEditing: {
-    type: Boolean,
-    default: false
-  },
-  player: {
-    type: String,
-    default: null
-  },
-  agents: {
-    type: Array,
-    default: () => []
-  },
-  opponent: {
-    type: String,
-    required: true
-  },
-  opponentIsAgent: {
-    type: Boolean,
-    default: false
-  },
-  playerIsAgent: {
-    type: Boolean,
-    default: false
-  },
-  isCurrentMove: {
-    type: Boolean,
-    default: false
-  },
-  isWhitePlayer: {
-    type: Boolean,
-    default: true
-  },
-  timePerMove: {
-    type: [ Number, String ],
-    default: 900
-  },
-  wagerAmount: {
-    type: [ Number, String ],
-    default: 0
-  }
+  loading:         { type: Boolean, default: false },
+  isEditing:       { type: Boolean, default: false },
+  player:          { type: String,  default: null },
+  agents:          { type: Array,   default: () => [] },
+  opponent:        { type: String,  default: '' },
+  isWhitePlayer:   { type: Boolean, default: true },
+  playerIsAgent:   { type: Boolean, default: false },
+  opponentIsAgent: { type: Boolean, default: false },
+  timePerMove:     { type: [ Number, String ], default: 900 },
+  wagerAmount:     { type: [ Number, String ], default: 0 }
 });
 
 const { opponent } = toRefs(props);
-
-// Seeded from the prop so Modify can flip a fixed challenge into an editable one.
-const editing = ref(props.isEditing);
 
 const senderOptions = computed(() => [
   { address: props.player, nickname: 'Myself' },
@@ -131,17 +93,21 @@ const submit = () => emit('submit', _.mapValues({ sender
                                                 , wagerToken }
                                               , unref));
 
-// Opened editing (new challenge) has no view to return to, so cancel closes;
-// reverting from Modify discards edits and restores the challenge's real state.
-const cancel = () => {
-  if (props.isEditing) return emit('cancel');
-  sender.value = props.player;
-  startAsWhite.value = props.isWhitePlayer;
-  timePerMove.value = props.timePerMove;
-  wagerAmount.value = props.wagerAmount;
-  wagerToken.value = 'ETH';
-  editing.value = false;
-};
+// When the parent flips isEditing back off (Cancel/revert), discard the user's
+// in-progress edits by reseating from the props.
+watch(() => props.isEditing, (now, prev) => {
+  if (prev && !now) {
+    sender.value = props.player;
+    startAsWhite.value = props.isWhitePlayer;
+    timePerMove.value = props.timePerMove;
+    wagerAmount.value = props.wagerAmount;
+    wagerToken.value = 'ETH';
+  }
+});
+
+// Action buttons live in the parent; expose `submit` so the parent's Send
+// button can trigger the emit without owning all the field state.
+defineExpose({ submit });
 </script>
 
 <template lang='pug'>
@@ -157,21 +123,12 @@ form(@submit.prevent='submit')
     div(class='flex-1 flex flex-col justify-center items-center gap-2')
       img(class='h-12' src='~assets/pieces/merida/bN.svg' v-if='startAsWhite')
       img(class='h-12' src='~assets/pieces/merida/wN.svg' v-else)
-      div(class='flex items-start gap-2')
+      div(v-if='opponent' class='flex items-start gap-2')
         img(class='h-4' :src='opponentIsAgent ? robotIcon : userIcon')
         div {{ truncAddress(opponent, 4) }}
-  div(class='flex justify-between')
-    div(class='text-xl font-bold') Match Summary:
-    button(
-      type='button'
-      v-if='!editing'
-      class='m-0 p-0 border-none group'
-      title='Modify'
-      @click='() => editing = true'
-      :disabled='loading'
-    )
-      img(class='h-4 opacity-50 group-hover:opacity-100' :src='editIcon')
-  div(v-if='editing && agents.length' class='my-4 flex items-center')
+      div(v-else class='text-sm text-gray-400 italic') Open
+  div(class='text-xl font-bold') Match Summary:
+  div(v-if='isEditing && agents.length' class='my-4 flex items-center')
     div(class='basis-2/5') I'm playing as:
     div(class='basis-3/5 flex justify-start')
       div(class='flex-1 relative flex')
@@ -184,7 +141,7 @@ form(@submit.prevent='submit')
   div(id='choose-color' class='my-4 flex items-center')
     div(class='basis-2/5') I'll start as:
     div(class='basis-3/5 flex justify-start gap-1')
-      template(v-if='editing')
+      template(v-if='isEditing')
         button(
           type='button'
           class='contents border-none'
@@ -216,7 +173,7 @@ form(@submit.prevent='submit')
   div(class='my-4 flex items-center')
     div(class='basis-2/5') Time per move:
     div(class='basis-3/5 flex justify-start')
-      template(v-if='editing')
+      template(v-if='isEditing')
         input(class='flex-1 w-16' v-model='displayTPM')
         select(class='w-20' v-model='timeUnits')
           option(value='minutes') Mins
@@ -229,7 +186,7 @@ form(@submit.prevent='submit')
   div(class='my-4 flex items-center')
     div(class='basis-2/5') Let's wager:
     div(class='basis-3/5 flex justify-start')
-      template(v-if='editing')
+      template(v-if='isEditing')
         input(class='flex-1 w-16' v-model='displayWager')
         select(class='w-20' v-model='wagerToken')
           option(value='ETH') ETH
@@ -239,34 +196,4 @@ form(@submit.prevent='submit')
       div(class='flex-1 flex gap-2' v-else)
         div(class='flex-1 text-end') {{ displayWager }}
         div(class='flex-1 text-center') {{ wagerToken }}
-  div(id='form-controls')
-    template(v-if='editing')
-      button(
-        type='submit'
-        :disabled='loading'
-      ) Send
-      button(
-        type='button'
-        @click='cancel'
-        :disabled='loading'
-      ) Cancel
-    template(v-else)
-      button(
-        v-if='isCurrentMove'
-        type='button'
-        @click='emit("accept")'
-        :disabled='loading'
-      ) Accept
-      button(
-        v-else
-        type='button'
-        title='Modify'
-        @click='() => editing = true'
-        :disabled='loading'
-      ) Modify
-      button(
-        type='button'
-        @click='emit("decline")'
-        :disabled='loading'
-      ) Decline
 </template>

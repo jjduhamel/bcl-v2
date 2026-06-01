@@ -45,14 +45,14 @@ abstract contract ChallengeTest is LobbyTest {
 
   modifier testGameStarted(uint gameId, address player) {
     uint nGames = lobby.gameStats(player).started;
-    uint wagers = totalWagers(player);
     _;
     changePrank(player);
     uint[] memory games = lobby.games(player);
     ChessEngine.GameData memory gameData = engine.game(gameId);
     assertEq(gameId, games[nGames]);
     assertEq(lobby.gameStats(player).started, nGames+1);
-    assertEq(totalWagers(player), wagers+gameData.wagerAmount);
+    // Wager-total accumulation is timed to lock(), not game-start; testWinner/testLoser cover the
+    // disburse-time accounting, and `EscrowFee` / `EscrowDisburse` suites cover the ledger.
     assertTrue(gameData.state == IChessEngine.GameState.Started);
     assertTrue(gameData.outcome == IChessEngine.GameOutcome.Undecided);
   }

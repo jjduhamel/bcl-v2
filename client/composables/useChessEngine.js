@@ -386,7 +386,7 @@ export default async function(gameId) {
       console.log('Disputed game', gameId);
       playAudioClip('nes/GenericNotify');
       const { GameDisputed } = lobbyContract.filters;
-      gameContract.once(GameDisputed(gameId), (id, outcome, winner)  => {
+      lobbyContract.once(GameDisputed(gameId), (id, outcome, winner)  => {
         console.log('Dispute received');
         $amplitude.track('GameDisputed', { gameId });
         resolve(id, outcome, winner);
