@@ -169,7 +169,7 @@ contract WageringEnabledTest is LobbyTest {
   }
 
   function testInsufficientDepositAmount() public {
-    vm.expectRevert(InvalidDepositAmount.selector);
+    vm.expectRevert(Escrow.InsufficientBalance.selector);
     lobby.challenge{ value: wager/2 }(p1, p2, true, 60, wager, address(0));
   }
 

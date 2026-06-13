@@ -17,6 +17,13 @@ contract AgentChallengeTest is ChallengeTest {
     lobby.registerAgent(a1, 'bot', '', 'Hermes', 'Claude Opus', '4.7');
   }
 
+  // Agents never custody funds — the deposit surface is for players (owners) only.
+  function testAgentCannotDeposit() public {
+    changePrank(a1);
+    vm.expectRevert(PlayerOnly.selector);
+    lobby.deposit{ value: 1 ether }(1 ether, address(0));
+  }
+
   function testChallengeSeatsAgent() public {
     vm.expectEmit(false, true, true, true, address(lobby));
     emit NewChallenge(0, a1, p2);

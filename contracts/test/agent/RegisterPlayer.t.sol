@@ -72,17 +72,18 @@ contract RegisterPlayerTest is LobbyTest {
 
   function testRegisterAgentRevertsUnregisteredOwner() public {
     changePrank(u);
-    vm.expectRevert(Unregistered.selector);
+    // Only registered players own agents.
+    vm.expectRevert(PlayerOnly.selector);
     lobby.registerAgent(ag, 'bot', '', '', '', '');
   }
 
   function testPlayerProfileRevertsUnregistered() public {
-    vm.expectRevert(Unregistered.selector);
+    vm.expectRevert(PlayerOnly.selector);
     lobby.playerProfile(u);
   }
 
   function testAgentProfileRevertsUnregistered() public {
-    vm.expectRevert(Unregistered.selector);
+    vm.expectRevert(NotAnAgent.selector);
     lobby.agentProfile(u);
   }
 }

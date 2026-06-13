@@ -80,7 +80,8 @@ contract AgentGameTest is ChallengeTest {
     engine.resign(gid);
 
     changePrank(a1);
-    vm.expectRevert(Escrow.InsufficientBalance.selector);
+    // An agent isn't a player, so withdraw rejects it outright.
+    vm.expectRevert(PlayerOnly.selector);
     lobby.withdraw(address(0));
   }
 

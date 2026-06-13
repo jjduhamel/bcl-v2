@@ -40,7 +40,6 @@ interface ILobby {
   error GameEngineOnly();
   error ChallengingDisabled();
   error WageringDisabled();
-  error InvalidDepositAmount();
   error UserBanned();
   error AdminOnly();
   error Unregistered();

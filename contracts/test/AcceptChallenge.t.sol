@@ -37,18 +37,28 @@ contract AcceptChallengeTest is ChallengeTest {
   }
 
   function testAcceptFailsWithoutDeposit() public {
-    vm.expectRevert(Escrow.InvalidDeposit.selector);
+    vm.expectRevert(Escrow.InsufficientBalance.selector);
     lobby.acceptChallenge(gameId);
   }
 
   function testAcceptFailsWithLowDeposit() public {
-    vm.expectRevert(Escrow.InvalidDeposit.selector);
+    vm.expectRevert(Escrow.InsufficientBalance.selector);
     lobby.acceptChallenge{ value: wager-1 }(gameId);
   }
 
-  function testAcceptRevertsOnExcessDeposit() public {
-    vm.expectRevert(Escrow.InvalidDeposit.selector);
+  function testAcceptCreditsExcessDeposit() public
+    testGameStarted(gameId, p2)
+    testEarnings(p2, 1)
+  {
     lobby.acceptChallenge{ value: wager+1 }(gameId);
+  }
+
+  function testAcceptFundedFromAvailableBalance() public
+    testGameStarted(gameId, p2)
+    testEarnings(p2, 0)
+  {
+    lobby.deposit{ value: wager }(wager, address(0));
+    lobby.acceptChallenge(gameId);
   }
 
   function testAcceptFailsAsSender() public {

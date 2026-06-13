@@ -5,21 +5,19 @@ import './Escrow.t.sol';
 
 contract EscrowERC20WithdrawTest is EscrowTest {
   function setUp() public {
-    deposit(p1, wager, address(token));
-    deposit(p2, wager, address(token));
-    lock(p1, gameId, wager, address(token));
-    lock(p2, gameId, wager, address(token));
-    disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
+    _stake(p1, gameId, wager, address(token));
+    _stake(p2, gameId, wager, address(token));
+    _disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
   }
 
   function testTransfersTokensToPlayer() public {
     uint before = token.balanceOf(p1);
-    withdraw(p1, address(token));
+    _withdraw(p1, address(token));
     assertEq(token.balanceOf(p1), before + 2 * wager);
   }
 
   function testClearsEarnings() public {
-    withdraw(p1, address(token));
+    _withdraw(p1, address(token));
     assertEq(availableBalance(p1, address(token)), 0);
   }
 
@@ -31,19 +29,19 @@ contract EscrowERC20WithdrawTest is EscrowTest {
 
 contract EscrowETHWithdrawTest is EscrowETHTest {
   function setUp() public {
-    this.depositETH{value: wager}(p1, gameId, address(0), wager);
-    this.depositETH{value: wager}(p2, gameId, address(0), wager);
-    disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
+    _stake(p1, gameId, wager, address(0));
+    _stake(p2, gameId, wager, address(0));
+    _disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
   }
 
   function testTransfersETHToPlayer() public {
     uint before = p1.balance;
-    withdraw(p1, address(0));
+    _withdraw(p1, address(0));
     assertEq(p1.balance, before + 2 * wager);
   }
 
   function testClearsEarnings() public {
-    withdraw(p1, address(0));
+    _withdraw(p1, address(0));
     assertEq(availableBalance(p1, address(0)), 0);
   }
 
@@ -75,12 +73,11 @@ contract EscrowReentrancyTest is EscrowETHTest {
   function setUp() public {
     atk = new ReentrantWithdrawer(this);
     // Fund the attacker's __available slot with one wager's worth.
-    this.depositETH{value: wager}(address(atk), gameId, address(0), wager);
-    refund(address(atk), gameId);
+    _fund(address(atk), wager, address(0));
   }
 
   function testReentrantWithdrawCannotDoubleSpend() public {
-    withdraw(address(atk), address(0));
+    _withdraw(address(atk), address(0));
     assertEq(address(atk).balance, wager);
     assertEq(availableBalance(address(atk), address(0)), 0);
   }

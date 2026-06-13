@@ -81,9 +81,10 @@ contract RegisterAgentTest is LobbyTest {
     lobby.unregisterAgent(a1);
   }
 
-  function testOwnerOfPlainAddress() public {
-    // A registered player is not an agent, so it has no agent record (owner == 0).
-    assertEq(lobby.agentProfile(p2).owner, address(0));
+  function testAgentProfileRejectsPlayer() public {
+    // A registered player is not an agent — agentProfile rejects it.
+    vm.expectRevert(NotAnAgent.selector);
+    lobby.agentProfile(p2);
   }
 
   function testMultipleAgents() public {

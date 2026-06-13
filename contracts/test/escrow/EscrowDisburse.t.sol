@@ -7,32 +7,30 @@ import './MockERC20Token.sol';
 
 contract EscrowERC20DisburseTest is EscrowTest {
   function setUp() public {
-    deposit(p1, wager, address(token));
-    deposit(p2, wager, address(token));
-    lock(p1, gameId, wager, address(token));
-    lock(p2, gameId, wager, address(token));
+    _stake(p1, gameId, wager, address(token));
+    _stake(p2, gameId, wager, address(token));
   }
 
   function testWhiteWins() public {
-    disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
+    _disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
     assertEq(availableBalance(p1, address(token)), 2 * wager);
     assertEq(availableBalance(p2, address(token)), 0);
   }
 
   function testBlackWins() public {
-    disburse(p1, p2, gameId, IChessEngine.GameOutcome.BlackWon);
+    _disburse(p1, p2, gameId, IChessEngine.GameOutcome.BlackWon);
     assertEq(availableBalance(p1, address(token)), 0);
     assertEq(availableBalance(p2, address(token)), 2 * wager);
   }
 
   function testDraw() public {
-    disburse(p1, p2, gameId, IChessEngine.GameOutcome.Draw);
+    _disburse(p1, p2, gameId, IChessEngine.GameOutcome.Draw);
     assertEq(availableBalance(p1, address(token)), wager);
     assertEq(availableBalance(p2, address(token)), wager);
   }
 
   function testDisburseClearsEscrow() public {
-    disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
+    _disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
     assertEq(currentDeposit(p1, gameId).amount, 0);
     assertEq(currentDeposit(p2, gameId).amount, 0);
   }
@@ -40,30 +38,30 @@ contract EscrowERC20DisburseTest is EscrowTest {
 
 contract EscrowETHDisburseTest is EscrowETHTest {
   function setUp() public {
-    this.depositETH{value: wager}(p1, gameId, address(0), wager);
-    this.depositETH{value: wager}(p2, gameId, address(0), wager);
+    _stake(p1, gameId, wager, address(0));
+    _stake(p2, gameId, wager, address(0));
   }
 
   function testWhiteWins() public {
-    disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
+    _disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
     assertEq(availableBalance(p1, address(0)), 2 * wager);
     assertEq(availableBalance(p2, address(0)), 0);
   }
 
   function testBlackWins() public {
-    disburse(p1, p2, gameId, IChessEngine.GameOutcome.BlackWon);
+    _disburse(p1, p2, gameId, IChessEngine.GameOutcome.BlackWon);
     assertEq(availableBalance(p1, address(0)), 0);
     assertEq(availableBalance(p2, address(0)), 2 * wager);
   }
 
   function testDraw() public {
-    disburse(p1, p2, gameId, IChessEngine.GameOutcome.Draw);
+    _disburse(p1, p2, gameId, IChessEngine.GameOutcome.Draw);
     assertEq(availableBalance(p1, address(0)), wager);
     assertEq(availableBalance(p2, address(0)), wager);
   }
 
   function testDisburseClearsEscrow() public {
-    disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
+    _disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
     assertEq(currentDeposit(p1, gameId).amount, 0);
     assertEq(currentDeposit(p2, gameId).amount, 0);
   }
@@ -80,13 +78,12 @@ contract EscrowMixedTokenDisburseTest is EscrowETHTest {
   }
 
   function setUp() public {
-    this.depositETH{value: wager}(p1, gameId, address(0), wager);
-    deposit(p2, wager, address(token2));
-    lock(p2, gameId, wager, address(token2));
+    _stake(p1, gameId, wager, address(0));
+    _stake(p2, gameId, wager, address(token2));
   }
 
   function testWhiteWinsGetsBothTokens() public {
-    disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
+    _disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
     assertEq(availableBalance(p1, address(0)), wager);
     assertEq(availableBalance(p1, address(token2)), wager);
     assertEq(availableBalance(p2, address(0)), 0);
@@ -94,7 +91,7 @@ contract EscrowMixedTokenDisburseTest is EscrowETHTest {
   }
 
   function testBlackWinsGetsBothTokens() public {
-    disburse(p1, p2, gameId, IChessEngine.GameOutcome.BlackWon);
+    _disburse(p1, p2, gameId, IChessEngine.GameOutcome.BlackWon);
     assertEq(availableBalance(p2, address(0)), wager);
     assertEq(availableBalance(p2, address(token2)), wager);
     assertEq(availableBalance(p1, address(0)), 0);
@@ -102,7 +99,7 @@ contract EscrowMixedTokenDisburseTest is EscrowETHTest {
   }
 
   function testDrawEachKeepsOwnToken() public {
-    disburse(p1, p2, gameId, IChessEngine.GameOutcome.Draw);
+    _disburse(p1, p2, gameId, IChessEngine.GameOutcome.Draw);
     assertEq(availableBalance(p1, address(0)), wager);
     assertEq(availableBalance(p1, address(token2)), 0);
     assertEq(availableBalance(p2, address(token2)), wager);

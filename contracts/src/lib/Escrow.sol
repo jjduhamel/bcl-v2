@@ -18,8 +18,8 @@ library Escrow {
 
   error EscrowLocked();
   error AmountOverflow();
-  error InvalidToken();
   error InvalidDeposit();
+  error InvalidToken();
   error InsufficientBalance();
   error TransferFailed();
 
@@ -133,41 +133,41 @@ abstract contract EscrowWrapper {
   // Reserved slots — decrement when adding state above to preserve layout across upgrades.
   uint256[47] private __gap;
 
-  function currentDeposit(address player, uint gameId) internal view returns (TokenDeposit memory) {
-    return __escrow[player].account(gameId);
+  function currentDeposit(address account, uint gameId) internal view returns (TokenDeposit memory) {
+    return __escrow[account].account(gameId);
   }
 
   // TODO Phase 1 #(naming): rename to availableFunds; this is the withdrawable balance.
-  function availableBalance(address player, address token) internal view returns (uint) {
-    return __escrow[player].available(token);
+  function availableBalance(address account, address token) internal view returns (uint) {
+    return __escrow[account].available(token);
   }
 
-  function tokens(address player) internal view returns (address[] memory) {
-    return __escrow[player].tokens();
+  function tokens(address account) internal view returns (address[] memory) {
+    return __escrow[account].tokens();
   }
 
-  function escrowStats(address player, address token) public view
+  function escrowStats(address account, address token) public view
   returns (Escrow.EscrowStats memory) {
-    return __escrow[player].__gross[token];
+    return __escrow[account].__gross[token];
   }
 
   // TODO Phase 1 #7: shape decision pending — currently refund+withdraw, should be ledger-only.
-  function refund(address player, uint gameId) internal {
-    TokenDeposit memory d = __escrow[player].account(gameId);
-    if (d.amount > 0) refund(player, gameId, d.amount);
+  function _refund(address account, uint gameId) internal {
+    TokenDeposit memory d = __escrow[account].account(gameId);
+    if (d.amount > 0) _refund(account, gameId, d.amount);
   }
 
   // TODO Phase 1 #7: same; auto-withdraw shape pending.
-  function refund(address player, uint gameId, uint amount) internal {
-    TokenDeposit memory d = __escrow[player].account(gameId);
+  function _refund(address account, uint gameId, uint amount) internal {
+    TokenDeposit memory d = __escrow[account].account(gameId);
     if (amount > d.amount) revert Escrow.InsufficientBalance();
-    __escrow[player].release(gameId, amount);
+    __escrow[account].release(gameId, amount);
   }
 
-  function refundExcess(address player, uint gameId, uint expected) internal {
-    TokenDeposit memory d = __escrow[player].account(gameId);
+  function _refundExcess(address account, uint gameId, uint expected) internal {
+    TokenDeposit memory d = __escrow[account].account(gameId);
     if (d.amount > expected) {
-      refund(player, gameId, d.amount - expected);
+      _refund(account, gameId, d.amount - expected);
     }
   }
 
@@ -180,49 +180,72 @@ abstract contract EscrowWrapper {
     }
   }
 
-  function deposit(address player, uint amount, address token) internal {
+  function _deposit(address account, uint amount, address token) internal {
+    if (account != msg.sender) revert Escrow.InvalidDeposit();
+
     if (token == address(0)) {
       if (msg.value != amount) revert Escrow.InvalidDeposit();
     } else {
-      IERC20(token).safeTransferFrom(player, address(this), amount);
+      IERC20(token).safeTransferFrom(account, address(this), amount);
     }
-    __escrow[player].debit(amount, token);
-    __escrow[player].__gross[token].deposits += amount;
+    __escrow[account].debit(amount, token);
+    __escrow[account].__gross[token].deposits += amount;
     __escrow[address(0)].__gross[token].deposits += amount;
   }
 
-  function withdraw(address player, uint amount, address token) internal {
-    uint avail = __escrow[player].available(token);
+  function _withdraw(address account, uint amount, address token) internal {
+    uint avail = __escrow[account].available(token);
     if (amount > avail) revert Escrow.InsufficientBalance();
     // CEI: state updates before the external transfer so a reentrant receiver
     // can't observe stale balance and double-spend.
-    __escrow[player].credit(amount, token);
-    __escrow[player].__gross[token].withdrawals += amount;
+    __escrow[account].credit(amount, token);
+    __escrow[account].__gross[token].withdrawals += amount;
     __escrow[address(0)].__gross[token].withdrawals += amount;
-    _transfer(player, amount, token);
+    _transfer(account, amount, token);
   }
 
-  function withdraw(address player, address token) internal {
-    uint avail = __escrow[player].available(token);
+  function _withdraw(address account, address token) internal {
+    uint avail = __escrow[account].available(token);
     if (avail == 0) revert Escrow.InsufficientBalance();
-    withdraw(player, avail, token);
+    _withdraw(account, avail, token);
   }
 
-  function lock(address player, uint gameId, uint amount, address token) internal {
-    uint avail = __escrow[player].available(token);
+  function _lock(address account, uint gameId, uint amount, address token) internal {
+    uint avail = __escrow[account].available(token);
     if (amount > avail) revert Escrow.InsufficientBalance();
-    __escrow[player].lock(gameId, amount, token);
-    __escrow[player].__gross[token].wagers += amount;
+    __escrow[account].lock(gameId, amount, token);
+    __escrow[account].__gross[token].wagers += amount;
     __escrow[address(0)].__gross[token].wagers += amount;
   }
 
-  // TODO Phase 1 #7: same auto-withdraw shape concern as refund.
-  function release(address player, uint gameId) internal {
-    TokenDeposit memory d = __escrow[player].account(gameId);
-    __escrow[player].release(gameId);
+  // NOTE: account should be ownerOf(msg.sender)
+  function _escrow(address account, uint gameId, uint amount, address token) internal {
+    uint locked = currentDeposit(account, gameId).amount;
+    if (locked >= amount) return;
+    uint extra = amount-locked;
+
+    // For ERC20, deposit any amount over available balance
+    uint balance = availableBalance(account, token);
+    if (balance < extra) {
+      // Player can complete ERC20 for own account here
+      if (account == msg.sender && token != address(0)) {
+        _deposit(account, extra-balance, token);
+      } else {
+        revert Escrow.InsufficientBalance();
+      }
+    }
+
+    // Lock extra amount to fulfill the required escrow
+    _lock(account, gameId, extra, token);
   }
 
-  function disburse(
+  // TODO Phase 1 #7: same auto-withdraw shape concern as refund.
+  function _release(address account, uint gameId) internal {
+    TokenDeposit memory d = __escrow[account].account(gameId);
+    __escrow[account].release(gameId);
+  }
+
+  function _disburse(
     address white,
     address black,
     uint gameId,
@@ -270,16 +293,16 @@ abstract contract EscrowWrapper {
     return uint96(wager * __platformFeePerc / 100);
   }
 
-  function chargeFee(address player, uint gameId, address token) internal {
-    TokenDeposit memory d = __escrow[player].account(gameId);
+  function _chargeFee(address account, uint gameId, address token) internal {
+    TokenDeposit memory d = __escrow[account].account(gameId);
     // No fees on zero-wager games
     if (d.amount == 0) return;
     uint96 fee = platformFee(d.amount);
-    __escrow[player].release(gameId, fee);             // restricted -> available
-    __escrow[player].credit(fee, d.token);             // available -> (move out)
+    __escrow[account].release(gameId, fee);             // restricted -> available
+    __escrow[account].credit(fee, d.token);             // available -> (move out)
     __escrow[address(0)].debit(fee, d.token);          // (move into) platform pot
     // Update escrow stats
-    __escrow[player].__gross[token].platformFees += fee;
+    __escrow[account].__gross[token].platformFees += fee;
     __escrow[address(0)].__gross[token].platformFees += fee;
   }
 
@@ -301,7 +324,7 @@ abstract contract EscrowWrapper {
 
   // Saturating: never reverts. Moves min(cost + fee, avail) ETH from owner.available → platform
   // pot. Saturation is required because postOp must not revert under ERC-4337.
-  function chargeGas(address owner, uint cost) internal returns (uint charged) {
+  function _chargeGas(address owner, uint cost) internal returns (uint charged) {
     uint avail = __escrow[owner].available(address(0));
     uint fee = gasFee(cost);
     uint total = cost + fee;
@@ -317,7 +340,7 @@ abstract contract EscrowWrapper {
     }
   }
 
-  function releasePlatformFunds(uint amount, address token, address receiver) internal {
+  function _releasePlatformFunds(uint amount, address token, address receiver) internal {
     uint balance = __escrow[address(0)].available(token);
     if (amount > balance) revert Escrow.InsufficientBalance();
     // CEI: see `withdraw` above.
@@ -326,8 +349,8 @@ abstract contract EscrowWrapper {
     _transfer(receiver, amount, token);
   }
 
-  function releasePlatformFunds(address token, address receiver) internal {
+  function _releasePlatformFunds(address token, address receiver) internal {
     uint balance = __escrow[address(0)].available(token);
-    releasePlatformFunds(balance, token, receiver);
+    _releasePlatformFunds(balance, token, receiver);
   }
 }
