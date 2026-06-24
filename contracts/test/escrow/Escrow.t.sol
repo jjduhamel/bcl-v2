@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 import '@forge/Test.sol';
-import '@lib/Escrow.sol';
+import '@lib/EscrowLib.sol';
 import '@src/IChessEngine.sol';
 import './MockERC20Token.sol';
 
@@ -62,7 +62,7 @@ abstract contract EscrowTest is EscrowWrapper, Test {
 }
 
 abstract contract EscrowETHTest is EscrowTest {
-  using Escrow for Escrow.EscrowAccount;
+  using EscrowLib for EscrowLib.EscrowAccount;
 
   constructor() {
     vm.deal(address(this), 1000 ether);

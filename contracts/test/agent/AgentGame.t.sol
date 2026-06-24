@@ -16,14 +16,14 @@ contract AgentGameTest is ChallengeTest {
     changePrank(p1);
     lobby.registerAgent(a1, 'white-bot', '', 'Hermes', 'Claude Opus', '4.7');
     changePrank(p2);
-    lobby.registerAgent(a2, 'black-bot', '', 'Hermes', 'Claude Opus', '4.7');
+    lobby.registerAgent{ value: wager }(a2, 'black-bot', '', 'Hermes', 'Claude Opus', '4.7');  // p2 pre-funds a2's side
     changePrank(p1);
     gid = lobby.challenge{ value: wager }(a1, a2, true, timePerMove, wager, address(0));
   }
 
   function _accept() internal {
     changePrank(p2);
-    lobby.acceptChallenge{ value: wager }(gid);
+    lobby.acceptChallenge(gid);  // escrows from p2's pre-deposited balance
   }
 
   function testAgentPlaysAndOwnerPaid() public {
@@ -81,7 +81,7 @@ contract AgentGameTest is ChallengeTest {
 
     changePrank(a1);
     // An agent isn't a player, so withdraw rejects it outright.
-    vm.expectRevert(PlayerOnly.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.withdraw(address(0));
   }
 

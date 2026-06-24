@@ -28,10 +28,12 @@ contract AgentGameERC20Test is ChallengeTest {
     changePrank(p2);
     lobby.registerAgent(a2, 'black-bot', '', '', '', '');
     token.approve(address(lobby), wager);
+    lobby.deposit(wager, address(token));  // opponent pre-funds so the challenge-time balance check passes
 
     changePrank(p1);
     lobby.registerAgent(a1, 'white-bot', '', '', '', '');
     token.approve(address(lobby), wager);
+    lobby.deposit(wager, address(token));  // challenger pre-funds too (_create checks both seats' balance)
     gid = lobby.challenge(a1, a2, true, timePerMove, wager, address(token));
 
     changePrank(p2);

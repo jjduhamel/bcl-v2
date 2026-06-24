@@ -12,7 +12,7 @@ contract EscrowERC20PlatformTest is EscrowTest {
   }
 
   function testPlatformEarningsAccumulate() public {
-    assertEq(availableBalance(address(0), address(token)), 2 * fee);
+    assertEq(availableFunds(address(0), address(token)), 2 * fee);
   }
 
   function testWithdrawPlatformTransfersTokens() public {
@@ -24,7 +24,7 @@ contract EscrowERC20PlatformTest is EscrowTest {
   function testWithdrawPlatformClearsEarnings() public {
     address recipient = makeAddr('recipient');
     _releasePlatformFunds(address(token), recipient);
-    assertEq(availableBalance(address(0), address(token)), 0);
+    assertEq(availableFunds(address(0), address(token)), 0);
   }
 
   function testWithdrawPlatformZeroBalanceIsNoop() public {
@@ -44,7 +44,7 @@ contract EscrowETHPlatformTest is EscrowETHTest {
   }
 
   function testPlatformEarningsAccumulate() public {
-    assertEq(availableBalance(address(0), address(0)), 2 * fee);
+    assertEq(availableFunds(address(0), address(0)), 2 * fee);
   }
 
   function testWithdrawPlatformTransfersETH() public {
@@ -57,7 +57,7 @@ contract EscrowETHPlatformTest is EscrowETHTest {
   function testWithdrawPlatformClearsEarnings() public {
     address recipient = makeAddr('recipient');
     _releasePlatformFunds(address(0), recipient);
-    assertEq(availableBalance(address(0), address(0)), 0);
+    assertEq(availableFunds(address(0), address(0)), 0);
   }
 
   function testWithdrawPlatformZeroBalanceIsNoop() public {

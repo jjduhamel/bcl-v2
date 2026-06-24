@@ -37,12 +37,12 @@ contract AcceptChallengeTest is ChallengeTest {
   }
 
   function testAcceptFailsWithoutDeposit() public {
-    vm.expectRevert(Escrow.InsufficientBalance.selector);
+    vm.expectRevert(EscrowLib.InsufficientBalance.selector);
     lobby.acceptChallenge(gameId);
   }
 
   function testAcceptFailsWithLowDeposit() public {
-    vm.expectRevert(Escrow.InsufficientBalance.selector);
+    vm.expectRevert(EscrowLib.InsufficientBalance.selector);
     lobby.acceptChallenge{ value: wager-1 }(gameId);
   }
 
@@ -63,13 +63,13 @@ contract AcceptChallengeTest is ChallengeTest {
 
   function testAcceptFailsAsSender() public {
     changePrank(p1);
-    vm.expectRevert(NotCurrentMove.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.acceptChallenge{ value: wager }(gameId);
   }
 
   function testAcceptAsSpectator() public {
     changePrank(p3);
-    vm.expectRevert(PlayerOnly.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.acceptChallenge{ value: wager }(gameId);
   }
 
@@ -94,7 +94,7 @@ contract AcceptChallengeTest is ChallengeTest {
 
   function testAcceptFailsAfterAccept() public {
     lobby.acceptChallenge{ value: wager }(gameId);
-    vm.expectRevert(InvalidContractState.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.acceptChallenge(gameId);
   }
 

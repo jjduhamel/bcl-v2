@@ -2,19 +2,20 @@
 pragma solidity >=0.4.22 <0.9.0;
 import '@oz/token/ERC20/IERC20.sol';
 import '@oz/token/ERC20/utils/SafeERC20.sol';
-import '@oz/utils/structs/EnumerableMap.sol';
+import '@oz/utils/Arrays.sol';
 import '../IChessEngine.sol';
 import './TokenDeposit.sol';
+import './EnumMap.sol';
 
 // Escrow accounting + custody as an external (linked) library: heavy EnumerableMap machinery is
 // deployed once and delegatecall-linked out of the calling contract's bytecode. Every function runs
 // in the caller's context (delegatecall preserves address(this) and msg.value), so funds and state
 // live on the caller — `EscrowWrapper` below holds the per-player `EscrowAccount` mapping and
 // exposes thin wrappers. Library is transfer-free: ERC20 transferFrom is performed by the wrapper.
-library Escrow {
+library EscrowLib {
   using SafeERC20 for IERC20;
-  using EnumerableMap for EnumerableMap.AddressToUintMap;
-  using TokenDepositMap for TokenDepositMap.GameIDTokenDepositMap;
+  using EnumMap for EnumMap.AddressUintMap;
+  using EnumMap for EnumMap.UintTokenDepositMap;
 
   error EscrowLocked();
   error AmountOverflow();
@@ -36,32 +37,45 @@ library Escrow {
 
   struct EscrowAccount {
     // gameId -> per-game locked deposit
-    TokenDepositMap.GameIDTokenDepositMap __accounts;
-    // token -> total locked across games (TODO Phase 1 #8: drop — duplicates Σ __accounts)
-    EnumerableMap.AddressToUintMap __restricted;
+    EnumMap.UintTokenDepositMap __accounts;
+    // token -> total locked across games (cache of Σ __accounts; backs total/locked reads)
+    EnumMap.AddressUintMap __restricted;
     // token -> withdrawable balance
-    EnumerableMap.AddressToUintMap __available;
+    EnumMap.AddressUintMap __available;
     mapping(address => EscrowStats) __gross;
   }
 
   function account(EscrowAccount storage escrow, uint gameId) internal view returns (TokenDeposit memory) {
-    (bool exists, TokenDeposit memory d) = escrow.__accounts.tryGet(gameId);
-    return exists ? d : TokenDeposit(address(0), 0);
+    return escrow.__accounts.get(gameId);
   }
 
-  // TODO: Should merge with escrow.__restricted.keys()
+  function accounts(EscrowAccount storage escrow) internal view returns (uint[] memory) {
+    return escrow.__accounts.keys();
+  }
+
+  // Every token the account holds a position in: withdrawable (__available) plus any held only as
+  // locked stake (__restricted) with nothing withdrawable.
   function tokens(EscrowAccount storage escrow) internal view returns (address[] memory) {
-    return escrow.__available.keys();
+    uint a = escrow.__available.length();
+    address[] memory locked = escrow.__restricted.keys();
+    address[] memory out = new address[](a + locked.length);
+    for (uint i = 0; i < a; i++) (out[i], ) = escrow.__available.at(i);
+    uint n = a;
+    for (uint i = 0; i < locked.length; i++)
+      if (!escrow.__available.contains(locked[i])) out[n++] = locked[i];
+    return Arrays.splice(out, 0, n);
   }
 
   function available(EscrowAccount storage escrow, address token) internal view returns (uint) {
-    (bool exists, uint out) = escrow.__available.tryGet(token);
-    return exists ? out : 0;
+    return escrow.__available.get(token);
   }
 
   function restricted(EscrowAccount storage escrow, address token) internal view returns (uint) {
-    (bool exists, uint out) = escrow.__restricted.tryGet(token);
-    return exists ? out : 0;
+    return escrow.__restricted.get(token);
+  }
+
+  function total(EscrowAccount storage escrow, address token) internal view returns (uint) {
+    return available(escrow, token) + restricted(escrow, token);
   }
 
   /*
@@ -104,11 +118,7 @@ library Escrow {
     if (amount > d.amount) revert InsufficientBalance();
     uint avail = available(escrow, d.token);
     uint locked = restricted(escrow, d.token);
-    if (amount == d.amount) {
-      escrow.__accounts.remove(gameId);
-    } else {
-      escrow.__accounts.set(gameId, d.token, d.amount - amount);
-    }
+    escrow.__accounts.set(gameId, d.token, d.amount - amount);   // prunes when fully released
     escrow.__available.set(d.token, avail + amount);
     escrow.__restricted.set(d.token, locked - amount);
   }
@@ -124,9 +134,9 @@ library Escrow {
 // sites are unchanged while the heavy logic is linked out into the Escrow library.
 abstract contract EscrowWrapper {
   using SafeERC20 for IERC20;
-  using Escrow for Escrow.EscrowAccount;
+  using EscrowLib for EscrowLib.EscrowAccount;
 
-  mapping(address => Escrow.EscrowAccount) internal __escrow;
+  mapping(address => EscrowLib.EscrowAccount) internal __escrow;
   uint internal __platformFeePerc;
   uint internal __gasSponsorFeePerc;
 
@@ -137,9 +147,13 @@ abstract contract EscrowWrapper {
     return __escrow[account].account(gameId);
   }
 
-  // TODO Phase 1 #(naming): rename to availableFunds; this is the withdrawable balance.
-  function availableBalance(address account, address token) internal view returns (uint) {
+  // Withdrawable (unrestricted) balance.
+  function availableFunds(address account, address token) internal view returns (uint) {
     return __escrow[account].available(token);
+  }
+
+  function totalBalance(address account, address token) internal view returns (uint) {
+    return __escrow[account].total(token);
   }
 
   function tokens(address account) internal view returns (address[] memory) {
@@ -147,20 +161,18 @@ abstract contract EscrowWrapper {
   }
 
   function escrowStats(address account, address token) public view
-  returns (Escrow.EscrowStats memory) {
+  returns (EscrowLib.EscrowStats memory) {
     return __escrow[account].__gross[token];
   }
 
-  // TODO Phase 1 #7: shape decision pending — currently refund+withdraw, should be ledger-only.
   function _refund(address account, uint gameId) internal {
     TokenDeposit memory d = __escrow[account].account(gameId);
     if (d.amount > 0) _refund(account, gameId, d.amount);
   }
 
-  // TODO Phase 1 #7: same; auto-withdraw shape pending.
   function _refund(address account, uint gameId, uint amount) internal {
     TokenDeposit memory d = __escrow[account].account(gameId);
-    if (amount > d.amount) revert Escrow.InsufficientBalance();
+    if (amount > d.amount) revert EscrowLib.InsufficientBalance();
     __escrow[account].release(gameId, amount);
   }
 
@@ -174,17 +186,17 @@ abstract contract EscrowWrapper {
   function _transfer(address receiver, uint amount, address token) private {
     if (token == address(0)) {
       (bool ok,) = payable(receiver).call{value: amount}("");
-      if (!ok) revert Escrow.TransferFailed();
+      if (!ok) revert EscrowLib.TransferFailed();
     } else {
       IERC20(token).safeTransfer(receiver, amount);
     }
   }
 
   function _deposit(address account, uint amount, address token) internal {
-    if (account != msg.sender) revert Escrow.InvalidDeposit();
+    if (account != msg.sender) revert EscrowLib.InvalidDeposit();
 
     if (token == address(0)) {
-      if (msg.value != amount) revert Escrow.InvalidDeposit();
+      if (msg.value != amount) revert EscrowLib.InvalidDeposit();
     } else {
       IERC20(token).safeTransferFrom(account, address(this), amount);
     }
@@ -195,7 +207,7 @@ abstract contract EscrowWrapper {
 
   function _withdraw(address account, uint amount, address token) internal {
     uint avail = __escrow[account].available(token);
-    if (amount > avail) revert Escrow.InsufficientBalance();
+    if (amount > avail) revert EscrowLib.InsufficientBalance();
     // CEI: state updates before the external transfer so a reentrant receiver
     // can't observe stale balance and double-spend.
     __escrow[account].credit(amount, token);
@@ -206,13 +218,13 @@ abstract contract EscrowWrapper {
 
   function _withdraw(address account, address token) internal {
     uint avail = __escrow[account].available(token);
-    if (avail == 0) revert Escrow.InsufficientBalance();
+    if (avail == 0) revert EscrowLib.InsufficientBalance();
     _withdraw(account, avail, token);
   }
 
   function _lock(address account, uint gameId, uint amount, address token) internal {
     uint avail = __escrow[account].available(token);
-    if (amount > avail) revert Escrow.InsufficientBalance();
+    if (amount > avail) revert EscrowLib.InsufficientBalance();
     __escrow[account].lock(gameId, amount, token);
     __escrow[account].__gross[token].wagers += amount;
     __escrow[address(0)].__gross[token].wagers += amount;
@@ -225,24 +237,18 @@ abstract contract EscrowWrapper {
     uint extra = amount-locked;
 
     // For ERC20, deposit any amount over available balance
-    uint balance = availableBalance(account, token);
+    uint balance = availableFunds(account, token);
     if (balance < extra) {
       // Player can complete ERC20 for own account here
       if (account == msg.sender && token != address(0)) {
         _deposit(account, extra-balance, token);
       } else {
-        revert Escrow.InsufficientBalance();
+        revert EscrowLib.InsufficientBalance();
       }
     }
 
     // Lock extra amount to fulfill the required escrow
     _lock(account, gameId, extra, token);
-  }
-
-  // TODO Phase 1 #7: same auto-withdraw shape concern as refund.
-  function _release(address account, uint gameId) internal {
-    TokenDeposit memory d = __escrow[account].account(gameId);
-    __escrow[account].release(gameId);
   }
 
   function _disburse(
@@ -273,7 +279,7 @@ abstract contract EscrowWrapper {
     } else if (outcome == IChessEngine.GameOutcome.Draw) {
       // Each side keeps its own stake — already released into their __available above.
     } else {
-      revert Escrow.EscrowLocked();
+      revert EscrowLib.EscrowLocked();
     }
   }
 
@@ -342,7 +348,7 @@ abstract contract EscrowWrapper {
 
   function _releasePlatformFunds(uint amount, address token, address receiver) internal {
     uint balance = __escrow[address(0)].available(token);
-    if (amount > balance) revert Escrow.InsufficientBalance();
+    if (amount > balance) revert EscrowLib.InsufficientBalance();
     // CEI: see `withdraw` above.
     __escrow[address(0)].credit(amount, token);
     __escrow[address(0)].__gross[token].withdrawals += amount;

@@ -18,6 +18,7 @@ contract AgentGaslessTest is LobbyTest {
   Simple7702Account impl;
   address a1;
   uint256 a1Pk;
+  address a2;  // opponent agent (owned by p2) — agents may only challenge agents
   address relayer;
   uint gid;
 
@@ -33,11 +34,15 @@ contract AgentGaslessTest is LobbyTest {
     lobby.allowChallenges(true);
 
     (a1, a1Pk) = makeAddrAndKey('agent'); // holds 0 ETH
+    a2 = makeAddr('agent2');
     changePrank(p1);
     // S1: owner funds the in-Lobby gas pot at registerAgent; postOp will debit this.
     lobby.registerAgent{value: 1 ether}(a1, 'bot', '', '', '', '');
-    gid = lobby.challenge(a1, p2, true, timePerMove, 0, address(0));
     changePrank(p2);
+    lobby.registerAgent(a2, 'bot', '', '', '', '');
+    changePrank(p1);
+    gid = lobby.challenge(a1, a2, true, timePerMove, 0, address(0));
+    changePrank(p2);  // p2 owns a2, accepts on its behalf
     lobby.acceptChallenge(gid);
 
     relayer = makeAddr('relayer');
@@ -101,6 +106,41 @@ contract AgentGaslessTest is LobbyTest {
     assertEq(lobby.platformBalance(address(0)) - potBefore, expectedCharge);
   }
 
+  // The agent accepts a pending challenge for its own seat, gaslessly, via the Lobby paymaster.
+  function testGaslessAcceptChallenge() public {
+    changePrank(p2);
+    uint g2 = lobby.challenge(p2, a1, true, timePerMove, 0, address(0)); // a1 is the current move
+    changePrank(relayer);
+    ep.handleOps(
+      _signedOp(address(lobby), abi.encodeWithSelector(Lobby.acceptChallenge.selector, g2)),
+      payable(relayer));
+    assertTrue(engine.game(g2).state == IChessEngine.GameState.Started);
+    assertEq(a1.balance, 0);
+  }
+
+  // The agent opens a directed challenge against another agent, gaslessly.
+  function testGaslessChallengeAgent() public {
+    uint createdBefore = lobby.gameStats(a1).created;
+    changePrank(relayer);
+    ep.handleOps(
+      _signedOp(address(lobby),
+        abi.encodeWithSelector(Lobby.challenge.selector, a1, a2, true, timePerMove, uint(0), address(0))),
+      payable(relayer));
+    assertEq(lobby.gameStats(a1).created, createdBefore + 1);
+    assertEq(a1.balance, 0);
+  }
+
+  // The agent updates its own profile, gaslessly, via the Lobby paymaster.
+  function testGaslessUpdateAgent() public {
+    changePrank(relayer);
+    ep.handleOps(
+      _signedOp(address(lobby),
+        abi.encodeWithSelector(Lobby.updateAgent.selector, a1, 'alphazero', 'ipfs://new', 'LangChain', 'Claude Sonnet', '4.7')),
+      payable(relayer));
+    assertEq(lobby.agentProfile(a1).nickname, 'alphazero');
+    assertEq(a1.balance, 0);
+  }
+
   // S1: the owner's in-Lobby gas pot is debited; the owner's wallet (external balance) is untouched.
   function testOwnerIsChargedForSponsoredMove() public {
     changePrank(arbiter);
@@ -153,7 +193,9 @@ contract AgentGaslessTest is LobbyTest {
     ep.handleOps(ops, payable(relayer));
   }
 
-  function testRejectsNonEngineTarget() public {
+  // withdraw targets the Lobby (a valid paymaster target now) but is not a sponsored Lobby
+  // selector, so validation still rejects it.
+  function testRejectsNonWhitelistedLobbySelector() public {
     PackedUserOperation[] memory ops =
       _signedOp(address(lobby), abi.encodeWithSelector(Lobby.withdraw.selector, address(0)));
     changePrank(relayer);

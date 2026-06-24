@@ -41,12 +41,12 @@ contract ModifyChallengeTest is ChallengeTest {
 
   function testModifyFailsWithoutDeposit() public
   {
-    vm.expectRevert(Escrow.InsufficientBalance.selector);
+    vm.expectRevert(EscrowLib.InsufficientBalance.selector);
     lobby.modifyChallenge(gameId, p2, true, timePerMove, wager);
   }
 
   function testModifyFailsWithLowDeposit() public {
-    vm.expectRevert(Escrow.InsufficientBalance.selector);
+    vm.expectRevert(EscrowLib.InsufficientBalance.selector);
     lobby.modifyChallenge{ value: wager-1 }(gameId, p2, true, timePerMove, wager);
   }
 
@@ -83,7 +83,7 @@ contract ModifyChallengeTest is ChallengeTest {
   }
 
   function testModifyWagerFailsWithoutDeposit() public {
-    vm.expectRevert(Escrow.InsufficientBalance.selector);
+    vm.expectRevert(EscrowLib.InsufficientBalance.selector);
     lobby.modifyChallenge(gameId, p2, true, timePerMove, wager*2);
   }
 
@@ -97,14 +97,14 @@ contract ModifyChallengeTest is ChallengeTest {
 
   function testModifyFailsAsSpectator() public {
     changePrank(p3);
-    vm.expectRevert(PlayerOnly.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.modifyChallenge(gameId, p3, false, timePerMove*2, wager/2);
   }
 
   // A participant can only assign a seat they own; passing the opponent's seat fails isOwner.
   function testCannotReassignOpponentSeat() public {
     changePrank(p1);
-    vm.expectRevert(NotAgentOwner.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.modifyChallenge(gameId, p2, true, timePerMove, wager);
   }
 }

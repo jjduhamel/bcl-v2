@@ -38,7 +38,7 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
    */
 
   modifier isAdmin() {
-    if (!__lobby.hasRole(__lobby.ADMIN_ROLE(), msg.sender)) revert ILobby.AdminOnly();
+    if (!__lobby.hasRole(__lobby.ADMIN_ROLE(), msg.sender)) revert ILobby.Unauthorized();
     _;
   }
 
@@ -241,7 +241,7 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
   ) public
     isLobby
     isChallenge(gameId)
-  {
+  returns (GameData memory) {
     if (timePerMove < 60) revert InvalidTimePerMove();
     GameData storage gameData = __games[gameId];
 
@@ -278,6 +278,8 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
 
     // Bump current move to the receiver so they can accept the modified challenge
     gameData.currentMove = opponent;
+
+    return gameData;
   }
 
   /*

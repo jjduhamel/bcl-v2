@@ -4,7 +4,8 @@ import '@oz-upgradeable/proxy/utils/Initializable.sol';
 import '@oz-upgradeable/proxy/utils/UUPSUpgradeable.sol';
 import '@aa/interfaces/IPaymaster.sol';
 import '@aa/interfaces/IEntryPoint.sol';
-import '@lib/Escrow.sol';
+import '@oz/utils/math/Math.sol';
+import '@lib/EscrowLib.sol';
 import '@lib/ProfileLib.sol';
 import './ILobby.sol';
 import './IChessEngine.sol';
@@ -27,10 +28,9 @@ contract Lobby is
   bool private __allowWagers;
 
   // User Roles
-  bytes32 public constant ADMIN_ROLE = 0x00;
+  bytes32 public constant ADMIN_ROLE = keccak256('ADMIN_ROLE');
   bytes32 public constant ARBITER_ROLE = keccak256('ARBITER_ROLE');
-  bytes32 internal constant AMBASSADOR_ROLE = keccak256('AMBASSADOR_ROLE');
-  bytes32 internal constant PLAYER_ROLE = keccak256('PLAYER_ROLE');
+  bytes32 public constant HUMAN_ROLE = keccak256('HUMAN_ROLE');
   bytes32 public constant AGENT_ROLE = keccak256('AGENT_ROLE');
   bytes32 public constant BANNED_ROLE = keccak256('BANNED_ROLE');
 
@@ -71,7 +71,7 @@ contract Lobby is
   }
 
   function _assertIsGameEngine(uint gameId) internal view {
-    if (msg.sender != __gameEngine[gameId]) revert GameEngineOnly();
+    if (msg.sender != __gameEngine[gameId]) revert Forbidden();
   }
 
   function challenges(address player) public view returns (uint[] memory) {
@@ -88,7 +88,7 @@ contract Lobby is
 
   function playerProfile(address player) external view
   returns (ProfileLib.PlayerProfile memory) {
-    _assertIsPlayer(player);
+    _assertIsHuman(player);
     return _player(player);
   }
 
@@ -104,7 +104,7 @@ contract Lobby is
   }
 
   function wagerStats(address account, address token) public view
-  returns (Escrow.EscrowStats memory) {
+  returns (EscrowLib.EscrowStats memory) {
     _assertIsOwner(account);
     return escrowStats(account, token);
   }
@@ -116,7 +116,7 @@ contract Lobby is
   function netEarnings(address account) public view returns (int) {
     _assertIsOwner(account);
     // Funds flow through the owner, not the seat — resolve agents to their owner before reading.
-    address owner = ownerOf(account);
+    address owner = _owner(account);
     uint gains = escrowStats(owner, address(0)).earnings;
     uint losses = escrowStats(owner, address(0)).losses;
     return int(gains)-int(losses);
@@ -124,11 +124,11 @@ contract Lobby is
 
   function earnings(address token) public view
   returns (uint) {
-    return availableBalance(msg.sender, token);
+    return availableFunds(msg.sender, token);
   }
 
   function currentDeposit(uint gameId) public view returns (uint) {
-    _assertIsPlayersGame(gameId);
+    _assertIsPlayer(gameId);
     return currentDeposit(msg.sender, gameId).amount;
   }
 
@@ -141,39 +141,93 @@ contract Lobby is
   function checkPlayerEarnings(address player, address token) public view
   returns (uint) {
     _assertIsAdmin();
-    return availableBalance(player, token);
+    return availableFunds(player, token);
   }
 
-  // Only registered players can deposit ETH
+  // This should run near the beginning of every payable function
   function _handleETHDeposit() internal {
     if (msg.value > 0) {
-      _assertIsPlayer(msg.sender);
+      _assertIsHuman(msg.sender);
       _deposit(msg.sender, msg.value, address(0));
     }
   }
 
   // Players only — agents hold no funds; their wagers and gas draw on the owner's balance.
   function deposit(uint amount, address token) external payable {
-    _assertIsPlayer(msg.sender);
+    _assertNotBanned(msg.sender);
+    _assertIsHuman(msg.sender);
     _deposit(msg.sender, amount, token);
   }
 
   function withdraw(address token) external {
-    _assertIsPlayer(msg.sender);
+    _assertIsHuman(msg.sender);
     _withdraw(msg.sender, token);
+  }
+
+  function _opponent(IChessEngine.GameData memory game) internal returns (address) {
+    if (_controls(game.whitePlayer)) return game.blackPlayer;
+    else if (_controls(game.blackPlayer)) return game.whitePlayer;
+    else return address(0);
+  }
+
+  function _owner(address account) internal view returns (address) {
+    if (_hasRole(account, AGENT_ROLE)) return _agent(account).owner;
+    else if (_hasRole(account, HUMAN_ROLE)) return account;
+    else return address(0);
+  }
+
+  function _controls(address account) internal view returns (bool) {
+    if (account == address(0)) return _hasRole(msg.sender, ADMIN_ROLE);
+    else if (_hasRole(msg.sender, HUMAN_ROLE)) return msg.sender == _owner(account);
+    else if (_hasRole(msg.sender, AGENT_ROLE)) return msg.sender == account;
+    else return false;
+  }
+
+  function _assertNotBanned(address account) internal view {
+    if (_hasRole(account, BANNED_ROLE)) revert UserBanned();
+    if (_hasRole(account, AGENT_ROLE)) {
+      if (_hasRole(_owner(account), BANNED_ROLE)) revert UserBanned();
+    }
+  }
+
+  function _assertIsHuman(address account) internal view {
+    if (!_hasRole(account, HUMAN_ROLE)) revert Unauthorized();
+  }
+
+  function _assertIsAgent(address account) internal view {
+    if (!_hasRole(account, AGENT_ROLE)) revert Unauthorized();
+  }
+
+  function _assertIsOwner(address account) internal view {
+    if (msg.sender != _owner(account)) revert Unauthorized();
+  }
+
+  function _assertSenderControls(address account) internal view {
+    if (!_controls(account)) revert Unauthorized();
+  }
+
+  function _assertIsRegistered(address account) internal view {
+    if (account == address(0)) return;     // sentinel for global rollups
+    if (!_hasRole(account, HUMAN_ROLE) && !_hasRole(account, AGENT_ROLE)) revert Unregistered();
+  }
+
+  function _assertIsUnregistered(address account) internal view {
+    if (_hasRole(account, HUMAN_ROLE) || _hasRole(account, AGENT_ROLE)) revert AlreadyRegistered();
+  }
+
+  function _assertIsOpenTable(uint gameId) internal view {
+    if (!_isOpenTable(gameId)) revert Forbidden();
+  }
+
+  function _assertIsPlayer(uint gameId) internal view {
+    IChessEngine.GameData memory game = chessEngine(gameId).game(gameId);
+    if (!_controls(game.whitePlayer) && !_controls(game.blackPlayer))
+      revert Unauthorized();
   }
 
   /*
    * Player / agent profiles
    */
-
-  function _isBanned(address account) private view returns (bool) {
-    if (_hasRole(account, BANNED_ROLE)) return true;
-    // Reach the agent's owner via direct storage (skips ownerOf's _assertIsRegistered, which
-    // would recurse: _assertIsRegistered -> _isBanned -> ownerOf -> _assertIsRegistered).
-    address owner = _agent(account).owner;
-    return owner != address(0) && _hasRole(owner, BANNED_ROLE);
-  }
 
   function registerPlayer(
     address player,
@@ -183,57 +237,17 @@ contract Lobby is
   {
     _assertIsUnregistered(player);
     _register(player, username, avatar);
-    _grantRole(player, PLAYER_ROLE);
+    _grantRole(player, HUMAN_ROLE);
   }
 
   function agents(address owner) external view
   returns (address[] memory) {
-    _assertIsPlayer(owner);
+    _assertIsHuman(owner);
     return _agents(owner);
   }
 
-  // The human accountable for a seat: an agent's owner, or the address itself for a human.
-  function ownerOf(address account) internal view returns (address) {
-    _assertIsRegistered(account);
-    address owner = _agent(account).owner;
-    return owner == address(0) ? account : owner;
-  }
-
-  function _assertIsPlayer(address account) internal view {
-    if (_isBanned(account)) revert UserBanned();
-    if (_player(account).createdAt == 0) revert IChessEngine.PlayerOnly();
-  }
-
-  function _assertIsAgent(address account) internal view {
-    if (_isBanned(account)) revert UserBanned();
-    if (_agent(account).createdAt == 0) revert NotAnAgent();
-  }
-
-  function _assertIsOwner(address account) internal view {
-    if (_isBanned(account) || _isBanned(ownerOf(account))) revert UserBanned();
-    if (ownerOf(account) != msg.sender) revert NotAgentOwner();
-  }
-
-  function _assertIsRegistered(address account) internal view {
-    if (account == address(0)) return;     // sentinel for global rollups
-    if (_isBanned(account)) revert UserBanned();
-    if (_player(account).createdAt == 0 &&
-        _agent(account).createdAt == 0
-    ) revert Unregistered();
-  }
-
-  function _assertIsUnregistered(address account) internal view {
-    if (_player(account).createdAt != 0 ||
-        _agent(account).createdAt != 0
-    ) revert AlreadyRegistered();
-  }
-
-  function _assertIsOpenTable(uint gameId) internal view {
-    if (!_isOpenTable(gameId)) revert NotAnOpenTable();
-  }
-
   // TODO: no agent consent yet. Any owner can claim an unregistered address as their agent,
-  // including a third party's EOA that hasn't onboarded yet — `ownerOf(victim)` then resolves
+  // including a third party's EOA that hasn't onboarded yet — `_owner(victim)` then resolves
   // to the attacker. The victim is permanently locked out of registering, and any wager sent
   // to `victim` by a third party (e.g. from a public address book) routes to the attacker.
   // Before mainnet, require proof the caller controls the agent key (e.g. an EIP-712 signature
@@ -247,7 +261,8 @@ contract Lobby is
     string calldata modelVersion
   )
   public payable {
-    _assertIsPlayer(msg.sender);
+    _assertIsHuman(msg.sender);
+    _assertNotBanned(msg.sender);
     _assertIsUnregistered(robot);
     _handleETHDeposit();
     _register(
@@ -271,24 +286,31 @@ contract Lobby is
     string calldata baseModel,
     string calldata modelVersion
   ) external {
-    _assertIsOwner(robot);
+    _assertIsAgent(robot);
+    _assertSenderControls(robot);
+    _assertNotBanned(robot);
     _agent(robot).update(nickname, avatar, agentFramework, baseModel, modelVersion);
     emit AgentUpdated(msg.sender, robot);
   }
 
   function suspendAgent(address robot) external {
+    _assertIsAgent(robot);
     _assertIsOwner(robot);
     _agent(robot).suspend(true);
     emit AgentSuspended(msg.sender, robot);
   }
 
   function resumeAgent(address robot) external {
+    _assertIsAgent(robot);
+    _assertNotBanned(robot);
     _assertIsOwner(robot);
     _agent(robot).suspend(false);
     emit AgentResumed(msg.sender, robot);
   }
 
   function unregisterAgent(address robot) external {
+    _assertIsAgent(robot);
+    _assertNotBanned(robot);
     _assertIsOwner(robot);
     // Disallow unregistering agent during a game to prevent loss of funds
     if (_games(robot).length > 0) revert AgentInGame();
@@ -309,6 +331,95 @@ contract Lobby is
     emit TouchRecord(gameId, sender, receiver);
   }
 
+  function _assertWagerOk(
+    address player,
+    uint wagerAmount,
+    address wagerToken
+  ) internal view {
+    if (wagerAmount > 0) {
+      if (!__allowWagers) revert WageringDisabled();
+      if (player == address(0)) return;
+      // Agents can only draw from the owner's withdrawable balance (funds locked in other games
+      // don't count toward a new wager).
+      if (_hasRole(player, AGENT_ROLE)) {
+        if (availableFunds(_owner(player), wagerToken) < wagerAmount) revert InvalidWager();
+        // TODO: We can enforce a max wager per token
+      }
+    }
+  }
+
+  function _create(
+    address player,
+    address opponent,
+    bool startAsWhite,
+    uint timePerMove,
+    uint wagerAmount,
+    address wagerToken
+  ) internal returns (uint) {
+    if (!__allowChallenges) revert ChallengingDisabled();
+    _assertWagerOk(player, wagerAmount, wagerToken);
+    _assertWagerOk(opponent, wagerAmount, wagerToken);
+
+    // Create a new challenge on the current game engine
+    uint gameId = __currentEngine.createChallenge(_stats(address(0)).created++
+                                                 , player
+                                                 , opponent
+                                                 , startAsWhite
+                                                 , timePerMove
+                                                 , wagerAmount
+                                                 , wagerToken);
+
+    // Set the game engine
+    __gameEngine[gameId] = address(__currentEngine);
+
+    // Hold the wager in the owner's lobby escrow
+    if (wagerAmount > 0) _escrow(_owner(player), gameId, wagerAmount, wagerToken);
+
+    // Add to pending challenges
+    _lobby(player).challenge(gameId);
+    _lobby(opponent).challenge(gameId);
+
+    // Update challenges sent/received
+    _stats(player).created++;
+    _stats(opponent).received++;
+
+    emit NewChallenge(gameId, player, opponent);
+
+    return gameId;
+  }
+
+  function _modify(
+    uint gameId,
+    address player,
+    bool startAsWhite,
+    uint timePerMove,
+    uint wagerAmount
+  ) internal {
+    ChessEngine engine = chessEngine(gameId);
+
+    // Engine validates state + applies seat/timePerMove/wagerAmount updates,
+    // and bumps currentMove to the opponent so they can accept the modified challenge.
+    IChessEngine.GameData memory game = engine.modifyChallenge(gameId,
+                                                               player,
+                                                               startAsWhite,
+                                                               timePerMove,
+                                                               wagerAmount);
+
+    address opponent = _opponent(game);
+    // A modify only tops up the difference, so check against funds already locked for this game
+    // deducted — matching what _escrow will actually lock.
+    uint pExtra = Math.saturatingSub(wagerAmount, currentDeposit(_owner(player), gameId).amount);
+    uint oExtra = Math.saturatingSub(wagerAmount, currentDeposit(_owner(opponent), gameId).amount);
+    _assertWagerOk(player, pExtra, game.wagerToken);
+    _assertWagerOk(opponent, oExtra, game.wagerToken);
+
+    // Top up the owner's escrow if needed. Any over-deposit from a wager decrease stays in
+    // escrow and is trimmed at game start (acceptChallenge) or returned on cancel.
+    if (wagerAmount > 0) _escrow(_owner(player), gameId, wagerAmount, game.wagerToken);
+
+    emit TouchRecord(gameId, player, opponent);
+  }
+
   function createTable(
     address player,
     bool startAsWhite,
@@ -316,25 +427,27 @@ contract Lobby is
     uint wagerAmount,
     address wagerToken
   ) external payable returns (uint) {
-    _assertIsOwner(player);
+    _assertSenderControls(player);
+    _assertNotBanned(player);
     _handleETHDeposit();
     return _create(player, address(0), startAsWhite, timePerMove, wagerAmount, wagerToken);
   }
 
   // Join an open table (opponent == address(0)): seat the joiner in the colour the creator left
   // open and hand the turn back to the creator to accept/decline. Terms are the table's.
-  // Not _assertIsPlayersGame — the joiner isn't a seat yet, only the owner of the seat-to-be.
+  // Not _assertIsPlayer — the joiner isn't a seat yet, only the owner of the seat-to-be.
   function joinTable(uint gameId, address player) external payable
   returns (uint) {
-    _assertIsOwner(player);
     _assertIsOpenTable(gameId);
+    _assertSenderControls(player);
+    _assertNotBanned(player);
     _handleETHDeposit();
     IChessEngine.GameData memory game = chessEngine(gameId).game(gameId);
 
     // Block self -> self and agent -> owner
     address opponent = game.whitePlayer == address(0) ? game.blackPlayer
                                                       : game.whitePlayer;
-    if (ownerOf(player) == ownerOf(opponent)) revert InvalidPlayer();
+    if (_owner(player) == _owner(opponent)) revert InvalidRequest();
 
     // The joiner fills the open seat — they can't pick a colour and flip the creator.
     _modify(gameId,
@@ -350,6 +463,27 @@ contract Lobby is
     return gameId;
   }
 
+  function closeTable(uint gameId) external
+  {
+    _assertIsOpenTable(gameId);
+    // Admins and arbiters can close any open table; otherwise the caller must hold a seat at it.
+    if (!_hasRole(msg.sender, ARBITER_ROLE) &&
+        !_hasRole(msg.sender, ADMIN_ROLE)) {
+      _assertIsPlayer(gameId);
+    }
+    IChessEngine.GameData memory gameData = chessEngine(gameId).game(gameId);
+    address creator = (gameData.whitePlayer == address(0)) ? gameData.blackPlayer
+                                                           : gameData.whitePlayer;
+
+    chessEngine(gameId).declineChallenge(gameId);
+    _refund(_owner(creator), gameId);
+
+    _lobby(creator).decline(gameId);
+    _lobby(address(0)).decline(gameId);
+
+    emit TableClosed(gameId, creator);
+  }
+
   function challenge(
     address player,
     address opponent,
@@ -358,50 +492,13 @@ contract Lobby is
     uint wagerAmount,
     address wagerToken
   ) external payable returns (uint) {
-    _assertIsOwner(player);
+    _assertSenderControls(player);
+    _assertNotBanned(player);
     _assertIsRegistered(opponent);
+    // Disallow agent -> human challenge
+    if (_hasRole(player, AGENT_ROLE)) _assertIsAgent(opponent);
     _handleETHDeposit();
     return _create(player, opponent, startAsWhite, timePerMove, wagerAmount, wagerToken);
-  }
-
-  function _create(
-    address player,
-    address opponent,
-    bool startAsWhite,
-    uint timePerMove,
-    uint wagerAmount,
-    address wagerToken
-  ) internal returns (uint) {
-    // `allowChallenge` gate inlined (single caller).
-    if (!__allowChallenges) revert ChallengingDisabled();
-    if (wagerAmount > 0 && !__allowWagers) revert WageringDisabled();
-
-    // Create a new challenge on the current game engine
-    uint gameId = __currentEngine.createChallenge(_stats(address(0)).created++
-                                                 , player
-                                                 , opponent
-                                                 , startAsWhite
-                                                 , timePerMove
-                                                 , wagerAmount
-                                                 , wagerToken);
-
-    // Set the game engine
-    __gameEngine[gameId] = address(__currentEngine);
-
-    // Hold the wager in the owner's lobby escrow
-    if (wagerAmount > 0) _escrow(ownerOf(player), gameId, wagerAmount, wagerToken);
-
-    // Add to pending challenges
-    _lobby(player).challenge(gameId);
-    _lobby(opponent).challenge(gameId);
-
-    // Update challenges sent/received
-    _stats(player).created++;
-    _stats(opponent).received++;
-
-    emit NewChallenge(gameId, player, opponent);
-
-    return gameId;
   }
 
   // TODO support changing wagerToken (requires refunding existing escrow and re-depositing)
@@ -412,66 +509,39 @@ contract Lobby is
     uint timePerMove,
     uint wagerAmount
   ) external payable {
-    _assertIsOwner(player);
-    _assertIsPlayersGame(gameId);
+    _assertSenderControls(player);
+    _assertNotBanned(player);
+    _assertIsPlayer(gameId);
     _handleETHDeposit();
     _modify(gameId, player, startAsWhite, timePerMove, wagerAmount);
   }
 
-  function _modify(
-    uint gameId,
-    address player,
-    bool startAsWhite,
-    uint timePerMove,
-    uint wagerAmount
-  ) internal {
-    if (wagerAmount > 0 && !__allowWagers) revert WageringDisabled();
-    ChessEngine engine = chessEngine(gameId);
-
-    // Engine validates state + applies seat/timePerMove/wagerAmount updates,
-    // and bumps currentMove to the opponent so they can accept the modified challenge.
-    engine.modifyChallenge(gameId, player, startAsWhite, timePerMove, wagerAmount);
-    IChessEngine.GameData memory gameData = engine.game(gameId);
-
-    // Top up the owner's escrow if needed. Any over-deposit from a wager decrease stays in
-    // escrow and is trimmed at game start (acceptChallenge) or returned on cancel.
-    if (wagerAmount > 0) _escrow(ownerOf(player), gameId, wagerAmount, gameData.wagerToken);
-
-    emit TouchRecord(gameId, player, gameData.currentMove);
-  }
-
-  function _assertIsPlayersGame(uint gameId) internal view {
-    IChessEngine.GameData memory game = chessEngine(gameId).game(gameId);
-    if (msg.sender != ownerOf(game.whitePlayer) &&
-        msg.sender != ownerOf(game.blackPlayer)) revert IChessEngine.PlayerOnly();
-  }
-
   function acceptChallenge(uint gameId) external payable {
+    _assertIsPlayer(gameId);
     // Inline state + seat + turn checks — separate `isGameState`/`isPlayersGame`/`isCurrentMove`
     // modifiers would re-decode GameData three times at this single call site.
     ChessEngine engine = chessEngine(gameId);
     IChessEngine.GameData memory gameData = engine.game(gameId);
+    if (!_controls(gameData.currentMove)) revert Unauthorized();
     if (gameData.state != IChessEngine.GameState.Pending) revert IChessEngine.InvalidContractState();
-    if (msg.sender != ownerOf(gameData.whitePlayer) &&
-        msg.sender != ownerOf(gameData.blackPlayer)) revert IChessEngine.PlayerOnly();
-    if (msg.sender != ownerOf(gameData.currentMove)) revert IChessEngine.NotCurrentMove();
     _handleETHDeposit();
 
     address player = gameData.currentMove;
     address opponent = (player == gameData.whitePlayer) ? gameData.blackPlayer
                                                         : gameData.whitePlayer;
+
     if (gameData.wagerAmount > 0) {
       // The player may already have made a partial deposit if the challenge was modified.
-      _escrow(ownerOf(player), gameId, gameData.wagerAmount, gameData.wagerToken);
+      _escrow(_owner(player), gameId, gameData.wagerAmount, gameData.wagerToken);
 
       // Refund any excess deposits.  This can occur if the wager amount is modified.
       // Escrow is keyed by owner, not seat — an agent's wager lives in its owner's account.
-      _refundExcess(ownerOf(player), gameId, gameData.wagerAmount);
-      _refundExcess(ownerOf(opponent), gameId, gameData.wagerAmount);
+      _refundExcess(_owner(player), gameId, gameData.wagerAmount);
+      _refundExcess(_owner(opponent), gameId, gameData.wagerAmount);
 
       // Charge platform fees out of both players' escrowed wagers
-      _chargeFee(ownerOf(player), gameId, gameData.wagerToken);
-      _chargeFee(ownerOf(opponent), gameId, gameData.wagerToken);
+      _chargeFee(_owner(player), gameId, gameData.wagerToken);
+      _chargeFee(_owner(opponent), gameId, gameData.wagerToken);
     }
 
     // Engine transitions Pending -> Started + emits GameStarted
@@ -488,56 +558,28 @@ contract Lobby is
     emit ChallengeAccepted(gameId, player, opponent);
   }
 
-  function revokeTable(uint gameId) external {
-    _assertIsRegistered(msg.sender);
-    _assertIsOpenTable(gameId);
-    _assertIsPlayersGame(gameId);
-    IChessEngine.GameData memory gameData = chessEngine(gameId).game(gameId);
-    address creator = (gameData.whitePlayer == address(0)) ? gameData.blackPlayer
-                                                           : gameData.whitePlayer;
-
-    chessEngine(gameId).declineChallenge(gameId);
-    _refund(ownerOf(msg.sender), gameId);
-
-    _lobby(creator).decline(gameId);
-    _lobby(address(0)).decline(gameId);
-
-    emit TableClosed(gameId, creator);
-  }
-
-  function closeTable(uint gameId) external
-  {
-    _assertIsArbiter();
-    _assertIsOpenTable(gameId);
-    IChessEngine.GameData memory gameData = chessEngine(gameId).game(gameId);
-    address creator = (gameData.whitePlayer == address(0)) ? gameData.blackPlayer
-                                                           : gameData.whitePlayer;
-
-    chessEngine(gameId).declineChallenge(gameId);
-    _refund(ownerOf(creator), gameId);
-
-    _lobby(creator).decline(gameId);
-    _lobby(address(0)).decline(gameId);
-
-    emit TableClosed(gameId, creator);
-  }
-
   function declineChallenge(uint gameId) external {
-    _assertIsRegistered(msg.sender);
-    _assertIsPlayersGame(gameId);
+    _assertIsPlayer(gameId);
+
     ChessEngine engine = chessEngine(gameId);
-    IChessEngine.GameData memory gameData = engine.game(gameId);
-    address player = (msg.sender == ownerOf(gameData.whitePlayer)) ? gameData.whitePlayer
-                                                                   : gameData.blackPlayer;
-    address opponent = (player == gameData.whitePlayer) ? gameData.blackPlayer
-                                                        : gameData.whitePlayer;
+    IChessEngine.GameData memory game = engine.game(gameId);
+
+    address player;
+    address opponent;
+    if (_controls(game.whitePlayer)) {
+      player = game.whitePlayer;
+      opponent = game.blackPlayer;
+    } else {
+      player = game.blackPlayer;
+      opponent = game.whitePlayer;
+    }
 
     // Engine validates state + transitions Pending -> Declined
     engine.declineChallenge(gameId);
 
     // Return escrowed wagers to both players
-    _refund(ownerOf(msg.sender), gameId);
-    _refund(ownerOf(opponent), gameId);
+    _refund(_owner(player), gameId);
+    _refund(_owner(opponent), gameId);
 
     _lobby(player).decline(gameId);
     _lobby(opponent).decline(gameId);
@@ -555,7 +597,7 @@ contract Lobby is
 
     // Payout winner / split on draw
     if (gameData.wagerAmount > 0) {
-      _disburse(ownerOf(white), ownerOf(black), gameId, outcome);
+      _disburse(_owner(white), _owner(black), gameId, outcome);
     }
 
     _lobby(white).finish(gameId);
@@ -654,11 +696,11 @@ contract Lobby is
   }
 
   function _assertIsAdmin() internal view {
-    if (!_hasRole(msg.sender, ADMIN_ROLE)) revert AdminOnly();
+    if (!_hasRole(msg.sender, ADMIN_ROLE)) revert Unauthorized();
   }
 
   function _assertIsArbiter() internal view {
-    if (!_hasRole(msg.sender, ARBITER_ROLE)) revert IChessEngine.ArbiterOnly();
+    if (!_hasRole(msg.sender, ARBITER_ROLE)) revert Unauthorized();
   }
 
   function allowChallenges(bool allow) external {
@@ -689,7 +731,7 @@ contract Lobby is
 
   function platformBalance(address token) public view returns (uint) {
     _assertIsAdmin();
-    return availableBalance(address(0), token);
+    return availableFunds(address(0), token);
   }
 
   function withdrawPlatformFunds(address token, address payable receiver) public {
@@ -712,7 +754,7 @@ contract Lobby is
   bytes4 private constant EXECUTE_SELECTOR = bytes4(keccak256('execute(address,uint256,bytes)'));
 
   modifier onlyEntryPoint() {
-    if (msg.sender != address(__entryPoint)) revert EntryPointOnly();
+    if (msg.sender != address(__entryPoint)) revert Forbidden();
     _;
   }
 
@@ -735,13 +777,19 @@ contract Lobby is
   ) external override onlyEntryPoint 
   returns (bytes memory context, uint256 validationData) {
     _assertIsAgent(op.sender);
+    _assertNotBanned(op.sender);
     (address target, uint256 value, bytes4 innerSelector) = _decodeExecute(op.callData);
-    if (!__chessEngines[target] || value != 0) revert UnsupportedExecuteCall();
-    if (!_isSponsoredSelector(innerSelector)) revert SelectorNotSponsored();
+    // Agents custody no ETH; a sponsored op must move no value.
+    if (value != 0) revert InvalidRequest();
+    if (__chessEngines[target] || target == address(this)) {
+      if (!_isSponsoredSelector(innerSelector)) revert Forbidden();
+    } else {
+      revert InvalidRequest();
+    }
 
-    address owner = ownerOf(op.sender);
-    if (availableBalance(owner, address(0)) < maxCost + gasFee(maxCost)) {
-      revert Escrow.InsufficientBalance();
+    address owner = _owner(op.sender);
+    if (availableFunds(owner, address(0)) < maxCost + gasFee(maxCost)) {
+      revert EscrowLib.InsufficientBalance();
     }
     // Carry the billable owner forward to postOp. validationData 0 == valid, no time bounds.
     return (abi.encode(owner), 0);
@@ -764,10 +812,10 @@ contract Lobby is
     private pure
     returns (address target, uint256 value, bytes4 innerSelector)
   {
-    if (callData.length < 4 || bytes4(callData[0:4]) != EXECUTE_SELECTOR) revert UnsupportedExecuteCall();
+    if (callData.length < 4 || bytes4(callData[0:4]) != EXECUTE_SELECTOR) revert InvalidRequest();
     bytes memory inner;
     (target, value, inner) = abi.decode(callData[4:], (address, uint256, bytes));
-    if (inner.length < 4) revert UnsupportedExecuteCall();
+    if (inner.length < 4) revert InvalidRequest();
     // First 4 bytes of `inner` (left-aligned in its first memory word) are the engine selector.
     assembly { innerSelector := mload(add(inner, 0x20)) }
   }
@@ -780,7 +828,15 @@ contract Lobby is
         || sel == ChessEngine.offerDraw.selector
         || sel == ChessEngine.respondDraw.selector
         || sel == ChessEngine.claimVictory.selector
-        || sel == ChessEngine.disputeGame.selector;
+        || sel == ChessEngine.disputeGame.selector
+        || sel == Lobby.createTable.selector
+        || sel == Lobby.joinTable.selector
+        || sel == Lobby.acceptChallenge.selector
+        || sel == Lobby.modifyChallenge.selector
+        || sel == Lobby.declineChallenge.selector
+        || sel == Lobby.closeTable.selector
+        || sel == Lobby.updateAgent.selector
+        || sel == Lobby.challenge.selector;
   }
 
   /*

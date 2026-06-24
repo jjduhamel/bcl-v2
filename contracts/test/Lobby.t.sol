@@ -71,7 +71,7 @@ abstract contract LobbyTest is Test, ILobby, IChessEngine {
   function totalWagers(address player) internal returns (uint) {
     address i = me.who();
     changePrank(player);
-    Escrow.EscrowStats memory stats = lobby.wagerStats(player, address(0));
+    EscrowLib.EscrowStats memory stats = lobby.wagerStats(player, address(0));
     changePrank(i);
     return stats.wagers;
   }
@@ -79,7 +79,7 @@ abstract contract LobbyTest is Test, ILobby, IChessEngine {
   function totalWinnings(address player) internal returns (uint) {
     address i = me.who();
     changePrank(player);
-    Escrow.EscrowStats memory stats = lobby.wagerStats(player, address(0));
+    EscrowLib.EscrowStats memory stats = lobby.wagerStats(player, address(0));
     changePrank(i);
     return stats.earnings;
   }
@@ -87,7 +87,7 @@ abstract contract LobbyTest is Test, ILobby, IChessEngine {
   function totalLosses(address player) internal returns (uint) {
     address i = me.who();
     changePrank(player);
-    Escrow.EscrowStats memory stats = lobby.wagerStats(player, address(0));
+    EscrowLib.EscrowStats memory stats = lobby.wagerStats(player, address(0));
     changePrank(i);
     return stats.losses;
   }
@@ -169,7 +169,7 @@ contract WageringEnabledTest is LobbyTest {
   }
 
   function testInsufficientDepositAmount() public {
-    vm.expectRevert(Escrow.InsufficientBalance.selector);
+    vm.expectRevert(EscrowLib.InsufficientBalance.selector);
     lobby.challenge{ value: wager/2 }(p1, p2, true, 60, wager, address(0));
   }
 
@@ -209,7 +209,7 @@ contract PlatformFeeTest is LobbyTest {
 
   function testNonAdminCannotSetFee() public {
     changePrank(p1);
-    vm.expectRevert(AdminOnly.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.setPlatformFee(5);
   }
 }
@@ -226,7 +226,7 @@ contract GasFeeTest is LobbyTest {
 
   function testNonAdminCannotSetGasFee() public {
     changePrank(p1);
-    vm.expectRevert(AdminOnly.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.setGasFee(15);
   }
 }
@@ -234,13 +234,13 @@ contract GasFeeTest is LobbyTest {
 contract EngineGetterPermissionsTest is LobbyTest {
   function testPlayerCantQueryAnotherDeposit() public {
     changePrank(p1);
-    vm.expectRevert(ArbiterOnly.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.checkPlayerDeposit(1, p2);
   }
 
   function testPlayerCantQueryOwnDepositViaTwoArgForm() public {
     changePrank(p1);
-    vm.expectRevert(ArbiterOnly.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.checkPlayerDeposit(1, p1);
   }
 
@@ -252,13 +252,13 @@ contract EngineGetterPermissionsTest is LobbyTest {
 
   function testPlayerCantQueryAnotherEarnings() public {
     changePrank(p1);
-    vm.expectRevert(AdminOnly.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.checkPlayerEarnings(p2, address(0));
   }
 
   function testPlayerCantQueryOwnEarningsViaTwoArgForm() public {
     changePrank(p1);
-    vm.expectRevert(AdminOnly.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.checkPlayerEarnings(p1, address(0));
   }
 

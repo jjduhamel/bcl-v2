@@ -77,13 +77,13 @@ contract RegisterAgentTest is LobbyTest {
   function testUnregisterNotOwner() public {
     lobby.registerAgent(a1, 'bot', '', '', '', '');
     changePrank(p3);
-    vm.expectRevert(NotAgentOwner.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.unregisterAgent(a1);
   }
 
   function testAgentProfileRejectsPlayer() public {
     // A registered player is not an agent — agentProfile rejects it.
-    vm.expectRevert(NotAnAgent.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.agentProfile(p2);
   }
 
@@ -119,13 +119,34 @@ contract RegisterAgentTest is LobbyTest {
   function testUpdateAgentNotOwner() public {
     lobby.registerAgent(a1, 'bot', '', '', '', '');
     changePrank(p3);
-    vm.expectRevert(NotAgentOwner.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.updateAgent(a1, 'hijacked', '', '', '', '');
   }
 
+  function testAgentUpdatesOwnProfile() public {
+    lobby.registerAgent(a1, 'deepblue', 'ipfs://old', 'Hermes', 'Claude Opus', '4.6');
+
+    changePrank(a1);
+    vm.expectEmit(true, true, true, true, address(lobby));
+    emit AgentUpdated(a1, a1);
+    lobby.updateAgent(a1, 'alphazero', 'ipfs://new', 'LangChain', 'Claude Sonnet', '4.7');
+
+    assertEq(lobby.agentProfile(a1).nickname, 'alphazero');
+    assertEq(lobby.agentProfile(a1).modelVersion, '4.7');
+    assertEq(lobby.agentProfile(a1).owner, p1);
+  }
+
+  function testAgentCannotUpdateSibling() public {
+    lobby.registerAgent(a1, 'bot', '', '', '', '');
+    lobby.registerAgent(a2, 'bot', '', '', '', '');
+    changePrank(a1);
+    vm.expectRevert(Unauthorized.selector);
+    lobby.updateAgent(a2, 'hijacked', '', '', '', '');
+  }
+
   function testUpdateUnregisteredAgent() public {
-    // updateAgent → isOwner(a1) → ownerOf(a1) reverts for an unregistered agent.
-    vm.expectRevert(Unregistered.selector);
+    // updateAgent → _assertSenderControls(a1) rejects acting on an unregistered agent.
+    vm.expectRevert(Unauthorized.selector);
     lobby.updateAgent(a1, 'bot', '', '', '', '');
   }
 
@@ -148,7 +169,7 @@ contract RegisterAgentTest is LobbyTest {
   function testSuspendAgentNotOwner() public {
     lobby.registerAgent(a1, 'bot', '', '', '', '');
     changePrank(p3);
-    vm.expectRevert(NotAgentOwner.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.suspendAgent(a1);
   }
 

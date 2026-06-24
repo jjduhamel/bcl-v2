@@ -57,8 +57,8 @@ contract RegisterPlayerTest is LobbyTest {
     changePrank(arbiter);
     lobby.allowChallenges(true);
     changePrank(u);
-    // isOwner(sender) → ownerOf(u) → isRegistered(u) reverts.
-    vm.expectRevert(Unregistered.selector);
+    // _assertSenderControls(u) rejects an unregistered sender acting as a seat.
+    vm.expectRevert(Unauthorized.selector);
     lobby.challenge(u, p2, true, timePerMove, 0, address(0));
   }
 
@@ -73,17 +73,17 @@ contract RegisterPlayerTest is LobbyTest {
   function testRegisterAgentRevertsUnregisteredOwner() public {
     changePrank(u);
     // Only registered players own agents.
-    vm.expectRevert(PlayerOnly.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.registerAgent(ag, 'bot', '', '', '', '');
   }
 
   function testPlayerProfileRevertsUnregistered() public {
-    vm.expectRevert(PlayerOnly.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.playerProfile(u);
   }
 
   function testAgentProfileRevertsUnregistered() public {
-    vm.expectRevert(NotAnAgent.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.agentProfile(u);
   }
 }

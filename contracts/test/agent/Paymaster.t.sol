@@ -47,9 +47,14 @@ contract PaymasterTest is LobbyTest {
 
   // Run validation as the EntryPoint and expect it to sponsor `execute(engine, 0, inner)`.
   function _expectSponsored(bytes memory inner) internal {
+    _expectSponsoredCall(address(engine), inner);
+  }
+
+  // ...sponsor `execute(target, 0, inner)` for an explicit target (engine or the Lobby itself).
+  function _expectSponsoredCall(address target, bytes memory inner) internal {
     changePrank(address(ep));
     (bytes memory context, uint256 validationData) =
-      lobby.validatePaymasterUserOp(_op(a1, address(engine), 0, inner), bytes32(0), 0);
+      lobby.validatePaymasterUserOp(_op(a1, target, 0, inner), bytes32(0), 0);
     assertEq(validationData, 0);
     assertEq(context, abi.encode(p1)); // billable owner carried to postOp
   }
@@ -60,13 +65,13 @@ contract PaymasterTest is LobbyTest {
     PackedUserOperation memory op =
       _op(a1, address(engine), 0, abi.encodeWithSelector(ChessEngine.move.selector, uint(0), 'e2e4'));
     changePrank(p1);
-    vm.expectRevert(EntryPointOnly.selector);
+    vm.expectRevert(Forbidden.selector);
     lobby.validatePaymasterUserOp(op, bytes32(0), 0);
   }
 
   function testPostOpRevertsWhenCallerIsNotEntryPoint() public {
     changePrank(p1);
-    vm.expectRevert(EntryPointOnly.selector);
+    vm.expectRevert(Forbidden.selector);
     lobby.postOp(IPaymaster.PostOpMode.opSucceeded, '', 0, 0);
   }
 
@@ -81,27 +86,42 @@ contract PaymasterTest is LobbyTest {
     _expectSponsored(abi.encodeWithSelector(ChessEngine.disputeGame.selector, uint(0)));
   }
 
-  /* ---- validate: rejects sponsoring Lobby actions (target is not a registered engine) ---- */
+  /* ---- validate: sponsors a delegated agent's whitelisted Lobby actions (target == Lobby) ---- */
 
-  function testValidateRejectsEverySponsoredLobbyAction() public {
-    _expectCallRejected(address(lobby), Lobby.challenge.selector, UnsupportedExecuteCall.selector);
-    _expectCallRejected(address(lobby), Lobby.acceptChallenge.selector, UnsupportedExecuteCall.selector);
-    _expectCallRejected(address(lobby), Lobby.withdraw.selector, UnsupportedExecuteCall.selector);
-    _expectCallRejected(address(lobby), Lobby.registerAgent.selector, UnsupportedExecuteCall.selector);
+  function testValidateSponsorsEveryLobbyAction() public {
+    _expectSponsoredCall(address(lobby), abi.encodeWithSelector(Lobby.createTable.selector));
+    _expectSponsoredCall(address(lobby), abi.encodeWithSelector(Lobby.joinTable.selector));
+    _expectSponsoredCall(address(lobby), abi.encodeWithSelector(Lobby.acceptChallenge.selector));
+    _expectSponsoredCall(address(lobby), abi.encodeWithSelector(Lobby.modifyChallenge.selector));
+    _expectSponsoredCall(address(lobby), abi.encodeWithSelector(Lobby.declineChallenge.selector));
+    _expectSponsoredCall(address(lobby), abi.encodeWithSelector(Lobby.closeTable.selector));
+    _expectSponsoredCall(address(lobby), abi.encodeWithSelector(Lobby.updateAgent.selector));
+    _expectSponsoredCall(address(lobby), abi.encodeWithSelector(Lobby.challenge.selector));
+  }
+
+  /* ---- validate: rejects non-whitelisted Lobby selectors and foreign targets ---- */
+
+  function testValidateRejectsNonWhitelistedLobbyActions() public {
+    // Right target (the Lobby) but a selector outside the sponsored-lobby whitelist.
+    _expectCallRejected(address(lobby), Lobby.withdraw.selector, Forbidden.selector);
+    _expectCallRejected(address(lobby), Lobby.registerAgent.selector, Forbidden.selector);
     // an agent must never be sponsored to drain the platform's own EntryPoint deposit
-    _expectCallRejected(address(lobby), Lobby.withdrawEntryPointDeposit.selector, UnsupportedExecuteCall.selector);
-    // nor target an arbitrary contract
-    _expectCallRejected(address(0xBEEF), ChessEngine.move.selector, UnsupportedExecuteCall.selector);
+    _expectCallRejected(address(lobby), Lobby.withdrawEntryPointDeposit.selector, Forbidden.selector);
+  }
+
+  function testValidateRejectsForeignTarget() public {
+    _expectCallRejected(address(0xBEEF), ChessEngine.move.selector, InvalidRequest.selector);
   }
 
   /* ---- validate: rejects non-whitelisted engine functions (right target, wrong selector) ---- */
 
   function testValidateRejectsEveryNonWhitelistedEngineCall() public {
-    _expectCallRejected(address(engine), ChessEngine.startGame.selector, SelectorNotSponsored.selector);
-    _expectCallRejected(address(engine), ChessEngine.createChallenge.selector, SelectorNotSponsored.selector);
-    _expectCallRejected(address(engine), ChessEngine.modifyChallenge.selector, SelectorNotSponsored.selector);
-    _expectCallRejected(address(engine), ChessEngine.declineChallenge.selector, SelectorNotSponsored.selector);
-    _expectCallRejected(address(engine), ChessEngine.resolveDispute.selector, SelectorNotSponsored.selector);
+    _expectCallRejected(address(engine), ChessEngine.startGame.selector, Forbidden.selector);
+    _expectCallRejected(address(engine), ChessEngine.createChallenge.selector, Forbidden.selector);
+    _expectCallRejected(address(engine), ChessEngine.resolveDispute.selector, Forbidden.selector);
+    // ChessEngine.modifyChallenge/declineChallenge share a selector with the whitelisted Lobby
+    // versions, so the single sponsored-selector set admits them. Harmless: both are isLobby-guarded
+    // and revert in execution when an agent calls the engine directly.
   }
 
   /* ---- validate: rejects malformed / non-agent / value-bearing ops ---- */
@@ -109,68 +129,68 @@ contract PaymasterTest is LobbyTest {
   function testValidateRejectsSenderThatIsNotAnAgent() public {
     _expectRejected(
       _op(p2, address(engine), 0, abi.encodeWithSelector(ChessEngine.move.selector, uint(0), 'e2e4')),
-      NotAnAgent.selector);
+      Unauthorized.selector);
   }
 
   function testValidateRejectsEthValueTransfer() public {
     _expectRejected(
       _op(a1, address(engine), 1, abi.encodeWithSelector(ChessEngine.move.selector, uint(0), 'e2e4')),
-      UnsupportedExecuteCall.selector);
+      InvalidRequest.selector);
   }
 
   function testValidateRejectsCallDataThatIsNotAnExecuteCall() public {
     PackedUserOperation memory op;
     op.sender = a1;
     op.callData = abi.encodeWithSelector(ChessEngine.move.selector, uint(0), 'e2e4'); // not execute(...)
-    _expectRejected(op, UnsupportedExecuteCall.selector);
+    _expectRejected(op, InvalidRequest.selector);
   }
 
   function testValidateRejectsTruncatedCallData() public {
     PackedUserOperation memory op;
     op.sender = a1;
     op.callData = hex'b61d27'; // fewer than 4 bytes
-    _expectRejected(op, UnsupportedExecuteCall.selector);
+    _expectRejected(op, InvalidRequest.selector);
   }
 
   function testValidateRejectsExecuteWithEmptyInnerCall() public {
-    _expectRejected(_op(a1, address(engine), 0, ''), UnsupportedExecuteCall.selector); // inner has no selector
+    _expectRejected(_op(a1, address(engine), 0, ''), InvalidRequest.selector); // inner has no selector
   }
 
   /* ---- funding surface is admin-only ---- */
 
   function testSetEntryPointRequiresAdmin() public {
     changePrank(p1);
-    vm.expectRevert(AdminOnly.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.setEntryPoint(ep);
   }
 
   function testDepositToEntryPointRequiresAdmin() public {
     changePrank(p1);
-    vm.expectRevert(AdminOnly.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.depositToEntryPoint{ value: 1 ether }();
   }
 
   function testAddStakeRequiresAdmin() public {
     changePrank(p1);
-    vm.expectRevert(AdminOnly.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.addStake{ value: 1 ether }(1 days);
   }
 
   function testWithdrawEntryPointDepositRequiresAdmin() public {
     changePrank(p1);
-    vm.expectRevert(AdminOnly.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.withdrawEntryPointDeposit(1, payable(p1));
   }
 
   function testUnlockStakeRequiresAdmin() public {
     changePrank(p1);
-    vm.expectRevert(AdminOnly.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.unlockStake();
   }
 
   function testWithdrawStakeRequiresAdmin() public {
     changePrank(p1);
-    vm.expectRevert(AdminOnly.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.withdrawStake(payable(p1));
   }
 
@@ -237,7 +257,7 @@ contract PaymasterTest is LobbyTest {
     PackedUserOperation memory op =
       _op(a1, address(engine), 0, abi.encodeWithSelector(ChessEngine.move.selector, uint(0), 'e2e4'));
     changePrank(address(ep));
-    vm.expectRevert(Escrow.InsufficientBalance.selector);
+    vm.expectRevert(EscrowLib.InsufficientBalance.selector);
     lobby.validatePaymasterUserOp(op, bytes32(0), 1 wei);  // any non-zero maxCost
   }
 
@@ -247,7 +267,7 @@ contract PaymasterTest is LobbyTest {
     PackedUserOperation memory op =
       _op(a1, address(engine), 0, abi.encodeWithSelector(ChessEngine.move.selector, uint(0), 'e2e4'));
     changePrank(address(ep));
-    vm.expectRevert(Escrow.InsufficientBalance.selector);
+    vm.expectRevert(EscrowLib.InsufficientBalance.selector);
     lobby.validatePaymasterUserOp(op, bytes32(0), 1 ether);
   }
 

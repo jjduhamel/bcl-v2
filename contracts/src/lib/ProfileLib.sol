@@ -22,9 +22,9 @@ library ProfileLib {
     bool    active;
     string  nickname;
     string  avatar;           // Avatar URI
-    string  agentFramework;   // e.g. Hermes
-    string  baseModel;        // e.g. Claude Opus
-    string  modelVersion;     // e.g. 4.7
+    string  agentFramework;   // e.g. Openclaw / Hermes
+    string  baseModel;        // e.g. Claude Opus 4.8
+    string  modelVersion;     // e.g. Stockfish
     uint40  createdAt;
   }
 
@@ -70,7 +70,8 @@ library ProfileLib {
     string calldata username,
     string calldata avatar
   ) public {
-    update(profile, username, avatar);
+    profile.username = username;
+    profile.avatar = avatar;
     profile.createdAt = uint40(block.timestamp);
   }
 
@@ -106,7 +107,11 @@ library ProfileLib {
   ) public {
     profile.owner = owner;
     profile.active = true;
-    update(profile, nickname, avatar, agentFramework, baseModel, modelVersion);
+    profile.nickname = nickname;
+    profile.avatar = avatar;
+    profile.agentFramework = agentFramework;
+    profile.baseModel = baseModel;
+    profile.modelVersion = modelVersion;
     profile.createdAt = uint40(block.timestamp);
   }
 

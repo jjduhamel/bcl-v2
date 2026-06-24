@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 import '@forge/Test.sol';
-//import '@src/lib/GameIDToTokenDepositMap.sol';
 import './Escrow.t.sol';
 import './MockERC20Token.sol';
 
@@ -13,20 +12,20 @@ contract EscrowERC20DisburseTest is EscrowTest {
 
   function testWhiteWins() public {
     _disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
-    assertEq(availableBalance(p1, address(token)), 2 * wager);
-    assertEq(availableBalance(p2, address(token)), 0);
+    assertEq(availableFunds(p1, address(token)), 2 * wager);
+    assertEq(availableFunds(p2, address(token)), 0);
   }
 
   function testBlackWins() public {
     _disburse(p1, p2, gameId, IChessEngine.GameOutcome.BlackWon);
-    assertEq(availableBalance(p1, address(token)), 0);
-    assertEq(availableBalance(p2, address(token)), 2 * wager);
+    assertEq(availableFunds(p1, address(token)), 0);
+    assertEq(availableFunds(p2, address(token)), 2 * wager);
   }
 
   function testDraw() public {
     _disburse(p1, p2, gameId, IChessEngine.GameOutcome.Draw);
-    assertEq(availableBalance(p1, address(token)), wager);
-    assertEq(availableBalance(p2, address(token)), wager);
+    assertEq(availableFunds(p1, address(token)), wager);
+    assertEq(availableFunds(p2, address(token)), wager);
   }
 
   function testDisburseClearsEscrow() public {
@@ -44,20 +43,20 @@ contract EscrowETHDisburseTest is EscrowETHTest {
 
   function testWhiteWins() public {
     _disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
-    assertEq(availableBalance(p1, address(0)), 2 * wager);
-    assertEq(availableBalance(p2, address(0)), 0);
+    assertEq(availableFunds(p1, address(0)), 2 * wager);
+    assertEq(availableFunds(p2, address(0)), 0);
   }
 
   function testBlackWins() public {
     _disburse(p1, p2, gameId, IChessEngine.GameOutcome.BlackWon);
-    assertEq(availableBalance(p1, address(0)), 0);
-    assertEq(availableBalance(p2, address(0)), 2 * wager);
+    assertEq(availableFunds(p1, address(0)), 0);
+    assertEq(availableFunds(p2, address(0)), 2 * wager);
   }
 
   function testDraw() public {
     _disburse(p1, p2, gameId, IChessEngine.GameOutcome.Draw);
-    assertEq(availableBalance(p1, address(0)), wager);
-    assertEq(availableBalance(p2, address(0)), wager);
+    assertEq(availableFunds(p1, address(0)), wager);
+    assertEq(availableFunds(p2, address(0)), wager);
   }
 
   function testDisburseClearsEscrow() public {
@@ -84,25 +83,25 @@ contract EscrowMixedTokenDisburseTest is EscrowETHTest {
 
   function testWhiteWinsGetsBothTokens() public {
     _disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
-    assertEq(availableBalance(p1, address(0)), wager);
-    assertEq(availableBalance(p1, address(token2)), wager);
-    assertEq(availableBalance(p2, address(0)), 0);
-    assertEq(availableBalance(p2, address(token2)), 0);
+    assertEq(availableFunds(p1, address(0)), wager);
+    assertEq(availableFunds(p1, address(token2)), wager);
+    assertEq(availableFunds(p2, address(0)), 0);
+    assertEq(availableFunds(p2, address(token2)), 0);
   }
 
   function testBlackWinsGetsBothTokens() public {
     _disburse(p1, p2, gameId, IChessEngine.GameOutcome.BlackWon);
-    assertEq(availableBalance(p2, address(0)), wager);
-    assertEq(availableBalance(p2, address(token2)), wager);
-    assertEq(availableBalance(p1, address(0)), 0);
-    assertEq(availableBalance(p1, address(token2)), 0);
+    assertEq(availableFunds(p2, address(0)), wager);
+    assertEq(availableFunds(p2, address(token2)), wager);
+    assertEq(availableFunds(p1, address(0)), 0);
+    assertEq(availableFunds(p1, address(token2)), 0);
   }
 
   function testDrawEachKeepsOwnToken() public {
     _disburse(p1, p2, gameId, IChessEngine.GameOutcome.Draw);
-    assertEq(availableBalance(p1, address(0)), wager);
-    assertEq(availableBalance(p1, address(token2)), 0);
-    assertEq(availableBalance(p2, address(token2)), wager);
-    assertEq(availableBalance(p2, address(0)), 0);
+    assertEq(availableFunds(p1, address(0)), wager);
+    assertEq(availableFunds(p1, address(token2)), 0);
+    assertEq(availableFunds(p2, address(token2)), wager);
+    assertEq(availableFunds(p2, address(0)), 0);
   }
 }

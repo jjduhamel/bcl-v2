@@ -33,12 +33,12 @@ contract CreateChallengeTest is ChallengeTest {
   }
 
   function testChallengeFailsWithNoDeposit() public {
-    vm.expectRevert(Escrow.InsufficientBalance.selector);
+    vm.expectRevert(EscrowLib.InsufficientBalance.selector);
     lobby.challenge(p1, p2, true, timePerMove, wager, address(0));
   }
 
   function testChallengeFailsWithLowDeposit() public {
-    vm.expectRevert(Escrow.InsufficientBalance.selector);
+    vm.expectRevert(EscrowLib.InsufficientBalance.selector);
     lobby.challenge{ value: wager-1 }(p1, p2, true, timePerMove, wager, address(0));
   }
 

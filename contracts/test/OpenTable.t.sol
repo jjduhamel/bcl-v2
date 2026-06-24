@@ -216,7 +216,7 @@ contract OpenTableTest is ChallengeTest {
     changePrank(p2);
     lobby.joinTable(id, p2);
     changePrank(p3);
-    vm.expectRevert(NotAnOpenTable.selector);
+    vm.expectRevert(Forbidden.selector);
     lobby.joinTable(id, p3);
   }
 
@@ -225,7 +225,7 @@ contract OpenTableTest is ChallengeTest {
     uint id = _open(0);
     address stranger = makeAddr('stranger');
     changePrank(stranger);
-    vm.expectRevert(Unregistered.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.joinTable(id, stranger);
   }
 
@@ -248,7 +248,7 @@ contract OpenTableTest is ChallengeTest {
     uint id = _open(wager);
     assertEq(p1.balance, balBefore - wager);
 
-    lobby.revokeTable(id);
+    lobby.closeTable(id);
     lobby.withdraw(address(0));
     assertEq(p1.balance, balBefore);
 
@@ -260,7 +260,7 @@ contract OpenTableTest is ChallengeTest {
     uint id = _open(0);
     vm.expectEmit(false, true, true, true, address(lobby));
     emit TableClosed(0, p1);
-    lobby.revokeTable(id);
+    lobby.closeTable(id);
   }
 
   // join() removes the table from challenges(address(0)); the registry guard then closes revoke.
@@ -269,30 +269,30 @@ contract OpenTableTest is ChallengeTest {
     changePrank(p2);
     lobby.joinTable(id, p2);
     changePrank(p1);
-    vm.expectRevert(NotAnOpenTable.selector);
-    lobby.revokeTable(id);
+    vm.expectRevert(Forbidden.selector);
+    lobby.closeTable(id);
   }
 
   // A named challenge was never in challenges(address(0)).
   function testRevokeNamedChallengeReverts() public {
     uint id = lobby.challenge(p1, p2, true, timePerMove, 0, address(0));
-    vm.expectRevert(NotAnOpenTable.selector);
-    lobby.revokeTable(id);
+    vm.expectRevert(Forbidden.selector);
+    lobby.closeTable(id);
   }
 
   function testRevokeBySpectatorReverts() public {
     uint id = _open(0);
     changePrank(p3);
-    vm.expectRevert(PlayerOnly.selector);
-    lobby.revokeTable(id);
+    vm.expectRevert(Unauthorized.selector);
+    lobby.closeTable(id);
   }
 
   function testRevokeUnregisteredReverts() public {
     uint id = _open(0);
     address stranger = makeAddr('stranger');
     changePrank(stranger);
-    vm.expectRevert(Unregistered.selector);
-    lobby.revokeTable(id);
+    vm.expectRevert(Unauthorized.selector);
+    lobby.closeTable(id);
   }
 
   // closeTable: arbiter-elevated teardown of any open table. Refund still goes to the creator.
@@ -326,7 +326,7 @@ contract OpenTableTest is ChallengeTest {
   function testCloseByNonArbiterReverts() public {
     uint id = _open(0);
     changePrank(p2);
-    vm.expectRevert(ArbiterOnly.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.closeTable(id);
   }
 
@@ -336,14 +336,14 @@ contract OpenTableTest is ChallengeTest {
     changePrank(p2);
     lobby.joinTable(id, p2);
     changePrank(arbiter);
-    vm.expectRevert(NotAnOpenTable.selector);
+    vm.expectRevert(Forbidden.selector);
     lobby.closeTable(id);
   }
 
   function testCloseNamedChallengeReverts() public {
     uint id = lobby.challenge(p1, p2, true, timePerMove, 0, address(0));
     changePrank(arbiter);
-    vm.expectRevert(NotAnOpenTable.selector);
+    vm.expectRevert(Forbidden.selector);
     lobby.closeTable(id);
   }
 }

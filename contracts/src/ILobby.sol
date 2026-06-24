@@ -36,23 +36,19 @@ interface ILobby {
   event AgentResumed(address indexed owner
                    , address indexed agent);
 
-  error ChessEngineOnly();
-  error GameEngineOnly();
   error ChallengingDisabled();
   error WageringDisabled();
   error UserBanned();
-  error AdminOnly();
-  error Unregistered();
-  error AlreadyRegistered();
-  error InvalidPlayer();
-  error NotAnOpenTable();
-  error NotAgentOwner();
-  error WagerExceedsAgentMax();
   error AgentInGame();
 
+  error InvalidWager();
+  error InvalidRequest();
+  error Forbidden();
+  error Unauthorized();
+  error Unregistered();
+  error AlreadyRegistered();
+
   // ERC-4337 paymaster
-  error EntryPointOnly();
-  error NotAnAgent();
   error UnsupportedExecuteCall();
   error SelectorNotSponsored();
 }
