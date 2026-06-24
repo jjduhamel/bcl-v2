@@ -236,19 +236,19 @@ contract PaymasterTest is LobbyTest {
     address a2 = makeAddr('agent2');
     lobby.registerAgent{value: 1 ether}(a2, 'bot', '', '', '', '');
     changePrank(arbiter);
-    assertEq(lobby.checkPlayerEarnings(p1, address(0)), 1 ether);
+    assertEq(uint(checkPlayerEarnings(p1, address(0))), 1 ether);
   }
 
   function testRegisterAgentZeroValueLeavesAvailableAtZero() public view {
     // setUp registered a1 with no value — owner's gas pot stays empty.
-    assertEq(lobby.checkPlayerEarnings(p1, address(0)), 0);
+    assertEq(uint(checkPlayerEarnings(p1, address(0))), 0);
   }
 
   function testDepositCreditsOwnerGasBalance() public {
     changePrank(p1);
     lobby.deposit{value: 0.5 ether}(0.5 ether, address(0));
     changePrank(arbiter);
-    assertEq(lobby.checkPlayerEarnings(p1, address(0)), 0.5 ether);
+    assertEq(uint(checkPlayerEarnings(p1, address(0))), 0.5 ether);
   }
 
   /* ---- S1: validate gates on owner's available balance vs maxCost ---- */
@@ -293,8 +293,8 @@ contract PaymasterTest is LobbyTest {
     changePrank(address(ep));
     lobby.postOp(IPaymaster.PostOpMode.opSucceeded, abi.encode(p1), 0.1 ether, 1 gwei);
     changePrank(arbiter);
-    assertEq(lobby.checkPlayerEarnings(p1, address(0)), 0.89 ether);
-    assertEq(lobby.platformBalance(address(0)), 0.11 ether);
+    assertEq(uint(checkPlayerEarnings(p1, address(0))), 0.89 ether);
+    assertEq(uint(lobby.platformBalance(address(0))), 0.11 ether);
   }
 
   function testPostOpBillsOpReverted() public {
@@ -303,26 +303,39 @@ contract PaymasterTest is LobbyTest {
     changePrank(address(ep));
     lobby.postOp(IPaymaster.PostOpMode.opReverted, abi.encode(p1), 0.1 ether, 1 gwei);
     changePrank(arbiter);
-    assertEq(lobby.checkPlayerEarnings(p1, address(0)), 0.89 ether);
-    assertEq(lobby.platformBalance(address(0)), 0.11 ether);
+    assertEq(uint(checkPlayerEarnings(p1, address(0))), 0.89 ether);
+    assertEq(uint(lobby.platformBalance(address(0))), 0.11 ether);
   }
 
-  function testPostOpSaturatesWhenCostExceedsAvailable() public {
+  function testPostOpChargesFullIntoDebtWhenCostExceedsAvailable() public {
     changePrank(p1);
     lobby.deposit{value: 0.05 ether}(0.05 ether, address(0));
     changePrank(address(ep));
     lobby.postOp(IPaymaster.PostOpMode.opSucceeded, abi.encode(p1), 1 ether, 1 gwei); // no revert
     changePrank(arbiter);
-    assertEq(lobby.checkPlayerEarnings(p1, address(0)), 0);
-    assertEq(lobby.platformBalance(address(0)), 0.05 ether);
+    // charge = 1 + gasFee(1) = 1.1; owner had 0.05, so 0.05 is realized to the pot and the rest
+    // becomes gas debt (negative balance).
+    assertEq(checkPlayerEarnings(p1, address(0)), -int(1.05 ether));
+    assertEq(uint(lobby.platformBalance(address(0))), 0.05 ether);
   }
 
-  function testPostOpZeroAvailableIsNoop() public {
+  function testPostOpZeroAvailableGoesFullyIntoDebt() public {
     changePrank(address(ep));
     lobby.postOp(IPaymaster.PostOpMode.opSucceeded, abi.encode(p1), 1 ether, 1 gwei); // no revert
     changePrank(arbiter);
-    assertEq(lobby.checkPlayerEarnings(p1, address(0)), 0);
-    assertEq(lobby.platformBalance(address(0)), 0);
+    assertEq(checkPlayerEarnings(p1, address(0)), -int(1.1 ether));
+    assertEq(uint(lobby.platformBalance(address(0))), 0);
+  }
+
+  function testGasDebtRecoveredOnNextDeposit() public {
+    changePrank(address(ep));
+    lobby.postOp(IPaymaster.PostOpMode.opSucceeded, abi.encode(p1), 1 ether, 1 gwei); // p1 owes 1.1
+    changePrank(p1);
+    lobby.deposit{value: 2 ether}(2 ether, address(0));
+    changePrank(arbiter);
+    // 1.1 of the deposit repays the platform first; 0.9 is left spendable.
+    assertEq(checkPlayerEarnings(p1, address(0)), int(0.9 ether));
+    assertEq(uint(lobby.platformBalance(address(0))), 1.1 ether);
   }
 
   function testPlatformPotIsWithdrawableAfterCharge() public {
@@ -335,6 +348,6 @@ contract PaymasterTest is LobbyTest {
     uint balanceBefore = arbiter.balance;
     lobby.withdrawPlatformFunds(address(0), payable(arbiter));
     assertEq(arbiter.balance, balanceBefore + 0.33 ether);
-    assertEq(lobby.platformBalance(address(0)), 0);
+    assertEq(uint(lobby.platformBalance(address(0))), 0);
   }
 }

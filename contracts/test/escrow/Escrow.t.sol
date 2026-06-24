@@ -59,6 +59,14 @@ abstract contract EscrowTest is EscrowWrapper, Test {
     _fund(player, amount, tok);
     _lock(player, id, amount, tok);
   }
+
+  // Mirrors Lobby.finishGame's escrow flow: refund both stakes, award the loser's net stake.
+  function _disburse(address white, address black, uint id, IChessEngine.GameOutcome outcome) internal {
+    TokenDeposit memory wPrize = _refund(white, id);
+    TokenDeposit memory bPrize = _refund(black, id);
+    if (outcome == IChessEngine.GameOutcome.WhiteWon) _award(white, black, bPrize);
+    else if (outcome == IChessEngine.GameOutcome.BlackWon) _award(black, white, wPrize);
+  }
 }
 
 abstract contract EscrowETHTest is EscrowTest {

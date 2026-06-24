@@ -3,18 +3,16 @@ pragma solidity >=0.4.22 <0.9.0;
 import '@oz/token/ERC20/IERC20.sol';
 import '@oz/token/ERC20/utils/SafeERC20.sol';
 import '@oz/utils/Arrays.sol';
+import '@oz/utils/math/Math.sol';
+import '@oz/utils/math/SignedMath.sol';
 import '../IChessEngine.sol';
 import './TokenDeposit.sol';
 import './EnumMap.sol';
 
-// Escrow accounting + custody as an external (linked) library: heavy EnumerableMap machinery is
-// deployed once and delegatecall-linked out of the calling contract's bytecode. Every function runs
-// in the caller's context (delegatecall preserves address(this) and msg.value), so funds and state
-// live on the caller — `EscrowWrapper` below holds the per-player `EscrowAccount` mapping and
-// exposes thin wrappers. Library is transfer-free: ERC20 transferFrom is performed by the wrapper.
 library EscrowLib {
   using SafeERC20 for IERC20;
   using EnumMap for EnumMap.AddressUintMap;
+  using EnumMap for EnumMap.AddressIntMap;
   using EnumMap for EnumMap.UintTokenDepositMap;
 
   error EscrowLocked();
@@ -39,9 +37,9 @@ library EscrowLib {
     // gameId -> per-game locked deposit
     EnumMap.UintTokenDepositMap __accounts;
     // token -> total locked across games (cache of Σ __accounts; backs total/locked reads)
-    EnumMap.AddressUintMap __restricted;
-    // token -> withdrawable balance
-    EnumMap.AddressUintMap __available;
+    EnumMap.AddressUintMap __locked;
+    // token -> withdrawable balance (signed; negative == gas debt owed to the platform)
+    EnumMap.AddressIntMap __unlocked;
     mapping(address => EscrowStats) __gross;
   }
 
@@ -53,29 +51,34 @@ library EscrowLib {
     return escrow.__accounts.keys();
   }
 
-  // Every token the account holds a position in: withdrawable (__available) plus any held only as
-  // locked stake (__restricted) with nothing withdrawable.
+  // Every token the account holds a position in: withdrawable (__unlocked) plus any held only as
+  // locked stake (__locked) with nothing withdrawable.
   function tokens(EscrowAccount storage escrow) internal view returns (address[] memory) {
-    uint a = escrow.__available.length();
-    address[] memory locked = escrow.__restricted.keys();
-    address[] memory out = new address[](a + locked.length);
-    for (uint i = 0; i < a; i++) (out[i], ) = escrow.__available.at(i);
+    uint a = escrow.__unlocked.length();
+    address[] memory lockedKeys = escrow.__locked.keys();
+    address[] memory out = new address[](a + lockedKeys.length);
+    for (uint i = 0; i < a; i++) (out[i], ) = escrow.__unlocked.at(i);
     uint n = a;
-    for (uint i = 0; i < locked.length; i++)
-      if (!escrow.__available.contains(locked[i])) out[n++] = locked[i];
+    for (uint i = 0; i < lockedKeys.length; i++)
+      if (!escrow.__unlocked.contains(lockedKeys[i])) out[n++] = lockedKeys[i];
     return Arrays.splice(out, 0, n);
   }
 
+  function locked(EscrowAccount storage escrow, address token) internal view returns (uint) {
+    return escrow.__locked.get(token);
+  }
+
+  function unlocked(EscrowAccount storage escrow, address token) internal view returns (int) {
+    return escrow.__unlocked.get(token);
+  }
+
+  // Spendable balance — `available` clamped to zero (a gas-debt account can't spend its debt).
   function available(EscrowAccount storage escrow, address token) internal view returns (uint) {
-    return escrow.__available.get(token);
+    return uint(SignedMath.max(unlocked(escrow, token), 0));
   }
 
-  function restricted(EscrowAccount storage escrow, address token) internal view returns (uint) {
-    return escrow.__restricted.get(token);
-  }
-
-  function total(EscrowAccount storage escrow, address token) internal view returns (uint) {
-    return available(escrow, token) + restricted(escrow, token);
+  function total(EscrowAccount storage escrow, address token) internal view returns (int) {
+    return unlocked(escrow, token) + int(locked(escrow, token));
   }
 
   /*
@@ -85,42 +88,43 @@ library EscrowLib {
 
   // Debit increases this account's available balance.
   function debit(EscrowAccount storage escrow, uint amount, address token) internal {
-    uint avail = available(escrow, token);
-    escrow.__available.set(token, avail + amount);
+    escrow.__unlocked.add(token, amount);
   }
 
-  // Credit reduces this account's available balance.
+  // Credit reduces this account's available balance, guarding against an overdraw.
   function credit(EscrowAccount storage escrow, uint amount, address token) internal {
-    uint avail = available(escrow, token);
-    if (amount > avail) revert InsufficientBalance();
-    escrow.__available.set(token, avail - amount);
+    if (amount > available(escrow, token)) revert InsufficientBalance();
+    escrow.__unlocked.sub(token, amount);
+  }
+
+  // Like credit but without the overdraw guard; the balance may go negative. Used to charge gas
+  // (a negative balance is gas debt, recovered from the account's next ETH inflow) and to move a
+  // loser's stake out of an account that may already carry gas debt.
+  function unsafeCredit(EscrowAccount storage escrow, uint amount, address token) internal {
+    escrow.__unlocked.sub(token, amount);
   }
 
   /*
-   * Lock / release — move between __available and __accounts (per-game restricted).
+   * Lock / release — move between __unlocked and __accounts (per-game restricted).
    */
 
   function lock(EscrowAccount storage escrow, uint gameId, uint amount, address token) internal {
     TokenDeposit memory d = account(escrow, gameId);
-    uint avail = available(escrow, token);
-    uint locked = restricted(escrow, token);
     uint total = d.amount + amount;
-    if (avail < amount) revert InsufficientBalance();
+    if (amount > available(escrow, token)) revert InsufficientBalance();
     if (d.amount > 0 && d.token != token) revert InvalidToken();
     if (total > type(uint96).max) revert AmountOverflow();
     escrow.__accounts.set(gameId, token, total);
-    escrow.__available.set(token, avail - amount);
-    escrow.__restricted.set(token, locked + amount);
+    escrow.__unlocked.sub(token, amount);
+    escrow.__locked.add(token, amount);
   }
 
   function release(EscrowAccount storage escrow, uint gameId, uint amount) internal {
     TokenDeposit memory d = account(escrow, gameId);
     if (amount > d.amount) revert InsufficientBalance();
-    uint avail = available(escrow, d.token);
-    uint locked = restricted(escrow, d.token);
-    escrow.__accounts.set(gameId, d.token, d.amount - amount);   // prunes when fully released
-    escrow.__available.set(d.token, avail + amount);
-    escrow.__restricted.set(d.token, locked - amount);
+    escrow.__accounts.set(gameId, d.token, d.amount - amount);
+    escrow.__unlocked.add(d.token, amount);
+    escrow.__locked.sub(d.token, amount);
   }
 
   function release(EscrowAccount storage escrow, uint gameId) internal {
@@ -147,17 +151,24 @@ abstract contract EscrowWrapper {
     return __escrow[account].account(gameId);
   }
 
-  // Withdrawable (unrestricted) balance.
-  function availableFunds(address account, address token) internal view returns (uint) {
+  function tokenDeposits(address account) internal view returns (address[] memory) {
+    return __escrow[account].tokens();
+  }
+
+  function lockedBalance(address account, address token) internal view returns (uint) {
+    return __escrow[account].locked(token);
+  }
+
+  function unlockedBalance(address account, address token) internal view returns (int) {
+    return __escrow[account].unlocked(token);
+  }
+
+  function availableBalance(address account, address token) internal view returns (uint) {
     return __escrow[account].available(token);
   }
 
-  function totalBalance(address account, address token) internal view returns (uint) {
+  function totalBalance(address account, address token) internal view returns (int) {
     return __escrow[account].total(token);
-  }
-
-  function tokens(address account) internal view returns (address[] memory) {
-    return __escrow[account].tokens();
   }
 
   function escrowStats(address account, address token) public view
@@ -165,22 +176,24 @@ abstract contract EscrowWrapper {
     return __escrow[account].__gross[token];
   }
 
-  function _refund(address account, uint gameId) internal {
+  // Returns the deposit reduced by any gas debt skimmed to the platform — i.e. the prize to award.
+  function _refund(address account, uint gameId, uint amount) internal returns (TokenDeposit memory) {
     TokenDeposit memory d = __escrow[account].account(gameId);
-    if (d.amount > 0) _refund(account, gameId, d.amount);
-  }
-
-  function _refund(address account, uint gameId, uint amount) internal {
-    TokenDeposit memory d = __escrow[account].account(gameId);
-    if (amount > d.amount) revert EscrowLib.InsufficientBalance();
-    __escrow[account].release(gameId, amount);
-  }
-
-  function _refundExcess(address account, uint gameId, uint expected) internal {
-    TokenDeposit memory d = __escrow[account].account(gameId);
-    if (d.amount > expected) {
-      _refund(account, gameId, d.amount - expected);
+    if (d.token == address(0)) {
+      d.amount -= uint96(_settleGasDebt(account, amount));
     }
+    __escrow[account].release(gameId, amount);
+    return d;
+  }
+
+  function _refund(address account, uint gameId) internal returns (TokenDeposit memory) {
+    TokenDeposit memory d = __escrow[account].account(gameId);
+    return (d.amount > 0) ? _refund(account, gameId, d.amount) : TokenDeposit(d.token, 0);
+  }
+
+  function _refundExcess(address account, uint gameId, uint expected) internal returns (TokenDeposit memory) {
+    TokenDeposit memory d = __escrow[account].account(gameId);
+    return (d.amount > expected) ? _refund(account, gameId, d.amount - expected) : TokenDeposit(d.token, 0);
   }
 
   function _transfer(address receiver, uint amount, address token) private {
@@ -197,6 +210,7 @@ abstract contract EscrowWrapper {
 
     if (token == address(0)) {
       if (msg.value != amount) revert EscrowLib.InvalidDeposit();
+      _settleGasDebt(account, amount);
     } else {
       IERC20(token).safeTransferFrom(account, address(this), amount);
     }
@@ -206,10 +220,6 @@ abstract contract EscrowWrapper {
   }
 
   function _withdraw(address account, uint amount, address token) internal {
-    uint avail = __escrow[account].available(token);
-    if (amount > avail) revert EscrowLib.InsufficientBalance();
-    // CEI: state updates before the external transfer so a reentrant receiver
-    // can't observe stale balance and double-spend.
     __escrow[account].credit(amount, token);
     __escrow[account].__gross[token].withdrawals += amount;
     __escrow[address(0)].__gross[token].withdrawals += amount;
@@ -217,14 +227,12 @@ abstract contract EscrowWrapper {
   }
 
   function _withdraw(address account, address token) internal {
-    uint avail = __escrow[account].available(token);
-    if (avail == 0) revert EscrowLib.InsufficientBalance();
-    _withdraw(account, avail, token);
+    int avail = __escrow[account].unlocked(token);
+    if (avail <= 0) return;     // nothing withdrawable (and never while in gas debt)
+    _withdraw(account, uint(avail), token);
   }
 
   function _lock(address account, uint gameId, uint amount, address token) internal {
-    uint avail = __escrow[account].available(token);
-    if (amount > avail) revert EscrowLib.InsufficientBalance();
     __escrow[account].lock(gameId, amount, token);
     __escrow[account].__gross[token].wagers += amount;
     __escrow[address(0)].__gross[token].wagers += amount;
@@ -237,13 +245,11 @@ abstract contract EscrowWrapper {
     uint extra = amount-locked;
 
     // For ERC20, deposit any amount over available balance
-    uint balance = availableFunds(account, token);
-    if (balance < extra) {
-      // Player can complete ERC20 for own account here
+    int balance = unlockedBalance(account, token);
+    if (balance < int(extra)) {
+      // Player can complete ERC20 for own account here (ERC20 balance is never negative)
       if (account == msg.sender && token != address(0)) {
-        _deposit(account, extra-balance, token);
-      } else {
-        revert EscrowLib.InsufficientBalance();
+        _deposit(account, extra - uint(balance), token);
       }
     }
 
@@ -251,36 +257,12 @@ abstract contract EscrowWrapper {
     _lock(account, gameId, extra, token);
   }
 
-  function _disburse(
-    address white,
-    address black,
-    uint gameId,
-    IChessEngine.GameOutcome outcome
-  ) internal {
-    TokenDeposit memory wPrize = __escrow[white].account(gameId);
-    TokenDeposit memory bPrize = __escrow[black].account(gameId);
-    __escrow[white].release(gameId);
-    __escrow[black].release(gameId);
 
-    if (outcome == IChessEngine.GameOutcome.WhiteWon) {
-      // Transfer black's stake -> white
-      __escrow[white].debit(bPrize.amount, bPrize.token);
-      __escrow[black].credit(bPrize.amount, bPrize.token);
-      // Update player stats
-      __escrow[white].__gross[bPrize.token].earnings += bPrize.amount;
-      __escrow[black].__gross[bPrize.token].losses += bPrize.amount;
-    } else if (outcome == IChessEngine.GameOutcome.BlackWon) {
-      // Transfer white's stake -> black
-      __escrow[black].debit(wPrize.amount, wPrize.token);
-      __escrow[white].credit(wPrize.amount, wPrize.token);
-      // Update player stats
-      __escrow[black].__gross[wPrize.token].earnings += wPrize.amount;
-      __escrow[white].__gross[wPrize.token].losses += wPrize.amount;
-    } else if (outcome == IChessEngine.GameOutcome.Draw) {
-      // Each side keeps its own stake — already released into their __available above.
-    } else {
-      revert EscrowLib.EscrowLocked();
-    }
+  function _award(address to, address from, TokenDeposit memory prize) internal {
+    __escrow[to].debit(prize.amount, prize.token);
+    __escrow[from].unsafeCredit(prize.amount, prize.token);
+    __escrow[to].__gross[prize.token].earnings += prize.amount;
+    __escrow[from].__gross[prize.token].losses += prize.amount;
   }
 
   /*
@@ -328,28 +310,33 @@ abstract contract EscrowWrapper {
     return uint96(wager * __gasSponsorFeePerc / 100);
   }
 
-  // Saturating: never reverts. Moves min(cost + fee, avail) ETH from owner.available → platform
-  // pot. Saturation is required because postOp must not revert under ERC-4337.
+  // Never reverts (postOp must not revert under ERC-4337). Charges the full cost+fee; the owner's
+  // balance may go negative (gas debt), recovered from their next ETH inflow. The platform pot is
+  // credited only the realized portion — it must hold real ETH. Gross stats book the full sponsored gas.
   function _chargeGas(address owner, uint cost) internal returns (uint charged) {
-    uint avail = __escrow[owner].available(address(0));
     uint fee = gasFee(cost);
     uint total = cost + fee;
-    charged = total < avail ? total : avail;
-    if (charged > 0) {
-      __escrow[owner].credit(charged, address(0));
-      __escrow[address(0)].debit(charged, address(0));
-      // Update escrow stats
-      __escrow[owner].__gross[address(0)].gasFees += fee;
-      __escrow[owner].__gross[address(0)].gas += cost;
-      __escrow[address(0)].__gross[address(0)].gasFees += fee;
-      __escrow[address(0)].__gross[address(0)].gas += cost;
-    }
+    charged = Math.min(total, __escrow[owner].available(address(0)));   // realized → platform pot
+    __escrow[owner].unsafeCredit(total, address(0));                    // full charge; may go negative
+    if (charged > 0) __escrow[address(0)].debit(charged, address(0));
+    // Gross stats book the full sponsored gas; the unreimbursed remainder lives as the debt.
+    __escrow[owner].__gross[address(0)].gasFees += fee;
+    __escrow[owner].__gross[address(0)].gas += cost;
+    __escrow[address(0)].__gross[address(0)].gasFees += fee;
+    __escrow[address(0)].__gross[address(0)].gas += cost;
+  }
+
+  // Route to the platform pot any gas debt that an increase in `account`'s ETH balance just covered.
+  // Call after an ETH inflow, passing the ETH unlocked balance captured before. ETH only.
+  function _settleGasDebt(address account, uint amount) private returns (uint) {
+    int balance = unlockedBalance(account, address(0));
+    if (balance >= 0) return 0;
+    uint debt = Math.min(uint(-balance), amount);
+    __escrow[address(0)].debit(debt, address(0));
+    return debt;
   }
 
   function _releasePlatformFunds(uint amount, address token, address receiver) internal {
-    uint balance = __escrow[address(0)].available(token);
-    if (amount > balance) revert EscrowLib.InsufficientBalance();
-    // CEI: see `withdraw` above.
     __escrow[address(0)].credit(amount, token);
     __escrow[address(0)].__gross[token].withdrawals += amount;
     _transfer(receiver, amount, token);

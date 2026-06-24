@@ -66,22 +66,22 @@ library ProfileLib {
   }
 
   function register(
-    PlayerProfile storage profile,
+    PlayerProfile storage p,
     string calldata username,
     string calldata avatar
   ) public {
-    profile.username = username;
-    profile.avatar = avatar;
-    profile.createdAt = uint40(block.timestamp);
+    p.username = username;
+    p.avatar = avatar;
+    p.createdAt = uint40(block.timestamp);
   }
 
   function update(
-    PlayerProfile storage profile,
+    PlayerProfile storage p,
     string calldata username,
     string calldata avatar
   ) public {
-    profile.username = username;
-    profile.avatar = avatar;
+    p.username = username;
+    p.avatar = avatar;
   }
 
   /*
@@ -97,7 +97,7 @@ library ProfileLib {
   }
 
   function register(
-    RobotProfile storage profile,
+    RobotProfile storage p,
     address owner,
     string calldata nickname,
     string calldata avatar,
@@ -105,34 +105,34 @@ library ProfileLib {
     string calldata baseModel,
     string calldata modelVersion
   ) public {
-    profile.owner = owner;
-    profile.active = true;
-    profile.nickname = nickname;
-    profile.avatar = avatar;
-    profile.agentFramework = agentFramework;
-    profile.baseModel = baseModel;
-    profile.modelVersion = modelVersion;
-    profile.createdAt = uint40(block.timestamp);
+    p.owner = owner;
+    p.active = true;
+    p.nickname = nickname;
+    p.avatar = avatar;
+    p.agentFramework = agentFramework;
+    p.baseModel = baseModel;
+    p.modelVersion = modelVersion;
+    p.createdAt = uint40(block.timestamp);
   }
 
   function update(
-    RobotProfile storage profile,
+    RobotProfile storage p,
     string calldata nickname,
     string calldata avatar,
     string calldata agentFramework,
     string calldata baseModel,
     string calldata modelVersion
   ) public {
-    profile.nickname = nickname;
-    profile.avatar = avatar;
-    profile.agentFramework = agentFramework;
-    profile.baseModel = baseModel;
-    profile.modelVersion = modelVersion;
+    p.nickname = nickname;
+    p.avatar = avatar;
+    p.agentFramework = agentFramework;
+    p.baseModel = baseModel;
+    p.modelVersion = modelVersion;
   }
 
   // value = true → suspend (active=false); value = false → resume (active=true).
-  function suspend(RobotProfile storage profile, bool value) public {
-    profile.active = !value;
+  function suspend(RobotProfile storage p, bool value) public {
+    p.active = !value;
   }
 }
 

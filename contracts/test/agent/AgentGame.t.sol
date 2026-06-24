@@ -42,11 +42,11 @@ contract AgentGameTest is ChallengeTest {
 
     // Funds route to the owners, not the agents.
     changePrank(p1);
-    assertEq(lobby.earnings(address(0)), purse());
+    assertEq(uint(earnings(address(0))), purse());
     changePrank(a1);
-    assertEq(lobby.earnings(address(0)), 0);
+    assertEq(uint(earnings(address(0))), 0);
     changePrank(p2);
-    assertEq(lobby.earnings(address(0)), 0);
+    assertEq(uint(earnings(address(0))), 0);
 
     // Owner withdraws the purse; the agent key holds nothing.
     uint ownerBefore = p1.balance;
@@ -94,9 +94,9 @@ contract AgentGameTest is ChallengeTest {
     assertEq(lobby.gameStats(a2).victories, 1);
     assertEq(lobby.gameStats(a1).defeats, 1);
     changePrank(p2);
-    assertEq(lobby.earnings(address(0)), purse());
+    assertEq(uint(earnings(address(0))), purse());
     changePrank(p1);
-    assertEq(lobby.earnings(address(0)), 0);
+    assertEq(uint(earnings(address(0))), 0);
   }
 
   // Draw disburse branch: each owner gets half the purse.
@@ -109,9 +109,9 @@ contract AgentGameTest is ChallengeTest {
     assertEq(lobby.gameStats(a1).draws, 1);
     assertEq(lobby.gameStats(a2).draws, 1);
     changePrank(p1);
-    assertEq(lobby.earnings(address(0)), purse() / 2);
+    assertEq(uint(earnings(address(0))), purse() / 2);
     changePrank(p2);
-    assertEq(lobby.earnings(address(0)), purse() / 2);
+    assertEq(uint(earnings(address(0))), purse() / 2);
   }
 
   // Agent claims victory on the opponent's timeout; the owner is paid.
@@ -123,7 +123,7 @@ contract AgentGameTest is ChallengeTest {
     engine.claimVictory(gid);
     assertEq(engine.winner(gid), a1);
     changePrank(p1);
-    assertEq(lobby.earnings(address(0)), purse());
+    assertEq(uint(earnings(address(0))), purse());
   }
 
   // Agent raises a dispute; arbiter resolves; owner is paid.
@@ -144,7 +144,7 @@ contract AgentGameTest is ChallengeTest {
 
     assertEq(engine.winner(gid), a1);
     changePrank(p1);
-    assertEq(lobby.earnings(address(0)), purse());
+    assertEq(uint(earnings(address(0))), purse());
   }
 
   // One owner may run both seats (wager-free); play and stats work per agent.

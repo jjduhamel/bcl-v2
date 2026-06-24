@@ -17,19 +17,19 @@ contract EscrowERC20FeeTest is EscrowTest {
 
   function testChargeFeeAddsToPlatformEarnings() public {
     _chargeFee(p1, gameId, address(token));
-    assertEq(availableFunds(address(0), address(token)), fee);
+    assertEq(uint(unlockedBalance(address(0), address(token))), fee);
   }
 
   function testChargeFeeBothPlayers() public {
     _chargeFee(p1, gameId, address(token));
     _chargeFee(p2, gameId, address(token));
-    assertEq(availableFunds(address(0), address(token)), 2 * fee);
+    assertEq(uint(unlockedBalance(address(0), address(token))), 2 * fee);
   }
 
   function testChargeFeeZeroWagerIsNoop() public {
     uint noWagerGame = gameId + 99;
     _chargeFee(p1, noWagerGame, address(token));
-    assertEq(availableFunds(address(0), address(token)), 0);
+    assertEq(uint(unlockedBalance(address(0), address(token))), 0);
     assertEq(currentDeposit(p1, noWagerGame).amount, 0);
   }
 }
@@ -48,19 +48,19 @@ contract EscrowETHFeeTest is EscrowETHTest {
 
   function testChargeFeeAddsToPlatformEarnings() public {
     _chargeFee(p1, gameId, address(0));
-    assertEq(availableFunds(address(0), address(0)), fee);
+    assertEq(uint(unlockedBalance(address(0), address(0))), fee);
   }
 
   function testChargeFeeBothPlayers() public {
     _chargeFee(p1, gameId, address(0));
     _chargeFee(p2, gameId, address(0));
-    assertEq(availableFunds(address(0), address(0)), 2 * fee);
+    assertEq(uint(unlockedBalance(address(0), address(0))), 2 * fee);
   }
 
   function testChargeFeeZeroWagerIsNoop() public {
     uint noWagerGame = gameId + 99;
     _chargeFee(p1, noWagerGame, address(0));
-    assertEq(availableFunds(address(0), address(0)), 0);
+    assertEq(uint(unlockedBalance(address(0), address(0))), 0);
     assertEq(currentDeposit(p1, noWagerGame).amount, 0);
   }
 }

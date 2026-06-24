@@ -49,7 +49,7 @@ contract AgentGameERC20Test is ChallengeTest {
     assertEq(engine.winner(gid), a1);
 
     changePrank(p1);
-    assertEq(lobby.earnings(address(token)), purse());
+    assertEq(uint(earnings(address(token))), purse());
     uint balBefore = token.balanceOf(p1);
     lobby.withdraw(address(token));
     assertEq(token.balanceOf(p1) - balBefore, purse());

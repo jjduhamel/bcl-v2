@@ -52,14 +52,14 @@ contract EscrowERC20DepositTest is EscrowTest {
   function testRefundMovesToEarnings() public {
     _refund(p1, gameId);
     assertEq(currentDeposit(p1, gameId).amount, 0);
-    assertEq(availableFunds(p1, address(token)), wager);
+    assertEq(uint(unlockedBalance(p1, address(token))), wager);
   }
 
-  // setUp staked p1's whole balance, so __available pruned the key (0 withdrawable). tokens() must
+  // setUp staked p1's whole balance, so __available pruned the key (0 withdrawable). tokenDeposits() must
   // still surface the token from __restricted.
   function testTokensIncludesFullyLockedToken() public {
-    assertEq(availableFunds(p1, address(token)), 0);
-    address[] memory t = tokens(p1);
+    assertEq(uint(unlockedBalance(p1, address(token))), 0);
+    address[] memory t = tokenDeposits(p1);
     assertEq(t.length, 1);
     assertEq(t[0], address(token));
   }
@@ -68,37 +68,37 @@ contract EscrowERC20DepositTest is EscrowTest {
   function testTokensEmptyWhenNoBalance() public {
     _refund(p1, gameId);
     _withdraw(p1, address(token));
-    assertEq(tokens(p1).length, 0);
+    assertEq(tokenDeposits(p1).length, 0);
   }
 
   function testRefundOnZeroIsNoop() public {
     _refund(p2, gameId);
-    assertEq(availableFunds(p2, address(token)), 0);
-    assertEq(tokens(p2).length, 0);
+    assertEq(uint(unlockedBalance(p2, address(token))), 0);
+    assertEq(tokenDeposits(p2).length, 0);
   }
 
   function testRefundExcessTrimsOverage() public {
     uint expected = wager / 2;
     _refundExcess(p1, gameId, expected);
     assertEq(currentDeposit(p1, gameId).amount, expected);
-    assertEq(availableFunds(p1, address(token)), wager - expected);
+    assertEq(uint(unlockedBalance(p1, address(token))), wager - expected);
   }
 
   function testRefundExcessNoopWhenAtExpected() public {
     _refundExcess(p1, gameId, wager);
     assertEq(currentDeposit(p1, gameId).amount, wager);
-    assertEq(availableFunds(p1, address(token)), 0);
+    assertEq(uint(unlockedBalance(p1, address(token))), 0);
   }
 
   function testRefundExcessNoopWhenUnderExpected() public {
     _refundExcess(p1, gameId, wager + 1);
     assertEq(currentDeposit(p1, gameId).amount, wager);
-    assertEq(availableFunds(p1, address(token)), 0);
+    assertEq(uint(unlockedBalance(p1, address(token))), 0);
   }
 
   function testRefundExcessNoopWhenNoDeposit() public {
     _refundExcess(p2, gameId, wager);
-    assertEq(availableFunds(p2, address(token)), 0);
+    assertEq(uint(unlockedBalance(p2, address(token))), 0);
   }
 }
 
@@ -127,13 +127,13 @@ contract EscrowETHDepositTest is EscrowETHTest {
   function testRefundMovesToEarnings() public {
     _refund(p1, gameId);
     assertEq(currentDeposit(p1, gameId).amount, 0);
-    assertEq(availableFunds(p1, address(0)), wager);
+    assertEq(uint(unlockedBalance(p1, address(0))), wager);
   }
 
   function testRefundOnZeroIsNoop() public {
     _refund(p2, gameId);
-    assertEq(availableFunds(p2, address(0)), 0);
-    assertEq(tokens(p2).length, 0);
+    assertEq(uint(unlockedBalance(p2, address(0))), 0);
+    assertEq(tokenDeposits(p2).length, 0);
   }
 }
 
@@ -145,7 +145,7 @@ contract EscrowFundETHTest is EscrowETHTest {
     _fund(p1, wager, address(0));
     this.ext_escrow(p1, gameId, wager, address(0));
     assertEq(currentDeposit(p1, gameId).amount, wager);
-    assertEq(availableFunds(p1, address(0)), 0);
+    assertEq(uint(unlockedBalance(p1, address(0))), 0);
   }
 
   function testNonPlayerInsufficientAvailableReverts() public {
@@ -166,7 +166,7 @@ contract EscrowFundERC20Test is EscrowTest {
     _fund(p1, wager, address(token));
     this.ext_escrow(p1, gameId, wager, address(token));
     assertEq(currentDeposit(p1, gameId).amount, wager);
-    assertEq(availableFunds(p1, address(token)), 0);
+    assertEq(uint(unlockedBalance(p1, address(token))), 0);
   }
 
   function testNonPlayerDoesNotPull() public {
@@ -200,6 +200,6 @@ contract EscrowMultiGameTest is EscrowTest {
   function testRefundBothGamesAccumulatesEarnings() public {
     _refund(p1, gameId);
     _refund(p1, gameId2);
-    assertEq(availableFunds(p1, address(token)), 2 * wager);
+    assertEq(uint(unlockedBalance(p1, address(token))), 2 * wager);
   }
 }

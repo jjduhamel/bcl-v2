@@ -31,6 +31,16 @@ library EnumMap {
     return ok ? v : 0;
   }
 
+  function add(AddressUintMap storage m, address key, uint value) internal {
+    uint cur = get(m, key);
+    set(m, key, cur + value);
+  }
+
+  function sub(AddressUintMap storage m, address key, uint value) internal {
+    uint cur = get(m, key);
+    set(m, key, cur - value);
+  }
+
   function contains(AddressUintMap storage m, address key) internal view returns (bool) {
     return m._inner.contains(key);
   }
@@ -61,6 +71,24 @@ library EnumMap {
   function get(AddressIntMap storage m, address key) internal view returns (int) {
     (bool ok, uint v) = m._inner.tryGet(key);
     return ok ? int(v) : int(0);
+  }
+
+  function add(AddressIntMap storage m, address key, int value) internal {
+    int cur = get(m, key);
+    set(m, key, cur + value);
+  }
+
+  function sub(AddressIntMap storage m, address key, int value) internal {
+    int cur = get(m, key);
+    set(m, key, cur - value);
+  }
+
+  function add(AddressIntMap storage m, address key, uint value) internal {
+    add(m, key, int(value));
+  }
+
+  function sub(AddressIntMap storage m, address key, uint value) internal {
+    sub(m, key, int(value));
   }
 
   function contains(AddressIntMap storage m, address key) internal view returns (bool) {

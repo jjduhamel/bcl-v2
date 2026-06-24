@@ -3,7 +3,6 @@ pragma solidity >=0.4.22 <0.9.0;
 import '@oz-upgradeable/proxy/utils/Initializable.sol';
 import '@oz-upgradeable/proxy/utils/UUPSUpgradeable.sol';
 import '@lib/Bitboard.sol';
-import '@lib/UCI.sol';
 import './IChessEngine.sol';
 import './ILobby.sol';
 import './Lobby.sol';
@@ -299,7 +298,7 @@ contract ChessEngine is Initializable, UUPSUpgradeable, IChessEngine {
   }
 
   function _applyMove(uint gameId, string memory uci) private returns (GameOutcome) {
-    (uint8 from, uint8 to, Piece promotion) = UCI.parse(uci);
+    (uint8 from, uint8 to, Piece promotion) = Bitboard.parse(uci);
     Color color = isWhitePlayer(msg.sender, gameId) ? Color.White : Color.Black;
     Piece captured = __bitboards[gameId].move(color, from, to, promotion);
 

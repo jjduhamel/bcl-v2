@@ -18,12 +18,12 @@ contract EscrowERC20WithdrawTest is EscrowTest {
 
   function testClearsEarnings() public {
     _withdraw(p1, address(token));
-    assertEq(availableFunds(p1, address(token)), 0);
+    assertEq(uint(unlockedBalance(p1, address(token))), 0);
   }
 
-  function testZeroEarningsReverts() public {
-    vm.expectRevert(EscrowLib.InsufficientBalance.selector);
+  function testWithdrawZeroIsNoop() public {
     this.ext_withdraw(p2, address(token));
+    assertEq(uint(unlockedBalance(p2, address(token))), 0);
   }
 }
 
@@ -42,12 +42,12 @@ contract EscrowETHWithdrawTest is EscrowETHTest {
 
   function testClearsEarnings() public {
     _withdraw(p1, address(0));
-    assertEq(availableFunds(p1, address(0)), 0);
+    assertEq(uint(unlockedBalance(p1, address(0))), 0);
   }
 
-  function testZeroEarningsReverts() public {
-    vm.expectRevert(EscrowLib.InsufficientBalance.selector);
+  function testWithdrawZeroIsNoop() public {
     this.ext_withdraw(p2, address(0));
+    assertEq(uint(unlockedBalance(p2, address(0))), 0);
   }
 }
 
@@ -79,6 +79,6 @@ contract EscrowReentrancyTest is EscrowETHTest {
   function testReentrantWithdrawCannotDoubleSpend() public {
     _withdraw(address(atk), address(0));
     assertEq(address(atk).balance, wager);
-    assertEq(availableFunds(address(atk), address(0)), 0);
+    assertEq(uint(unlockedBalance(address(atk), address(0))), 0);
   }
 }

@@ -145,7 +145,7 @@ contract AgentChallengeTest is ChallengeTest {
     lobby.declineChallenge(gid);
     // The owner's deposit is refunded to the owner, not the agent seat.
     changePrank(arbiter);
-    assertEq(lobby.checkPlayerEarnings(p1, address(0)), wager);
+    assertEq(uint(checkPlayerEarnings(p1, address(0))), wager);
   }
 
   function testAgentModifiesChallenge() public {
@@ -161,7 +161,7 @@ contract AgentChallengeTest is ChallengeTest {
     emit ChallengeDeclined(gid, a1, a2);
     lobby.declineChallenge(gid);
     // The owner's deposit is refunded to the owner.
-    assertEq(lobby.earnings(address(0)), wager);
+    assertEq(uint(earnings(address(0))), wager);
   }
 
   function testOwnerCanModifyAgentChallenge() public {
@@ -214,10 +214,10 @@ contract AgentChallengeTest is ChallengeTest {
     lobby.declineChallenge(gid);
 
     changePrank(arbiter);
-    assertEq(lobby.checkPlayerEarnings(p1, address(0)), wager);
-    assertEq(lobby.checkPlayerEarnings(p2, address(0)), wager);
-    assertEq(lobby.checkPlayerEarnings(a1, address(0)), 0);
-    assertEq(lobby.checkPlayerEarnings(a2, address(0)), 0);
+    assertEq(uint(checkPlayerEarnings(p1, address(0))), wager);
+    assertEq(uint(checkPlayerEarnings(p2, address(0))), wager);
+    assertEq(uint(checkPlayerEarnings(a1, address(0))), 0);
+    assertEq(uint(checkPlayerEarnings(a2, address(0))), 0);
   }
 
   // --- Agent acts on the Lobby for itself; the wager is funded from the owner ---
@@ -250,7 +250,7 @@ contract AgentChallengeTest is ChallengeTest {
     lobby.closeTable(gid);
     // The owner's locked wager is released back to its available balance.
     changePrank(arbiter);
-    assertEq(lobby.checkPlayerEarnings(p1, address(0)), wager);
+    assertEq(uint(checkPlayerEarnings(p1, address(0))), wager);
     assertEq(lobby.checkPlayerDeposit(gid, p1), 0);
   }
 

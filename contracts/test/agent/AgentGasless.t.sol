@@ -84,8 +84,8 @@ contract AgentGaslessTest is LobbyTest {
   function testGaslessMove() public {
     changePrank(arbiter);
     uint depositBefore = ep.balanceOf(address(lobby));
-    uint availBefore = lobby.checkPlayerEarnings(p1, address(0));
-    uint potBefore = lobby.platformBalance(address(0));
+    uint availBefore = uint(checkPlayerEarnings(p1, address(0)));
+    uint potBefore = uint(lobby.platformBalance(address(0)));
 
     changePrank(relayer);
     ep.handleOps(_signedOp(address(engine), abi.encodeCall(ChessEngine.move, (gid, 'e2e4'))), payable(relayer));
@@ -102,8 +102,8 @@ contract AgentGaslessTest is LobbyTest {
     changePrank(arbiter);
     uint actualGasCost = lobby.escrowStats(p1, address(0)).gas;
     uint expectedCharge = actualGasCost + lobby.gasFee(actualGasCost);
-    assertEq(availBefore - lobby.checkPlayerEarnings(p1, address(0)), expectedCharge);
-    assertEq(lobby.platformBalance(address(0)) - potBefore, expectedCharge);
+    assertEq(availBefore - uint(checkPlayerEarnings(p1, address(0))), expectedCharge);
+    assertEq(uint(lobby.platformBalance(address(0))) - potBefore, expectedCharge);
   }
 
   // The agent accepts a pending challenge for its own seat, gaslessly, via the Lobby paymaster.
@@ -145,14 +145,14 @@ contract AgentGaslessTest is LobbyTest {
   function testOwnerIsChargedForSponsoredMove() public {
     changePrank(arbiter);
     uint walletBefore = p1.balance;
-    uint availBefore = lobby.checkPlayerEarnings(p1, address(0));
+    uint availBefore = uint(checkPlayerEarnings(p1, address(0)));
     PackedUserOperation[] memory ops = _signedOp(address(engine), abi.encodeCall(ChessEngine.move, (gid, 'e2e4')));
     changePrank(relayer);
     ep.handleOps(ops, payable(relayer));
     assertEq(p1.balance, walletBefore);
 
     changePrank(arbiter);
-    assertLt(lobby.checkPlayerEarnings(p1, address(0)), availBefore);
+    assertLt(uint(checkPlayerEarnings(p1, address(0))), availBefore);
   }
 
   function testGaslessMoveRejectedWhenUnfunded() public {

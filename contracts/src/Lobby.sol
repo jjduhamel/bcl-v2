@@ -64,7 +64,7 @@ contract Lobby is
    * Accessors
    */
 
-  function currentEngine() public view returns (address) { return address(__currentEngine); }
+  function currentEngine() external view returns (address) { return address(__currentEngine); }
 
   function chessEngine(uint gameId) public view returns (ChessEngine) {
     return ChessEngine(__gameEngine[gameId]);
@@ -74,15 +74,15 @@ contract Lobby is
     if (msg.sender != __gameEngine[gameId]) revert Forbidden();
   }
 
-  function challenges(address player) public view returns (uint[] memory) {
+  function challenges(address player) external view returns (uint[] memory) {
     return _lobby(player).challenges();
   }
 
-  function games(address player) public view returns (uint[] memory) {
+  function games(address player) external view returns (uint[] memory) {
     return _lobby(player).games();
   }
 
-  function history(address player) public view returns (uint[] memory) {
+  function history(address player) external view returns (uint[] memory) {
     return _lobby(player).history();
   }
 
@@ -98,12 +98,12 @@ contract Lobby is
     return _agent(robot);
   }
 
-  function gameStats(address account) public view
+  function gameStats(address account) external view
   returns (ProfileLib.AccountStats memory) {
     return _stats(account);
   }
 
-  function wagerStats(address account, address token) public view
+  function wagerStats(address account, address token) external view
   returns (EscrowLib.EscrowStats memory) {
     _assertIsOwner(account);
     return escrowStats(account, token);
@@ -113,7 +113,7 @@ contract Lobby is
    * Player Balances
    */
 
-  function netEarnings(address account) public view returns (int) {
+  function netEarnings(address account) external view returns (int) {
     _assertIsOwner(account);
     // Funds flow through the owner, not the seat — resolve agents to their owner before reading.
     address owner = _owner(account);
@@ -122,26 +122,32 @@ contract Lobby is
     return int(gains)-int(losses);
   }
 
-  function earnings(address token) public view
-  returns (uint) {
-    return availableFunds(msg.sender, token);
+  function _balances(address account, address token) private view returns (int, int, uint) {
+    return (
+      totalBalance(account, token),
+      unlockedBalance(account, token),
+      lockedBalance(account, token)
+    );
   }
 
-  function currentDeposit(uint gameId) public view returns (uint) {
+  function currentBalance(address token) external view returns (int, int, uint) {
+    return _balances(msg.sender, token);
+  }
+
+  function currentDeposit(uint gameId) external view returns (uint) {
     _assertIsPlayer(gameId);
     return currentDeposit(msg.sender, gameId).amount;
   }
 
-  function checkPlayerDeposit(uint gameId, address player) public view
+  function checkPlayerBalance(address player, address token) external view returns (int, int, uint) {
+    _assertIsAdmin();
+    return _balances(player, token);
+  }
+
+  function checkPlayerDeposit(uint gameId, address player) external view
   returns (uint) {
     _assertIsArbiter();
     return currentDeposit(player, gameId).amount;
-  }
-
-  function checkPlayerEarnings(address player, address token) public view
-  returns (uint) {
-    _assertIsAdmin();
-    return availableFunds(player, token);
   }
 
   // This should run near the beginning of every payable function
@@ -260,7 +266,7 @@ contract Lobby is
     string calldata baseModel,
     string calldata modelVersion
   )
-  public payable {
+  external payable {
     _assertIsHuman(msg.sender);
     _assertNotBanned(msg.sender);
     _assertIsUnregistered(robot);
@@ -342,7 +348,7 @@ contract Lobby is
       // Agents can only draw from the owner's withdrawable balance (funds locked in other games
       // don't count toward a new wager).
       if (_hasRole(player, AGENT_ROLE)) {
-        if (availableFunds(_owner(player), wagerToken) < wagerAmount) revert InvalidWager();
+        if (availableBalance(_owner(player), wagerToken) < wagerAmount) revert InvalidWager();
         // TODO: We can enforce a max wager per token
       }
     }
@@ -595,32 +601,26 @@ contract Lobby is
     address white = gameData.whitePlayer;
     address black = gameData.blackPlayer;
 
-    // Payout winner / split on draw
-    if (gameData.wagerAmount > 0) {
-      _disburse(_owner(white), _owner(black), gameId, outcome);
-    }
-
     _lobby(white).finish(gameId);
     _lobby(black).finish(gameId);
     _lobby(address(0)).finish(gameId);
 
-    if (outcome == IChessEngine.GameOutcome.Draw) {
+    TokenDeposit memory wPrize = _refund(_owner(white), gameId);
+    TokenDeposit memory bPrize = _refund(_owner(black), gameId);
+    if (outcome == IChessEngine.GameOutcome.WhiteWon) {
+      _award(_owner(white), _owner(black), bPrize);
+      _stats(white).victories++;
+      _stats(black).defeats++;
+    } else if (outcome == IChessEngine.GameOutcome.BlackWon) {
+      _award(_owner(black), _owner(white), wPrize);
+      _stats(black).victories++;
+      _stats(white).defeats++;
+    } else if (outcome == IChessEngine.GameOutcome.Draw) {
       _stats(white).draws++;
       _stats(black).draws++;
       _stats(address(0)).draws++;
     } else {
-      address winner;
-      address loser;
-      if (outcome == IChessEngine.GameOutcome.WhiteWon) {
-        winner = white;
-        loser = black;
-      } else {
-        winner = black;
-        loser = white;
-      }
-
-      _stats(winner).victories++;
-      _stats(loser).defeats++;
+      revert IChessEngine.InvalidContractState();
     }
 
     _stats(white).finished++;
@@ -634,7 +634,7 @@ contract Lobby is
    * Disputes
    */
 
-  function disputes() public view
+  function disputes() external view
   returns (uint[] memory) {
     _assertIsArbiter();
     return _lobby(address(0)).disputes();
@@ -681,7 +681,7 @@ contract Lobby is
    * Admin / arbiter Stuff
    */
 
-  function hasRole(bytes32 role, address account) public view returns (bool) {
+  function hasRole(bytes32 role, address account) external view returns (bool) {
     return _hasRole(account, role);
   }
 
@@ -729,12 +729,12 @@ contract Lobby is
     _setGasFee(perc);
   }
 
-  function platformBalance(address token) public view returns (uint) {
+  function platformBalance(address token) external view returns (int) {
     _assertIsAdmin();
-    return availableFunds(address(0), token);
+    return unlockedBalance(address(0), token);
   }
 
-  function withdrawPlatformFunds(address token, address payable receiver) public {
+  function withdrawPlatformFunds(address token, address payable receiver) external {
     _assertIsAdmin();
     _releasePlatformFunds(token, receiver);
   }
@@ -788,7 +788,7 @@ contract Lobby is
     }
 
     address owner = _owner(op.sender);
-    if (availableFunds(owner, address(0)) < maxCost + gasFee(maxCost)) {
+    if (availableBalance(owner, address(0)) < maxCost + gasFee(maxCost)) {
       revert EscrowLib.InsufficientBalance();
     }
     // Carry the billable owner forward to postOp. validationData 0 == valid, no time bounds.

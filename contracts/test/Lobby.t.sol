@@ -68,6 +68,17 @@ abstract contract LobbyTest is Test, ILobby, IChessEngine {
     return 2 * (wager - fee());
   }
 
+  // The unlocked component of the new tuple balance reads — stands in for the old earnings accessors.
+  function earnings(address token) internal view returns (int) {
+    (, int unlocked, ) = lobby.currentBalance(token);
+    return unlocked;
+  }
+
+  function checkPlayerEarnings(address player, address token) internal view returns (int) {
+    (, int unlocked, ) = lobby.checkPlayerBalance(player, token);
+    return unlocked;
+  }
+
   function totalWagers(address player) internal returns (uint) {
     address i = me.who();
     changePrank(player);
@@ -253,17 +264,17 @@ contract EngineGetterPermissionsTest is LobbyTest {
   function testPlayerCantQueryAnotherEarnings() public {
     changePrank(p1);
     vm.expectRevert(Unauthorized.selector);
-    lobby.checkPlayerEarnings(p2, address(0));
+    uint(checkPlayerEarnings(p2, address(0)));
   }
 
   function testPlayerCantQueryOwnEarningsViaTwoArgForm() public {
     changePrank(p1);
     vm.expectRevert(Unauthorized.selector);
-    lobby.checkPlayerEarnings(p1, address(0));
+    uint(checkPlayerEarnings(p1, address(0)));
   }
 
   function testArbiterCanQueryAnyEarnings() public {
-    assertEq(lobby.checkPlayerEarnings(p1, address(0)), 0);
-    assertEq(lobby.checkPlayerEarnings(p2, address(0)), 0);
+    assertEq(uint(checkPlayerEarnings(p1, address(0))), 0);
+    assertEq(uint(checkPlayerEarnings(p2, address(0))), 0);
   }
 }
