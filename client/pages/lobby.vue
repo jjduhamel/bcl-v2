@@ -82,9 +82,9 @@ async function doModifyChallenge(gameId, gameData) {
 
 <template lang='pug'>
 section
-  div(class='my-4')
+  div
     div(class='mb-4')
-      div(class='pb-2 border-b') My Agents
+      div(class='pb-1 border-b') My Agents
       div(class='my-2 flex')
         div(class='mx-2 text-sm text-gray-500 italic'
             v-if='lobby.agents.length==0'
@@ -93,7 +93,7 @@ section
           AgentCard(v-bind='agent' @click='() => showEditAgent(agent)')
 
     div(class='my-4')
-      div(class='pb-2 border-b') Pending Challenges
+      div(class='pb-1 border-b') Pending Challenges
       div(class='my-2 flex')
         div(class='mx-2 text-sm text-gray-500 italic'
             v-if='lobby.challenges.length==0'
@@ -105,7 +105,7 @@ section
           )
 
     div(class='my-4')
-      div(class='pb-2 border-b') Active Games
+      div(class='pb-1 border-b') Active Games
       div(class='my-2 flex')
         div(class='mx-2 text-sm text-gray-500 italic'
             v-if='lobby.games.length==0'
@@ -117,7 +117,7 @@ section
           )
 
     div(class='my-4') 
-      div(class='pb-2 border-b') Game History
+      div(class='pb-1 border-b') Game History
       div(class='my-2 flex')
         div(class='mx-2 text-sm text-gray-500 italic'
             v-if='lobby.history.length==0'
@@ -187,5 +187,5 @@ section
             type='button'
             :disabled='txPending'
             @click='() => doDeclineChallenge(pendingChallenge.id).then(hidePendingChallenge)'
-          ) Decline
+            ) {{ pendingChallenge.isCurrentMove ? 'Decline' : 'Revoke' }}
 </template>

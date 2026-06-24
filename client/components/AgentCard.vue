@@ -47,6 +47,6 @@ section
       img(v-if='avatar' class='h-12' :src='avatar')
       img(v-else-if='isWhiteAgent' class='h-12' src='~assets/pieces/merida/wB.svg')
       img(v-else class='h-12' src='~assets/pieces/merida/bB.svg')
-    div {{ nickname }}
     div {{ truncAddress(address) }}
+    div {{ nickname }}
 </template>

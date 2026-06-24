@@ -28,9 +28,6 @@ const config = useRuntimeConfig();
 
 const { chains, provider, webSocketProvider } = configureChains(
   [ chain.mainnet
-  , chain.polygon
-  , chain.goerli
-  , chain.polygonMumbai
   , chain.sepolia
   , chain.foundry ],
   //[ alchemyProvider({ apiKey: config.alchemyId })
@@ -81,7 +78,7 @@ export default async function() {
   wallet.initialized = true;
 
   function fetchProvider() {
-    return getProvider({ chainId: Number(config.spectatorChainId) });
+    return getProvider({ chainId: Number(wallet.chainId) });
   }
 
   async function fetchCurrentBalance(player) {
@@ -141,7 +138,6 @@ export default async function() {
     wallet.connected = false;
     wallet.source = null;
     wallet.address = null;
-    wallet.network = null;
     wallet.balance = 0;
   }
 
@@ -213,10 +209,7 @@ export default async function() {
       console.log('Account changed', wallet.address, '->', address);
       $amplitude.track('AccountChanged');
       if (isConnected) wallet.address = address;
-      else {
-        _disconnected();
-        navigateTo('/lounge');
-      }
+      else _disconnected();
     });
 
     const unsubNetwork = watchNetwork(net => {

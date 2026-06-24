@@ -44,11 +44,9 @@ div(id='wallet-status' class='py-0.5')
   div(id='network' class='py-0.5 flex items-center gap-2')
     img(class='h-4' src='~assets/icons/bytesize/link.svg')
     div(class='flex-1')
-      div(v-if='connected') {{ network }}
-      div(v-else) ---
+      div() {{ network ?? '---' }}
     button(
       id='change-network'
-      v-if='connected'
       title='Change Network'
       @click='emit("changeNetwork")'
     )
@@ -70,10 +68,11 @@ div(id='wallet-status' class='py-0.5')
       all: unset
       cursor: pointer
 
-  #network
+  #account, #network
     button
       img
-        display: none
+        //display: none
+        @apply opacity-30
 
       &:disabled
         @apply text-gray-400 border-gray-400
@@ -82,5 +81,6 @@ div(id='wallet-status' class='py-0.5')
     &:hover
       button
         img
+          @apply opacity-60
           display: block
 </style>
