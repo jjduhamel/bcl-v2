@@ -166,7 +166,7 @@ abstract contract EscrowWrapper {
     return __escrow[account].__gross.keys();
   }
 
-  function escrowStats(address account, address token) public view
+  function escrowStats(address account, address token) internal view
   returns (EscrowStats memory) {
     return __escrow[account].__gross.get(token);
   }

@@ -100,10 +100,10 @@ contract AgentGaslessTest is LobbyTest {
     assertLt(ep.balanceOf(address(paymaster)), depositBefore);
 
     // S1: owner pays exactly `actualGasCost + gasFee(actualGasCost)`; platform pot grows by the same.
-    // We recover the cost from escrowStats(...).gas (chargeGas writes this) — the UserOperationEvent's
+    // We recover the cost from wagerStats(...).gas (chargeGas writes this) — the UserOperationEvent's
     // actualGasCost includes postOp's own gas and so over-counts what chargeGas actually billed.
-    changePrank(arbiter);
-    uint actualGasCost = lobby.escrowStats(p1, address(0)).gas;
+    changePrank(arbiter);   // arbiter holds ADMIN_ROLE, so the owner-gated read passes
+    uint actualGasCost = lobby.wagerStats(p1, address(0)).gas;
     uint expectedCharge = actualGasCost + paymaster.gasFee(actualGasCost);
     assertEq(availBefore - uint(checkPlayerEarnings(p1, address(0))), expectedCharge);
     assertEq(uint(lobby.platformBalance(address(0))) - potBefore, expectedCharge);
