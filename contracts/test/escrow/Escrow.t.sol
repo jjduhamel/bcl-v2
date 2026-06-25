@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 import '@forge/Test.sol';
-import '@lib/Escrow.sol';
+import '@lib/EscrowLib.sol';
 import '@src/IChessEngine.sol';
 import './MockERC20Token.sol';
 
@@ -30,27 +30,49 @@ abstract contract EscrowTest is EscrowWrapper, Test {
   // and the wrapper functions kick off with a delegatecall to the linked library. Tests using
   // expectRevert call these instead so the whole wrapper body is one external call.
   function ext_deposit(address player, uint amount, address tok) external payable {
-    deposit(player, amount, tok);
+    _deposit(player, amount, tok);
   }
   function ext_withdraw(address player, address tok) external {
-    withdraw(player, tok);
+    _withdraw(player, tok);
+  }
+  function ext_escrow(address player, uint id, uint amount, address tok) external payable {
+    _escrow(player, id, amount, tok);
+  }
+
+  // Seed `player`'s withdrawable balance, depositing AS the player so _deposit's
+  // `account == msg.sender` guard holds. Inline-ETH banking now lives at the Lobby layer
+  // (_handleETHDeposit), so escrow-level tests fund available balance directly here.
+  function _fund(address player, uint amount, address tok) internal {
+    if (tok == address(0)) {
+      // Pranked sender pays the call's value, so give the player the ETH to deposit.
+      vm.deal(player, player.balance + amount);
+      vm.prank(player);
+      this.ext_deposit{ value: amount }(player, amount, tok);
+    } else {
+      vm.prank(player);
+      this.ext_deposit(player, amount, tok);
+    }
+  }
+
+  // Seed + lock into a game's escrow — the common "player has staked a wager" setup.
+  function _stake(address player, uint id, uint amount, address tok) internal {
+    _fund(player, amount, tok);
+    _lock(player, id, amount, tok);
+  }
+
+  // Mirrors Lobby.finishGame's escrow flow: refund both stakes, award the loser's net stake.
+  function _disburse(address white, address black, uint id, IChessEngine.GameOutcome outcome) internal {
+    TokenDeposit memory wPrize = _refund(white, id);
+    TokenDeposit memory bPrize = _refund(black, id);
+    if (outcome == IChessEngine.GameOutcome.WhiteWon) _award(white, black, bPrize);
+    else if (outcome == IChessEngine.GameOutcome.BlackWon) _award(black, white, wPrize);
   }
 }
 
 abstract contract EscrowETHTest is EscrowTest {
-  using Escrow for Escrow.EscrowAccount;
-
-  // In real-life, deposit would be called by some payable function (i.e. acceptChallenge)
-  function depositETH(address player, uint gameId, address token, uint amount)
-  public payable {
-    require(token == address(0), 'InvalidToken');
-    deposit(player, amount, token);
-    lock(player, gameId, amount, token);
-  }
+  using EscrowLib for EscrowLib.EscrowAccount;
 
   constructor() {
-    p1 = makeAddr('player1');
-    p2 = makeAddr('player2');
     vm.deal(address(this), 1000 ether);
   }
 }

@@ -50,6 +50,6 @@ contract ResignGameTest is ChessGameTest {
     uint balBefore = p2.balance;
     lobby.withdraw(address(0));
     assertEq(p2.balance - balBefore, purse());
-    assertEq(lobby.earnings(address(0)), 0);
+    assertEq(uint(earnings(address(0))), 0);
   }
 }

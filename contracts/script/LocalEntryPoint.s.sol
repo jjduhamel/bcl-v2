@@ -5,7 +5,7 @@ import '@forge/Script.sol';
 import '@aa/core/EntryPoint.sol';
 
 // Places EntryPoint v0.8 at its canonical address on a fresh anvil (it already exists on live
-// chains). Run before Deploy.s.sol so the Lobby's paymaster funding has an EntryPoint to reach.
+// chains). Run before Deploy.s.sol so paymaster funding has an EntryPoint to reach.
 contract LocalEntryPoint is Script {
   address constant ENTRYPOINT_V8 = 0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108;
 

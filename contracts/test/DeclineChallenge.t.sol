@@ -62,7 +62,7 @@ contract DeclineChallengeTest is ChallengeTest {
 
   function testDeclineAsSpectator() public {
     changePrank(p3);
-    vm.expectRevert(PlayerOnly.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.declineChallenge(gameId);
   }
 

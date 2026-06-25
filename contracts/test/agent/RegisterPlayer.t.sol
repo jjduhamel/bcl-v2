@@ -22,29 +22,32 @@ contract RegisterPlayerTest is LobbyTest {
 
   function testRegisterPlayer() public {
     changePrank(u);
-    lobby.registerPlayer(u, 'neo', 'ipfs://avatar');
+    lobby.registerPlayer('neo', 'ipfs://avatar');
 
-    ProfileLib.PlayerProfile memory p = lobby.playerProfile(u);
+    PlayerProfile memory p = lobby.playerProfile(u);
     assertEq(p.username, 'neo');
     assertEq(p.avatar, 'ipfs://avatar');
     assertTrue(p.createdAt != 0);
   }
 
   function testRegisterPlayerRevertsWhenAlreadyPlayer() public {
+    // pranked as p1 (pre-registered) from setUp
     vm.expectRevert(AlreadyRegistered.selector);
-    lobby.registerPlayer(p1, 'dup', '');
+    lobby.registerPlayer('dup', '');
   }
 
   function testRegisterPlayerRevertsWhenAgent() public {
     lobby.registerAgent(ag, 'bot', '', '', '', '');
+    changePrank(ag);
     vm.expectRevert(AlreadyRegistered.selector);
-    lobby.registerPlayer(ag, 'x', '');
+    lobby.registerPlayer('x', '');
   }
 
   function testRegisterPlayerTwiceReverts() public {
-    lobby.registerPlayer(u, 'neo', '');
+    changePrank(u);
+    lobby.registerPlayer('neo', '');
     vm.expectRevert(AlreadyRegistered.selector);
-    lobby.registerPlayer(u, 'neo2', '');
+    lobby.registerPlayer('neo2', '');
   }
 
   /*
@@ -57,8 +60,8 @@ contract RegisterPlayerTest is LobbyTest {
     changePrank(arbiter);
     lobby.allowChallenges(true);
     changePrank(u);
-    // isOwner(sender) → ownerOf(u) → isRegistered(u) reverts.
-    vm.expectRevert(Unregistered.selector);
+    // _assertSenderControls(u) rejects an unregistered sender acting as a seat.
+    vm.expectRevert(Unauthorized.selector);
     lobby.challenge(u, p2, true, timePerMove, 0, address(0));
   }
 
@@ -72,17 +75,18 @@ contract RegisterPlayerTest is LobbyTest {
 
   function testRegisterAgentRevertsUnregisteredOwner() public {
     changePrank(u);
-    vm.expectRevert(Unregistered.selector);
+    // Only registered players own agents.
+    vm.expectRevert(Unauthorized.selector);
     lobby.registerAgent(ag, 'bot', '', '', '', '');
   }
 
   function testPlayerProfileRevertsUnregistered() public {
-    vm.expectRevert(Unregistered.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.playerProfile(u);
   }
 
   function testAgentProfileRevertsUnregistered() public {
-    vm.expectRevert(Unregistered.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.agentProfile(u);
   }
 }

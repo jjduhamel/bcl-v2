@@ -6,6 +6,7 @@ import '@forge/console2.sol';
 import '@oz/proxy/ERC1967/ERC1967Proxy.sol';
 import '@src/Lobby.sol';
 import '@src/ChessEngine.sol';
+import '@src/Paymaster.sol';
 import '@aa/accounts/Simple7702Account.sol';
 import '@aa/interfaces/IEntryPoint.sol';
 
@@ -36,8 +37,10 @@ contract Deploy is Script {
     // Reused EIP-7702 account implementation — the delegation target for agent EOAs.
     Simple7702Account agentAccount = new Simple7702Account{ salt: SALT }();
 
-    // Wire the paymaster's EntryPoint and open the lobby. Funding the deposit is FundEntryPoint.s.sol.
-    lobby.setEntryPoint(IEntryPoint(ENTRYPOINT_V8));
+    // Standalone paymaster. Funding the EntryPoint deposit is FundEntryPoint.s.sol.
+    Paymaster paymaster = new Paymaster{ salt: SALT }(lobby, IEntryPoint(ENTRYPOINT_V8));
+    lobby.setPaymaster(address(paymaster));
+
     lobby.allowChallenges(true);
     lobby.allowWagers(true);
 
@@ -50,6 +53,7 @@ contract Deploy is Script {
     console.log('Proxy:');
     console.log('  Lobby:       ', address(lobby));
     console.log('  Engine:      ', address(engine));
+    console.log('Paymaster:     ', address(paymaster));
     console.log('AgentAccount:  ', address(agentAccount));
 
     // The user-facing proxy address must equal the independently computed CREATE2 address,

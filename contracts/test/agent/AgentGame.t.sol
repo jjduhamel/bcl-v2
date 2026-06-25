@@ -16,14 +16,14 @@ contract AgentGameTest is ChallengeTest {
     changePrank(p1);
     lobby.registerAgent(a1, 'white-bot', '', 'Hermes', 'Claude Opus', '4.7');
     changePrank(p2);
-    lobby.registerAgent(a2, 'black-bot', '', 'Hermes', 'Claude Opus', '4.7');
+    lobby.registerAgent{ value: wager }(a2, 'black-bot', '', 'Hermes', 'Claude Opus', '4.7');  // p2 pre-funds a2's side
     changePrank(p1);
     gid = lobby.challenge{ value: wager }(a1, a2, true, timePerMove, wager, address(0));
   }
 
   function _accept() internal {
     changePrank(p2);
-    lobby.acceptChallenge{ value: wager }(gid);
+    lobby.acceptChallenge(gid);  // escrows from p2's pre-deposited balance
   }
 
   function testAgentPlaysAndOwnerPaid() public {
@@ -42,11 +42,11 @@ contract AgentGameTest is ChallengeTest {
 
     // Funds route to the owners, not the agents.
     changePrank(p1);
-    assertEq(lobby.earnings(address(0)), purse());
+    assertEq(uint(earnings(address(0))), purse());
     changePrank(a1);
-    assertEq(lobby.earnings(address(0)), 0);
+    assertEq(uint(earnings(address(0))), 0);
     changePrank(p2);
-    assertEq(lobby.earnings(address(0)), 0);
+    assertEq(uint(earnings(address(0))), 0);
 
     // Owner withdraws the purse; the agent key holds nothing.
     uint ownerBefore = p1.balance;
@@ -80,7 +80,8 @@ contract AgentGameTest is ChallengeTest {
     engine.resign(gid);
 
     changePrank(a1);
-    vm.expectRevert(Escrow.InsufficientBalance.selector);
+    // An agent isn't a player, so withdraw rejects it outright.
+    vm.expectRevert(Unauthorized.selector);
     lobby.withdraw(address(0));
   }
 
@@ -93,9 +94,9 @@ contract AgentGameTest is ChallengeTest {
     assertEq(lobby.gameStats(a2).victories, 1);
     assertEq(lobby.gameStats(a1).defeats, 1);
     changePrank(p2);
-    assertEq(lobby.earnings(address(0)), purse());
+    assertEq(uint(earnings(address(0))), purse());
     changePrank(p1);
-    assertEq(lobby.earnings(address(0)), 0);
+    assertEq(uint(earnings(address(0))), 0);
   }
 
   // Draw disburse branch: each owner gets half the purse.
@@ -108,9 +109,9 @@ contract AgentGameTest is ChallengeTest {
     assertEq(lobby.gameStats(a1).draws, 1);
     assertEq(lobby.gameStats(a2).draws, 1);
     changePrank(p1);
-    assertEq(lobby.earnings(address(0)), purse() / 2);
+    assertEq(uint(earnings(address(0))), purse() / 2);
     changePrank(p2);
-    assertEq(lobby.earnings(address(0)), purse() / 2);
+    assertEq(uint(earnings(address(0))), purse() / 2);
   }
 
   // Agent claims victory on the opponent's timeout; the owner is paid.
@@ -122,7 +123,7 @@ contract AgentGameTest is ChallengeTest {
     engine.claimVictory(gid);
     assertEq(engine.winner(gid), a1);
     changePrank(p1);
-    assertEq(lobby.earnings(address(0)), purse());
+    assertEq(uint(earnings(address(0))), purse());
   }
 
   // Agent raises a dispute; arbiter resolves; owner is paid.
@@ -143,7 +144,7 @@ contract AgentGameTest is ChallengeTest {
 
     assertEq(engine.winner(gid), a1);
     changePrank(p1);
-    assertEq(lobby.earnings(address(0)), purse());
+    assertEq(uint(earnings(address(0))), purse());
   }
 
   // One owner may run both seats (wager-free); play and stats work per agent.
@@ -176,5 +177,56 @@ contract AgentGameTest is ChallengeTest {
     changePrank(p1);
     lobby.unregisterAgent(a1);
     assertEq(lobby.agents(p1).length, 0);
+  }
+
+  // A suspended agent must still be able to play out a game already in progress.
+  function testSuspendedAgentCompletesInProgressGame() public {
+    _accept();                         // game is Started (in-progress)
+    changePrank(p1);
+    lobby.suspendAgent(a1);            // suspend mid-game
+    changePrank(a1);
+    engine.move(gid, 'e2e4');          // play continues
+    changePrank(a2);
+    engine.resign(gid);
+    assertEq(engine.winner(gid), a1);
+  }
+
+  // A suspended agent can still be claimed against / resolve a dispute to finish an in-progress game.
+  function testSuspendedAgentCanBeClaimedAgainst() public {
+    _accept();
+    changePrank(a1);
+    engine.move(gid, 'e2e4');
+    changePrank(p2);
+    lobby.suspendAgent(a2);            // suspend the side about to time out
+    skip(timePerMove + 1);
+    changePrank(a1);
+    engine.claimVictory(gid);          // opponent still completes the game
+    assertEq(engine.winner(gid), a1);
+  }
+
+  // The owner can enumerate the tokens their account has wager stats for; reads are owner-gated.
+  function testOwnerWagerStatTokens() public {
+    _accept();
+    changePrank(a1);
+    engine.move(gid, 'e2e4');
+    changePrank(a2);
+    engine.resign(gid);               // game settles; p1 (a1's owner) accrues ETH stats
+
+    changePrank(p1);
+    address[] memory toks = lobby.wagerStatTokens(p1);
+    assertEq(toks.length, 1);
+    assertEq(toks[0], address(0));
+
+    // The array overload returns each token's stats, parallel to wagerStatTokens.
+    EscrowStats[] memory all = lobby.wagerStats(p1);
+    assertEq(all.length, toks.length);
+    assertEq(all[0].earnings, lobby.wagerStats(p1, address(0)).earnings);
+    assertEq(all[0].wagers, lobby.wagerStats(p1, address(0)).wagers);
+
+    changePrank(p2);                  // a non-owner can't read p1's tokens
+    vm.expectRevert(Unauthorized.selector);
+    lobby.wagerStatTokens(p1);
+    vm.expectRevert(Unauthorized.selector);
+    lobby.wagerStats(p1);
   }
 }

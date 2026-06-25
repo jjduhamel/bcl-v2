@@ -6,6 +6,8 @@ import '@forge/console2.sol';
 import '@oz/proxy/ERC1967/ERC1967Proxy.sol';
 import '@src/Lobby.sol';
 import '@src/ChessEngine.sol';
+import '@src/Paymaster.sol';
+import '@aa/core/EntryPoint.sol';
 
 contract WhoAmI {
   function who() public returns (address) {
@@ -55,9 +57,13 @@ abstract contract LobbyTest is Test, ILobby, IChessEngine {
     vm.startPrank(arbiter);
     _initializeLobby();
     _initializeEngine();
-    lobby.registerPlayer(p1, '', '');
-    lobby.registerPlayer(p2, '', '');
-    lobby.registerPlayer(p3, '', '');
+    changePrank(p1);
+    lobby.registerPlayer('', '');
+    changePrank(p2);
+    lobby.registerPlayer('', '');
+    changePrank(p3);
+    lobby.registerPlayer('', '');
+    changePrank(arbiter);
   }
 
   function fee() internal view returns (uint) {
@@ -68,10 +74,21 @@ abstract contract LobbyTest is Test, ILobby, IChessEngine {
     return 2 * (wager - fee());
   }
 
+  // The unlocked component of the new tuple balance reads — stands in for the old earnings accessors.
+  function earnings(address token) internal view returns (int) {
+    (, int unlocked, ) = lobby.currentBalance(token);
+    return unlocked;
+  }
+
+  function checkPlayerEarnings(address player, address token) internal view returns (int) {
+    (, int unlocked, ) = lobby.checkPlayerBalance(player, token);
+    return unlocked;
+  }
+
   function totalWagers(address player) internal returns (uint) {
     address i = me.who();
     changePrank(player);
-    Escrow.EscrowStats memory stats = lobby.wagerStats(player, address(0));
+    EscrowStats memory stats = lobby.wagerStats(player, address(0));
     changePrank(i);
     return stats.wagers;
   }
@@ -79,7 +96,7 @@ abstract contract LobbyTest is Test, ILobby, IChessEngine {
   function totalWinnings(address player) internal returns (uint) {
     address i = me.who();
     changePrank(player);
-    Escrow.EscrowStats memory stats = lobby.wagerStats(player, address(0));
+    EscrowStats memory stats = lobby.wagerStats(player, address(0));
     changePrank(i);
     return stats.earnings;
   }
@@ -87,7 +104,7 @@ abstract contract LobbyTest is Test, ILobby, IChessEngine {
   function totalLosses(address player) internal returns (uint) {
     address i = me.who();
     changePrank(player);
-    Escrow.EscrowStats memory stats = lobby.wagerStats(player, address(0));
+    EscrowStats memory stats = lobby.wagerStats(player, address(0));
     changePrank(i);
     return stats.losses;
   }
@@ -169,7 +186,7 @@ contract WageringEnabledTest is LobbyTest {
   }
 
   function testInsufficientDepositAmount() public {
-    vm.expectRevert(InvalidDepositAmount.selector);
+    vm.expectRevert(EscrowLib.InsufficientBalance.selector);
     lobby.challenge{ value: wager/2 }(p1, p2, true, 60, wager, address(0));
   }
 
@@ -209,38 +226,44 @@ contract PlatformFeeTest is LobbyTest {
 
   function testNonAdminCannotSetFee() public {
     changePrank(p1);
-    vm.expectRevert(AdminOnly.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.setPlatformFee(5);
   }
 }
 
 contract GasFeeTest is LobbyTest {
+  Paymaster paymaster;
+
+  function setUp() public {
+    paymaster = new Paymaster(lobby, new EntryPoint());
+  }
+
   function testInitialGasFeeIsTenPercent() public {
-    assertEq(lobby.gasFeePerc(), 10);
+    assertEq(paymaster.gasFeePerc(), 10);
   }
 
   function testAdminCanSetGasFee() public {
-    lobby.setGasFee(15);
-    assertEq(lobby.gasFeePerc(), 15);
+    paymaster.setGasFee(15);
+    assertEq(paymaster.gasFeePerc(), 15);
   }
 
   function testNonAdminCannotSetGasFee() public {
     changePrank(p1);
-    vm.expectRevert(AdminOnly.selector);
-    lobby.setGasFee(15);
+    vm.expectRevert(Unauthorized.selector);
+    paymaster.setGasFee(15);
   }
 }
 
 contract EngineGetterPermissionsTest is LobbyTest {
   function testPlayerCantQueryAnotherDeposit() public {
     changePrank(p1);
-    vm.expectRevert(ArbiterOnly.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.checkPlayerDeposit(1, p2);
   }
 
   function testPlayerCantQueryOwnDepositViaTwoArgForm() public {
     changePrank(p1);
-    vm.expectRevert(ArbiterOnly.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.checkPlayerDeposit(1, p1);
   }
 
@@ -252,18 +275,18 @@ contract EngineGetterPermissionsTest is LobbyTest {
 
   function testPlayerCantQueryAnotherEarnings() public {
     changePrank(p1);
-    vm.expectRevert(AdminOnly.selector);
-    lobby.checkPlayerEarnings(p2, address(0));
+    vm.expectRevert(Unauthorized.selector);
+    uint(checkPlayerEarnings(p2, address(0)));
   }
 
   function testPlayerCantQueryOwnEarningsViaTwoArgForm() public {
     changePrank(p1);
-    vm.expectRevert(AdminOnly.selector);
-    lobby.checkPlayerEarnings(p1, address(0));
+    vm.expectRevert(Unauthorized.selector);
+    uint(checkPlayerEarnings(p1, address(0)));
   }
 
   function testArbiterCanQueryAnyEarnings() public {
-    assertEq(lobby.checkPlayerEarnings(p1, address(0)), 0);
-    assertEq(lobby.checkPlayerEarnings(p2, address(0)), 0);
+    assertEq(uint(checkPlayerEarnings(p1, address(0))), 0);
+    assertEq(uint(checkPlayerEarnings(p2, address(0))), 0);
   }
 }

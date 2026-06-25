@@ -37,29 +37,39 @@ contract AcceptChallengeTest is ChallengeTest {
   }
 
   function testAcceptFailsWithoutDeposit() public {
-    vm.expectRevert(Escrow.InvalidDeposit.selector);
+    vm.expectRevert(EscrowLib.InsufficientBalance.selector);
     lobby.acceptChallenge(gameId);
   }
 
   function testAcceptFailsWithLowDeposit() public {
-    vm.expectRevert(Escrow.InvalidDeposit.selector);
+    vm.expectRevert(EscrowLib.InsufficientBalance.selector);
     lobby.acceptChallenge{ value: wager-1 }(gameId);
   }
 
-  function testAcceptRevertsOnExcessDeposit() public {
-    vm.expectRevert(Escrow.InvalidDeposit.selector);
+  function testAcceptCreditsExcessDeposit() public
+    testGameStarted(gameId, p2)
+    testEarnings(p2, 1)
+  {
     lobby.acceptChallenge{ value: wager+1 }(gameId);
+  }
+
+  function testAcceptFundedFromAvailableBalance() public
+    testGameStarted(gameId, p2)
+    testEarnings(p2, 0)
+  {
+    lobby.deposit{ value: wager }(wager, address(0));
+    lobby.acceptChallenge(gameId);
   }
 
   function testAcceptFailsAsSender() public {
     changePrank(p1);
-    vm.expectRevert(NotCurrentMove.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.acceptChallenge{ value: wager }(gameId);
   }
 
   function testAcceptAsSpectator() public {
     changePrank(p3);
-    vm.expectRevert(PlayerOnly.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.acceptChallenge{ value: wager }(gameId);
   }
 
@@ -84,7 +94,7 @@ contract AcceptChallengeTest is ChallengeTest {
 
   function testAcceptFailsAfterAccept() public {
     lobby.acceptChallenge{ value: wager }(gameId);
-    vm.expectRevert(InvalidContractState.selector);
+    vm.expectRevert(Unauthorized.selector);
     lobby.acceptChallenge(gameId);
   }
 

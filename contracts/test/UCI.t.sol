@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 import '@forge/Test.sol';
-import '@lib/UCI.sol';
 import '@lib/Bitboard.sol';
 
 contract UCITest is Test {
   function testParseMove() public {
-    (uint8 from, uint8 to, Piece promotion) = UCI.parse('e2e4');
+    (uint8 from, uint8 to, Piece promotion) = Bitboard.parse('e2e4');
     assertEq(Bitboard._rank(from), 0x01);  // rank 2
     assertEq(Bitboard._file(from), 0x04);  // file e
     assertEq(Bitboard._rank(to),   0x03);  // rank 4
@@ -15,7 +14,7 @@ contract UCITest is Test {
   }
 
   function testParseA1H8() public {
-    (uint8 from, uint8 to,) = UCI.parse('a1h8');
+    (uint8 from, uint8 to,) = Bitboard.parse('a1h8');
     assertEq(Bitboard._rank(from), 0x00);  // rank 1
     assertEq(Bitboard._file(from), 0x00);  // file a
     assertEq(Bitboard._rank(to),   0x07);  // rank 8
@@ -23,52 +22,52 @@ contract UCITest is Test {
   }
 
   function testParsePromotionQueen() public {
-    (,, Piece p) = UCI.parse('a7a8q');
+    (,, Piece p) = Bitboard.parse('a7a8q');
     assertTrue(p == Piece.Queen);
   }
 
   function testParsePromotionRook() public {
-    (,, Piece p) = UCI.parse('a7a8r');
+    (,, Piece p) = Bitboard.parse('a7a8r');
     assertTrue(p == Piece.Rook);
   }
 
   function testParsePromotionBishop() public {
-    (,, Piece p) = UCI.parse('a7a8b');
+    (,, Piece p) = Bitboard.parse('a7a8b');
     assertTrue(p == Piece.Bishop);
   }
 
   function testParsePromotionKnight() public {
-    (,, Piece p) = UCI.parse('a7a8n');
+    (,, Piece p) = Bitboard.parse('a7a8n');
     assertTrue(p == Piece.Knight);
   }
 
   function testRejectsTooShort() public {
     vm.expectRevert(InvalidMove.selector);
-    UCI.parse('a2a');
+    Bitboard.parse('a2a');
   }
 
   function testRejectsTooLong() public {
     vm.expectRevert(InvalidMove.selector);
-    UCI.parse('a2a3bb');
+    Bitboard.parse('a2a3bb');
   }
 
   function testRejectsEmpty() public {
     vm.expectRevert(InvalidMove.selector);
-    UCI.parse('');
+    Bitboard.parse('');
   }
 
   function testRejectsInvalidPromotionChar() public {
     vm.expectRevert(InvalidPromotion.selector);
-    UCI.parse('a7a8x');
+    Bitboard.parse('a7a8x');
   }
 
   function testRejectsInvalidFile() public {
     vm.expectRevert(InvalidMove.selector);
-    UCI.parse('i2e4');
+    Bitboard.parse('i2e4');
   }
 
   function testRejectsInvalidRank() public {
     vm.expectRevert(InvalidMove.selector);
-    UCI.parse('a9e4');
+    Bitboard.parse('a9e4');
   }
 }

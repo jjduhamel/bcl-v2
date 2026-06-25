@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-V3
 pragma solidity >=0.4.22 <0.9.0;
 import '@oz/utils/structs/EnumerableSet.sol';
+import './SharedStructs.sol';
 
-// Identity / account profile shapes + the per-profile mutations on them.
+// Per-profile mutations on the identity structs (PlayerProfile / RobotProfile / AccountStats,
+// defined in SharedStructs).
 //
 // Layout: PlayerProfile / RobotProfile are the lean, ABI-returnable structs (no mappings) that
 // frontend / MCP read via `playerProfile()` / `agentProfile()`. PlayerData / RobotData wrap that
@@ -10,37 +12,6 @@ import '@oz/utils/structs/EnumerableSet.sol';
 // maps and never cross the ABI boundary. Library functions take the wrapper by storage ref and
 // reach into `__profile` for field updates.
 library ProfileLib {
-  struct PlayerProfile {
-    string username;
-    string avatar;            // Avatar URI
-    uint40  createdAt;
-  }
-
-  // TODO: Handle maxWager for different token types
-  struct RobotProfile {
-    address owner;
-    bool    active;
-    string  nickname;
-    string  avatar;           // Avatar URI
-    string  agentFramework;   // e.g. Hermes
-    string  baseModel;        // e.g. Claude Opus
-    string  modelVersion;     // e.g. 4.7
-    uint40  createdAt;
-  }
-
-  struct AccountStats {
-    uint created;
-    uint received;
-    uint started;
-    uint finished;
-    uint victories;
-    uint defeats;
-    uint draws;
-    uint disputes;
-    uint disputesWon;
-    uint disputesLost;
-  }
-
   // Wrapper structs holding mapping-bearing state. Stay inside Lobby's storage maps; never
   // returned across the external ABI.
   struct PlayerData {
@@ -66,21 +37,22 @@ library ProfileLib {
   }
 
   function register(
-    PlayerProfile storage profile,
+    PlayerProfile storage p,
     string calldata username,
     string calldata avatar
   ) public {
-    update(profile, username, avatar);
-    profile.createdAt = uint40(block.timestamp);
+    p.username = username;
+    p.avatar = avatar;
+    p.createdAt = uint40(block.timestamp);
   }
 
   function update(
-    PlayerProfile storage profile,
+    PlayerProfile storage p,
     string calldata username,
     string calldata avatar
   ) public {
-    profile.username = username;
-    profile.avatar = avatar;
+    p.username = username;
+    p.avatar = avatar;
   }
 
   /*
@@ -96,7 +68,7 @@ library ProfileLib {
   }
 
   function register(
-    RobotProfile storage profile,
+    RobotProfile storage p,
     address owner,
     string calldata nickname,
     string calldata avatar,
@@ -104,30 +76,34 @@ library ProfileLib {
     string calldata baseModel,
     string calldata modelVersion
   ) public {
-    profile.owner = owner;
-    profile.active = true;
-    update(profile, nickname, avatar, agentFramework, baseModel, modelVersion);
-    profile.createdAt = uint40(block.timestamp);
+    p.owner = owner;
+    p.active = true;
+    p.nickname = nickname;
+    p.avatar = avatar;
+    p.agentFramework = agentFramework;
+    p.baseModel = baseModel;
+    p.modelVersion = modelVersion;
+    p.createdAt = uint40(block.timestamp);
   }
 
   function update(
-    RobotProfile storage profile,
+    RobotProfile storage p,
     string calldata nickname,
     string calldata avatar,
     string calldata agentFramework,
     string calldata baseModel,
     string calldata modelVersion
   ) public {
-    profile.nickname = nickname;
-    profile.avatar = avatar;
-    profile.agentFramework = agentFramework;
-    profile.baseModel = baseModel;
-    profile.modelVersion = modelVersion;
+    p.nickname = nickname;
+    p.avatar = avatar;
+    p.agentFramework = agentFramework;
+    p.baseModel = baseModel;
+    p.modelVersion = modelVersion;
   }
 
   // value = true → suspend (active=false); value = false → resume (active=true).
-  function suspend(RobotProfile storage profile, bool value) public {
-    profile.active = !value;
+  function suspend(RobotProfile storage p, bool value) public {
+    p.active = !value;
   }
 }
 
@@ -209,8 +185,8 @@ library PlayerLobby {
 
 abstract contract ProfileWrapper {
   using PlayerLobby for PlayerLobby.PlayerLobby;
-  using ProfileLib for ProfileLib.PlayerProfile;
-  using ProfileLib for ProfileLib.RobotProfile;
+  using ProfileLib for PlayerProfile;
+  using ProfileLib for RobotProfile;
 
   // Player Lobby
   mapping(address => PlayerLobby.PlayerLobby) private __lobby;
@@ -229,12 +205,12 @@ abstract contract ProfileWrapper {
   }
 
   function _player(address account) internal view
-  returns (ProfileLib.PlayerProfile storage) {
+  returns (PlayerProfile storage) {
     return ProfileLib.profile(__players[account]);
   }
 
   function _agent(address account) internal view
-  returns (ProfileLib.RobotProfile storage) {
+  returns (RobotProfile storage) {
     return ProfileLib.profile(__robots[account]);
   }
 
@@ -244,7 +220,7 @@ abstract contract ProfileWrapper {
   }
 
   function _stats(address account) internal view
-  returns (ProfileLib.AccountStats storage) {
+  returns (AccountStats storage) {
     return _agent(account).owner == address(0) ? ProfileLib.statistics(__players[account])
                                                : ProfileLib.statistics(__robots[account]);
   }

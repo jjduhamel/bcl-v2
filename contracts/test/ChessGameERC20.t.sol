@@ -34,7 +34,7 @@ contract ERC20DeclineChallengeTest is ERC20ChallengeTest {
   function testDeclineRefundsToEarnings() public {
     lobby.declineChallenge(gameId);
     changePrank(p1);
-    assertEq(lobby.earnings(address(token)), wager);
+    assertEq(uint(earnings(address(token))), wager);
   }
 
   function testWithdrawERC20AfterDecline() public {
@@ -43,7 +43,7 @@ contract ERC20DeclineChallengeTest is ERC20ChallengeTest {
     uint balBefore = token.balanceOf(p1);
     lobby.withdraw(address(token));
     assertEq(token.balanceOf(p1) - balBefore, wager);
-    assertEq(lobby.earnings(address(token)), 0);
+    assertEq(uint(earnings(address(token))), 0);
   }
 }
 
@@ -68,7 +68,7 @@ contract ERC20GameTest is ERC20ChallengeTest {
     uint balBefore = token.balanceOf(p2);
     lobby.withdraw(address(token));
     assertEq(token.balanceOf(p2) - balBefore, purse());
-    assertEq(lobby.earnings(address(token)), 0);
+    assertEq(uint(earnings(address(token))), 0);
   }
 
   function testPlatformFeeInERC20() public {
@@ -79,11 +79,11 @@ contract ERC20GameTest is ERC20ChallengeTest {
     _move(p1, 'a2a3');
     _move(p2, 'h4e1');
     changePrank(arbiter);
-    assertEq(lobby.platformBalance(address(token)), 2 * fee());
+    assertEq(uint(lobby.platformBalance(address(token))), 2 * fee());
     address receiver = makeAddr('feeReceiver');
     uint balBefore = token.balanceOf(receiver);
     lobby.withdrawPlatformFunds(address(token), payable(receiver));
     assertEq(token.balanceOf(receiver) - balBefore, 2 * fee());
-    assertEq(lobby.platformBalance(address(token)), 0);
+    assertEq(uint(lobby.platformBalance(address(token))), 0);
   }
 }

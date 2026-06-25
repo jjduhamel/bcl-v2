@@ -1,38 +1,35 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 import '@forge/Test.sol';
-//import '@src/lib/GameIDToTokenDepositMap.sol';
 import './Escrow.t.sol';
 import './MockERC20Token.sol';
 
 contract EscrowERC20DisburseTest is EscrowTest {
   function setUp() public {
-    deposit(p1, wager, address(token));
-    deposit(p2, wager, address(token));
-    lock(p1, gameId, wager, address(token));
-    lock(p2, gameId, wager, address(token));
+    _stake(p1, gameId, wager, address(token));
+    _stake(p2, gameId, wager, address(token));
   }
 
   function testWhiteWins() public {
-    disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
-    assertEq(availableBalance(p1, address(token)), 2 * wager);
-    assertEq(availableBalance(p2, address(token)), 0);
+    _disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
+    assertEq(uint(unlockedBalance(p1, address(token))), 2 * wager);
+    assertEq(uint(unlockedBalance(p2, address(token))), 0);
   }
 
   function testBlackWins() public {
-    disburse(p1, p2, gameId, IChessEngine.GameOutcome.BlackWon);
-    assertEq(availableBalance(p1, address(token)), 0);
-    assertEq(availableBalance(p2, address(token)), 2 * wager);
+    _disburse(p1, p2, gameId, IChessEngine.GameOutcome.BlackWon);
+    assertEq(uint(unlockedBalance(p1, address(token))), 0);
+    assertEq(uint(unlockedBalance(p2, address(token))), 2 * wager);
   }
 
   function testDraw() public {
-    disburse(p1, p2, gameId, IChessEngine.GameOutcome.Draw);
-    assertEq(availableBalance(p1, address(token)), wager);
-    assertEq(availableBalance(p2, address(token)), wager);
+    _disburse(p1, p2, gameId, IChessEngine.GameOutcome.Draw);
+    assertEq(uint(unlockedBalance(p1, address(token))), wager);
+    assertEq(uint(unlockedBalance(p2, address(token))), wager);
   }
 
   function testDisburseClearsEscrow() public {
-    disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
+    _disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
     assertEq(currentDeposit(p1, gameId).amount, 0);
     assertEq(currentDeposit(p2, gameId).amount, 0);
   }
@@ -40,32 +37,52 @@ contract EscrowERC20DisburseTest is EscrowTest {
 
 contract EscrowETHDisburseTest is EscrowETHTest {
   function setUp() public {
-    this.depositETH{value: wager}(p1, gameId, address(0), wager);
-    this.depositETH{value: wager}(p2, gameId, address(0), wager);
+    _stake(p1, gameId, wager, address(0));
+    _stake(p2, gameId, wager, address(0));
   }
 
   function testWhiteWins() public {
-    disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
-    assertEq(availableBalance(p1, address(0)), 2 * wager);
-    assertEq(availableBalance(p2, address(0)), 0);
+    _disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
+    assertEq(uint(unlockedBalance(p1, address(0))), 2 * wager);
+    assertEq(uint(unlockedBalance(p2, address(0))), 0);
   }
 
   function testBlackWins() public {
-    disburse(p1, p2, gameId, IChessEngine.GameOutcome.BlackWon);
-    assertEq(availableBalance(p1, address(0)), 0);
-    assertEq(availableBalance(p2, address(0)), 2 * wager);
+    _disburse(p1, p2, gameId, IChessEngine.GameOutcome.BlackWon);
+    assertEq(uint(unlockedBalance(p1, address(0))), 0);
+    assertEq(uint(unlockedBalance(p2, address(0))), 2 * wager);
   }
 
   function testDraw() public {
-    disburse(p1, p2, gameId, IChessEngine.GameOutcome.Draw);
-    assertEq(availableBalance(p1, address(0)), wager);
-    assertEq(availableBalance(p2, address(0)), wager);
+    _disburse(p1, p2, gameId, IChessEngine.GameOutcome.Draw);
+    assertEq(uint(unlockedBalance(p1, address(0))), wager);
+    assertEq(uint(unlockedBalance(p2, address(0))), wager);
   }
 
   function testDisburseClearsEscrow() public {
-    disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
+    _disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
     assertEq(currentDeposit(p1, gameId).amount, 0);
     assertEq(currentDeposit(p2, gameId).amount, 0);
+  }
+
+  // A loser carrying gas debt must not block disbursal: their stake settles the debt to the
+  // platform first, and only the remainder is awarded to the winner. (Exercises unsafeCredit.)
+  function testDisburseLoserInGasDebtSettlesFromStake() public {
+    _chargeGas(p2, 30 ether, 0);  // loser p2 had 0 unlocked, so this is pure debt
+    assertEq(unlockedBalance(p2, address(0)), -int(30 ether));
+    _disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);   // must not revert
+    assertEq(uint(unlockedBalance(p1, address(0))), 2 * wager - 30 ether);  // own + loser's net stake
+    assertEq(unlockedBalance(p2, address(0)), 0);                           // debt cleared
+    assertEq(uint(availableBalance(address(0), address(0))), 30 ether);     // platform recovered it
+  }
+
+  // A winner carrying gas debt settles it from their own returned stake.
+  function testDisburseWinnerInGasDebtSettlesFromOwnStake() public {
+    _chargeGas(p1, 30 ether, 0);
+    _disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
+    assertEq(uint(unlockedBalance(p1, address(0))), 2 * wager - 30 ether);
+    assertEq(unlockedBalance(p2, address(0)), 0);
+    assertEq(uint(availableBalance(address(0), address(0))), 30 ether);
   }
 }
 
@@ -80,32 +97,31 @@ contract EscrowMixedTokenDisburseTest is EscrowETHTest {
   }
 
   function setUp() public {
-    this.depositETH{value: wager}(p1, gameId, address(0), wager);
-    deposit(p2, wager, address(token2));
-    lock(p2, gameId, wager, address(token2));
+    _stake(p1, gameId, wager, address(0));
+    _stake(p2, gameId, wager, address(token2));
   }
 
   function testWhiteWinsGetsBothTokens() public {
-    disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
-    assertEq(availableBalance(p1, address(0)), wager);
-    assertEq(availableBalance(p1, address(token2)), wager);
-    assertEq(availableBalance(p2, address(0)), 0);
-    assertEq(availableBalance(p2, address(token2)), 0);
+    _disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
+    assertEq(uint(unlockedBalance(p1, address(0))), wager);
+    assertEq(uint(unlockedBalance(p1, address(token2))), wager);
+    assertEq(uint(unlockedBalance(p2, address(0))), 0);
+    assertEq(uint(unlockedBalance(p2, address(token2))), 0);
   }
 
   function testBlackWinsGetsBothTokens() public {
-    disburse(p1, p2, gameId, IChessEngine.GameOutcome.BlackWon);
-    assertEq(availableBalance(p2, address(0)), wager);
-    assertEq(availableBalance(p2, address(token2)), wager);
-    assertEq(availableBalance(p1, address(0)), 0);
-    assertEq(availableBalance(p1, address(token2)), 0);
+    _disburse(p1, p2, gameId, IChessEngine.GameOutcome.BlackWon);
+    assertEq(uint(unlockedBalance(p2, address(0))), wager);
+    assertEq(uint(unlockedBalance(p2, address(token2))), wager);
+    assertEq(uint(unlockedBalance(p1, address(0))), 0);
+    assertEq(uint(unlockedBalance(p1, address(token2))), 0);
   }
 
   function testDrawEachKeepsOwnToken() public {
-    disburse(p1, p2, gameId, IChessEngine.GameOutcome.Draw);
-    assertEq(availableBalance(p1, address(0)), wager);
-    assertEq(availableBalance(p1, address(token2)), 0);
-    assertEq(availableBalance(p2, address(token2)), wager);
-    assertEq(availableBalance(p2, address(0)), 0);
+    _disburse(p1, p2, gameId, IChessEngine.GameOutcome.Draw);
+    assertEq(uint(unlockedBalance(p1, address(0))), wager);
+    assertEq(uint(unlockedBalance(p1, address(token2))), 0);
+    assertEq(uint(unlockedBalance(p2, address(token2))), wager);
+    assertEq(uint(unlockedBalance(p2, address(0))), 0);
   }
 }
