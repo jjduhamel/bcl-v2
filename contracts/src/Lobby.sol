@@ -6,6 +6,7 @@ import '@aa/interfaces/IPaymaster.sol';
 import '@aa/interfaces/IEntryPoint.sol';
 import '@oz/utils/math/Math.sol';
 import '@lib/EscrowLib.sol';
+import '@lib/SharedStructs.sol';
 import '@lib/ProfileLib.sol';
 import './ILobby.sol';
 import './IChessEngine.sol';
@@ -20,8 +21,8 @@ contract Lobby is
   ILobby
 {
   using PlayerLobby for PlayerLobby.PlayerLobby;
-  using ProfileLib for ProfileLib.PlayerProfile;
-  using ProfileLib for ProfileLib.RobotProfile;
+  using ProfileLib for PlayerProfile;
+  using ProfileLib for RobotProfile;
 
   // Lobby Settings
   bool private __allowChallenges;
@@ -87,24 +88,24 @@ contract Lobby is
   }
 
   function playerProfile(address player) external view
-  returns (ProfileLib.PlayerProfile memory) {
+  returns (PlayerProfile memory) {
     _assertIsHuman(player);
     return _player(player);
   }
 
   function agentProfile(address robot) external view
-  returns (ProfileLib.RobotProfile memory) {
+  returns (RobotProfile memory) {
     _assertIsAgent(robot);
     return _agent(robot);
   }
 
   function gameStats(address account) external view
-  returns (ProfileLib.AccountStats memory) {
+  returns (AccountStats memory) {
     return _stats(account);
   }
 
   function wagerStats(address account, address token) external view
-  returns (EscrowLib.EscrowStats memory) {
+  returns (EscrowStats memory) {
     _assertIsOwner(account);
     return escrowStats(account, token);
   }
@@ -160,7 +161,7 @@ contract Lobby is
 
   // Players only — agents hold no funds; their wagers and gas draw on the owner's balance.
   function deposit(uint amount, address token) external payable {
-    _assertNotBanned(msg.sender);
+    _assertIsActive(msg.sender);
     _assertIsHuman(msg.sender);
     _deposit(msg.sender, amount, token);
   }
@@ -193,6 +194,13 @@ contract Lobby is
     if (_hasRole(account, BANNED_ROLE)) revert UserBanned();
     if (_hasRole(account, AGENT_ROLE)) {
       if (_hasRole(_owner(account), BANNED_ROLE)) revert UserBanned();
+    }
+  }
+
+  function _assertIsActive(address account) internal view {
+    _assertNotBanned(account);
+    if (_hasRole(account, AGENT_ROLE)) {
+      if (!_agent(account).active) revert Forbidden();
     }
   }
 
@@ -236,14 +244,13 @@ contract Lobby is
    */
 
   function registerPlayer(
-    address player,
     string calldata username,
     string calldata avatar
   ) external
   {
-    _assertIsUnregistered(player);
-    _register(player, username, avatar);
-    _grantRole(player, HUMAN_ROLE);
+    _assertIsUnregistered(msg.sender);
+    _register(msg.sender, username, avatar);
+    _grantRole(msg.sender, HUMAN_ROLE);
   }
 
   function agents(address owner) external view
@@ -268,7 +275,7 @@ contract Lobby is
   )
   external payable {
     _assertIsHuman(msg.sender);
-    _assertNotBanned(msg.sender);
+    _assertIsActive(msg.sender);
     _assertIsUnregistered(robot);
     _handleETHDeposit();
     _register(
@@ -308,7 +315,6 @@ contract Lobby is
 
   function resumeAgent(address robot) external {
     _assertIsAgent(robot);
-    _assertNotBanned(robot);
     _assertIsOwner(robot);
     _agent(robot).suspend(false);
     emit AgentResumed(msg.sender, robot);
@@ -434,7 +440,7 @@ contract Lobby is
     address wagerToken
   ) external payable returns (uint) {
     _assertSenderControls(player);
-    _assertNotBanned(player);
+    _assertIsActive(player);
     _handleETHDeposit();
     return _create(player, address(0), startAsWhite, timePerMove, wagerAmount, wagerToken);
   }
@@ -446,7 +452,7 @@ contract Lobby is
   returns (uint) {
     _assertIsOpenTable(gameId);
     _assertSenderControls(player);
-    _assertNotBanned(player);
+    _assertIsActive(player);
     _handleETHDeposit();
     IChessEngine.GameData memory game = chessEngine(gameId).game(gameId);
 
@@ -454,6 +460,7 @@ contract Lobby is
     address opponent = game.whitePlayer == address(0) ? game.blackPlayer
                                                       : game.whitePlayer;
     if (_owner(player) == _owner(opponent)) revert InvalidRequest();
+    _assertIsActive(opponent);
 
     // The joiner fills the open seat — they can't pick a colour and flip the creator.
     _modify(gameId,
@@ -499,8 +506,9 @@ contract Lobby is
     address wagerToken
   ) external payable returns (uint) {
     _assertSenderControls(player);
-    _assertNotBanned(player);
+    _assertIsActive(player);
     _assertIsRegistered(opponent);
+    _assertIsActive(opponent);
     // Disallow agent -> human challenge
     if (_hasRole(player, AGENT_ROLE)) _assertIsAgent(opponent);
     _handleETHDeposit();
@@ -516,7 +524,7 @@ contract Lobby is
     uint wagerAmount
   ) external payable {
     _assertSenderControls(player);
-    _assertNotBanned(player);
+    _assertIsActive(player);
     _assertIsPlayer(gameId);
     _handleETHDeposit();
     _modify(gameId, player, startAsWhite, timePerMove, wagerAmount);
@@ -529,6 +537,7 @@ contract Lobby is
     ChessEngine engine = chessEngine(gameId);
     IChessEngine.GameData memory gameData = engine.game(gameId);
     if (!_controls(gameData.currentMove)) revert Unauthorized();
+    _assertIsActive(gameData.currentMove);
     if (gameData.state != IChessEngine.GameState.Pending) revert IChessEngine.InvalidContractState();
     _handleETHDeposit();
 

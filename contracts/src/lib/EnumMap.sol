@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-V3
 pragma solidity >=0.4.22 <0.9.0;
 import '@oz/utils/structs/EnumerableMap.sol';
-import './TokenDeposit.sol';
+import '@oz/utils/structs/EnumerableSet.sol';
+import './SharedStructs.sol';
 
 // Companion to OZ's EnumerableMap. Every map prunes a key whose value reaches zero, so
 // keys()/length()/at() enumerate only live entries and get() of an absent key returns the type's
@@ -12,6 +13,7 @@ import './TokenDeposit.sol';
 library EnumMap {
   using EnumerableMap for EnumerableMap.AddressToUintMap;
   using EnumerableMap for EnumerableMap.UintToBytes32Map;
+  using EnumerableSet for EnumerableSet.AddressSet;
 
   error AmountOverflow();
 
@@ -148,5 +150,40 @@ library EnumMap {
   function at(UintTokenDepositMap storage m, uint i) internal view returns (uint, TokenDeposit memory) {
     (uint key, bytes32 val) = m._inner.at(i);
     return (key, _decodeTD(val));
+  }
+
+  /* ---------- AddressEscrowStatsMap: address -> EscrowStats, append-only (stats never prune) ---------- */
+
+  struct AddressEscrowStatsMap {
+    EnumerableSet.AddressSet _keys;
+    mapping(address => EscrowStats) _values;
+  }
+
+  // Returns a storage ref for in-place mutation, enrolling the key. Stats only ever grow, so keys
+  // are never pruned — this keeps a token enumerable here after its balances prune to zero elsewhere.
+  function stats(AddressEscrowStatsMap storage m, address key) internal returns (EscrowStats storage) {
+    m._keys.add(key);
+    return m._values[key];
+  }
+
+  function get(AddressEscrowStatsMap storage m, address key) internal view returns (EscrowStats memory) {
+    return m._values[key];
+  }
+
+  function contains(AddressEscrowStatsMap storage m, address key) internal view returns (bool) {
+    return m._keys.contains(key);
+  }
+
+  function keys(AddressEscrowStatsMap storage m) internal view returns (address[] memory) {
+    return m._keys.values();
+  }
+
+  function length(AddressEscrowStatsMap storage m) internal view returns (uint) {
+    return m._keys.length();
+  }
+
+  function at(AddressEscrowStatsMap storage m, uint i) internal view returns (address, EscrowStats memory) {
+    address key = m._keys.at(i);
+    return (key, m._values[key]);
   }
 }

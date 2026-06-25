@@ -25,7 +25,7 @@ contract RegisterAgentTest is LobbyTest {
     assertEq(list.length, 1);
     assertEq(list[0], a1);
 
-    ProfileLib.RobotProfile memory profile = lobby.agentProfile(a1);
+    RobotProfile memory profile = lobby.agentProfile(a1);
     assertEq(profile.owner, p1);
     assertTrue(profile.active);
     assertEq(profile.nickname, 'deepblue');
@@ -105,7 +105,7 @@ contract RegisterAgentTest is LobbyTest {
     emit AgentUpdated(p1, a1);
     lobby.updateAgent(a1, 'alphazero', 'ipfs://new', 'LangChain', 'Claude Sonnet', '4.7');
 
-    ProfileLib.RobotProfile memory profile = lobby.agentProfile(a1);
+    RobotProfile memory profile = lobby.agentProfile(a1);
     assertEq(profile.nickname, 'alphazero');
     assertEq(profile.avatar, 'ipfs://new');
     assertEq(profile.agentFramework, 'LangChain');

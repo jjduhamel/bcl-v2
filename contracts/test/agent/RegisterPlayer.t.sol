@@ -22,29 +22,32 @@ contract RegisterPlayerTest is LobbyTest {
 
   function testRegisterPlayer() public {
     changePrank(u);
-    lobby.registerPlayer(u, 'neo', 'ipfs://avatar');
+    lobby.registerPlayer('neo', 'ipfs://avatar');
 
-    ProfileLib.PlayerProfile memory p = lobby.playerProfile(u);
+    PlayerProfile memory p = lobby.playerProfile(u);
     assertEq(p.username, 'neo');
     assertEq(p.avatar, 'ipfs://avatar');
     assertTrue(p.createdAt != 0);
   }
 
   function testRegisterPlayerRevertsWhenAlreadyPlayer() public {
+    // pranked as p1 (pre-registered) from setUp
     vm.expectRevert(AlreadyRegistered.selector);
-    lobby.registerPlayer(p1, 'dup', '');
+    lobby.registerPlayer('dup', '');
   }
 
   function testRegisterPlayerRevertsWhenAgent() public {
     lobby.registerAgent(ag, 'bot', '', '', '', '');
+    changePrank(ag);
     vm.expectRevert(AlreadyRegistered.selector);
-    lobby.registerPlayer(ag, 'x', '');
+    lobby.registerPlayer('x', '');
   }
 
   function testRegisterPlayerTwiceReverts() public {
-    lobby.registerPlayer(u, 'neo', '');
+    changePrank(u);
+    lobby.registerPlayer('neo', '');
     vm.expectRevert(AlreadyRegistered.selector);
-    lobby.registerPlayer(u, 'neo2', '');
+    lobby.registerPlayer('neo2', '');
   }
 
   /*

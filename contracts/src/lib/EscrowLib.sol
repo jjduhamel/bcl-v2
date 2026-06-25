@@ -6,7 +6,7 @@ import '@oz/utils/Arrays.sol';
 import '@oz/utils/math/Math.sol';
 import '@oz/utils/math/SignedMath.sol';
 import '../IChessEngine.sol';
-import './TokenDeposit.sol';
+import './SharedStructs.sol';
 import './EnumMap.sol';
 
 library EscrowLib {
@@ -22,17 +22,6 @@ library EscrowLib {
   error InsufficientBalance();
   error TransferFailed();
 
-  struct EscrowStats {
-    uint deposits;
-    uint withdrawals;
-    uint wagers;
-    uint earnings;
-    uint losses;
-    uint platformFees;
-    uint gasFees;
-    uint gas;
-  }
-
   struct EscrowAccount {
     // gameId -> per-game locked deposit
     EnumMap.UintTokenDepositMap __accounts;
@@ -40,7 +29,8 @@ library EscrowLib {
     EnumMap.AddressUintMap __locked;
     // token -> withdrawable balance (signed; negative == gas debt owed to the platform)
     EnumMap.AddressIntMap __unlocked;
-    mapping(address => EscrowStats) __gross;
+    // token -> lifetime stats
+    EnumMap.AddressEscrowStatsMap __gross;
   }
 
   function account(EscrowAccount storage escrow, uint gameId) internal view returns (TokenDeposit memory) {
@@ -139,6 +129,7 @@ library EscrowLib {
 abstract contract EscrowWrapper {
   using SafeERC20 for IERC20;
   using EscrowLib for EscrowLib.EscrowAccount;
+  using EnumMap for EnumMap.AddressEscrowStatsMap;
 
   mapping(address => EscrowLib.EscrowAccount) internal __escrow;
   uint internal __platformFeePerc;
@@ -171,9 +162,14 @@ abstract contract EscrowWrapper {
     return __escrow[account].total(token);
   }
 
+  // The tokens this account has ever transacted in (deposit/wager/win/loss/fee/gas).
+  function escrowStatTokens(address account) internal view returns (address[] memory) {
+    return __escrow[account].__gross.keys();
+  }
+
   function escrowStats(address account, address token) public view
-  returns (EscrowLib.EscrowStats memory) {
-    return __escrow[account].__gross[token];
+  returns (EscrowStats memory) {
+    return __escrow[account].__gross.get(token);
   }
 
   // Returns the deposit reduced by any gas debt skimmed to the platform — i.e. the prize to award.
@@ -215,14 +211,14 @@ abstract contract EscrowWrapper {
       IERC20(token).safeTransferFrom(account, address(this), amount);
     }
     __escrow[account].debit(amount, token);
-    __escrow[account].__gross[token].deposits += amount;
-    __escrow[address(0)].__gross[token].deposits += amount;
+    __escrow[account].__gross.stats(token).deposits += amount;
+    __escrow[address(0)].__gross.stats(token).deposits += amount;
   }
 
   function _withdraw(address account, uint amount, address token) internal {
     __escrow[account].credit(amount, token);
-    __escrow[account].__gross[token].withdrawals += amount;
-    __escrow[address(0)].__gross[token].withdrawals += amount;
+    __escrow[account].__gross.stats(token).withdrawals += amount;
+    __escrow[address(0)].__gross.stats(token).withdrawals += amount;
     _transfer(account, amount, token);
   }
 
@@ -234,8 +230,8 @@ abstract contract EscrowWrapper {
 
   function _lock(address account, uint gameId, uint amount, address token) internal {
     __escrow[account].lock(gameId, amount, token);
-    __escrow[account].__gross[token].wagers += amount;
-    __escrow[address(0)].__gross[token].wagers += amount;
+    __escrow[account].__gross.stats(token).wagers += amount;
+    __escrow[address(0)].__gross.stats(token).wagers += amount;
   }
 
   // NOTE: account should be ownerOf(msg.sender)
@@ -261,8 +257,8 @@ abstract contract EscrowWrapper {
   function _award(address to, address from, TokenDeposit memory prize) internal {
     __escrow[to].debit(prize.amount, prize.token);
     __escrow[from].unsafeCredit(prize.amount, prize.token);
-    __escrow[to].__gross[prize.token].earnings += prize.amount;
-    __escrow[from].__gross[prize.token].losses += prize.amount;
+    __escrow[to].__gross.stats(prize.token).earnings += prize.amount;
+    __escrow[from].__gross.stats(prize.token).losses += prize.amount;
   }
 
   /*
@@ -290,8 +286,8 @@ abstract contract EscrowWrapper {
     __escrow[account].credit(fee, d.token);             // available -> (move out)
     __escrow[address(0)].debit(fee, d.token);          // (move into) platform pot
     // Update escrow stats
-    __escrow[account].__gross[token].platformFees += fee;
-    __escrow[address(0)].__gross[token].platformFees += fee;
+    __escrow[account].__gross.stats(token).platformFees += fee;
+    __escrow[address(0)].__gross.stats(token).platformFees += fee;
   }
 
   /*
@@ -320,10 +316,10 @@ abstract contract EscrowWrapper {
     __escrow[owner].unsafeCredit(total, address(0));                    // full charge; may go negative
     if (charged > 0) __escrow[address(0)].debit(charged, address(0));
     // Gross stats book the full sponsored gas; the unreimbursed remainder lives as the debt.
-    __escrow[owner].__gross[address(0)].gasFees += fee;
-    __escrow[owner].__gross[address(0)].gas += cost;
-    __escrow[address(0)].__gross[address(0)].gasFees += fee;
-    __escrow[address(0)].__gross[address(0)].gas += cost;
+    __escrow[owner].__gross.stats(address(0)).gasFees += fee;
+    __escrow[owner].__gross.stats(address(0)).gas += cost;
+    __escrow[address(0)].__gross.stats(address(0)).gasFees += fee;
+    __escrow[address(0)].__gross.stats(address(0)).gas += cost;
   }
 
   // Route to the platform pot any gas debt that an increase in `account`'s ETH balance just covered.
@@ -338,7 +334,7 @@ abstract contract EscrowWrapper {
 
   function _releasePlatformFunds(uint amount, address token, address receiver) internal {
     __escrow[address(0)].credit(amount, token);
-    __escrow[address(0)].__gross[token].withdrawals += amount;
+    __escrow[address(0)].__gross.stats(token).withdrawals += amount;
     _transfer(receiver, amount, token);
   }
 

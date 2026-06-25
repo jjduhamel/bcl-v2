@@ -178,4 +178,29 @@ contract AgentGameTest is ChallengeTest {
     lobby.unregisterAgent(a1);
     assertEq(lobby.agents(p1).length, 0);
   }
+
+  // A suspended agent must still be able to play out a game already in progress.
+  function testSuspendedAgentCompletesInProgressGame() public {
+    _accept();                         // game is Started (in-progress)
+    changePrank(p1);
+    lobby.suspendAgent(a1);            // suspend mid-game
+    changePrank(a1);
+    engine.move(gid, 'e2e4');          // play continues
+    changePrank(a2);
+    engine.resign(gid);
+    assertEq(engine.winner(gid), a1);
+  }
+
+  // A suspended agent can still be claimed against / resolve a dispute to finish an in-progress game.
+  function testSuspendedAgentCanBeClaimedAgainst() public {
+    _accept();
+    changePrank(a1);
+    engine.move(gid, 'e2e4');
+    changePrank(p2);
+    lobby.suspendAgent(a2);            // suspend the side about to time out
+    skip(timePerMove + 1);
+    changePrank(a1);
+    engine.claimVictory(gid);          // opponent still completes the game
+    assertEq(engine.winner(gid), a1);
+  }
 }

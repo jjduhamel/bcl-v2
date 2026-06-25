@@ -99,6 +99,25 @@ contract PaymasterTest is LobbyTest {
     _expectSponsoredCall(address(lobby), abi.encodeWithSelector(Lobby.challenge.selector));
   }
 
+  /* ---- validate: suspension gates new engagements, not gas for in-progress play ---- */
+
+  // A suspended agent holds no ETH, so it must still be sponsored to move/resign/claim and finish
+  // a game already underway — otherwise its in-progress games would stall to a timeout forfeit.
+  function testValidateStillSponsorsSuspendedAgentInProgressPlay() public {
+    changePrank(p1);
+    lobby.suspendAgent(a1);
+    _expectSponsored(abi.encodeWithSelector(ChessEngine.move.selector, uint(0), 'e2e4'));
+    _expectSponsored(abi.encodeWithSelector(ChessEngine.resign.selector, uint(0)));
+    _expectSponsored(abi.encodeWithSelector(ChessEngine.claimVictory.selector, uint(0)));
+    _expectSponsoredCall(address(lobby), abi.encodeWithSelector(Lobby.declineChallenge.selector));
+  }
+
+  // A banned agent gets no sponsorship at all — ban still gates the paymaster.
+  function testValidateRejectsBannedAgent() public {
+    lobby.grantRole(lobby.BANNED_ROLE(), a1);   // pranked as arbiter (admin) from setUp
+    _expectCallRejected(address(engine), ChessEngine.move.selector, UserBanned.selector);
+  }
+
   /* ---- validate: rejects non-whitelisted Lobby selectors and foreign targets ---- */
 
   function testValidateRejectsNonWhitelistedLobbyActions() public {

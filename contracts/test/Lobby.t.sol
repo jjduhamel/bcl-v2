@@ -55,9 +55,13 @@ abstract contract LobbyTest is Test, ILobby, IChessEngine {
     vm.startPrank(arbiter);
     _initializeLobby();
     _initializeEngine();
-    lobby.registerPlayer(p1, '', '');
-    lobby.registerPlayer(p2, '', '');
-    lobby.registerPlayer(p3, '', '');
+    changePrank(p1);
+    lobby.registerPlayer('', '');
+    changePrank(p2);
+    lobby.registerPlayer('', '');
+    changePrank(p3);
+    lobby.registerPlayer('', '');
+    changePrank(arbiter);
   }
 
   function fee() internal view returns (uint) {
@@ -82,7 +86,7 @@ abstract contract LobbyTest is Test, ILobby, IChessEngine {
   function totalWagers(address player) internal returns (uint) {
     address i = me.who();
     changePrank(player);
-    EscrowLib.EscrowStats memory stats = lobby.wagerStats(player, address(0));
+    EscrowStats memory stats = lobby.wagerStats(player, address(0));
     changePrank(i);
     return stats.wagers;
   }
@@ -90,7 +94,7 @@ abstract contract LobbyTest is Test, ILobby, IChessEngine {
   function totalWinnings(address player) internal returns (uint) {
     address i = me.who();
     changePrank(player);
-    EscrowLib.EscrowStats memory stats = lobby.wagerStats(player, address(0));
+    EscrowStats memory stats = lobby.wagerStats(player, address(0));
     changePrank(i);
     return stats.earnings;
   }
@@ -98,7 +102,7 @@ abstract contract LobbyTest is Test, ILobby, IChessEngine {
   function totalLosses(address player) internal returns (uint) {
     address i = me.who();
     changePrank(player);
-    EscrowLib.EscrowStats memory stats = lobby.wagerStats(player, address(0));
+    EscrowStats memory stats = lobby.wagerStats(player, address(0));
     changePrank(i);
     return stats.losses;
   }

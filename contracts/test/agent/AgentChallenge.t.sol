@@ -263,4 +263,71 @@ contract AgentChallengeTest is ChallengeTest {
     vm.expectRevert(InvalidWager.selector);
     lobby.challenge{ value: wager }(a1, a2, true, timePerMove, wager, address(0));
   }
+
+  /*
+   * Suspended agents take no new engagements — only complete in-progress games.
+   */
+
+  // A suspended agent can't initiate a new challenge.
+  function testSuspendedAgentCannotChallenge() public {
+    changePrank(p2);
+    lobby.registerAgent(a2, 'bot', '', '', '', '');
+    changePrank(p1);
+    lobby.suspendAgent(a1);
+    vm.expectRevert(Forbidden.selector);
+    lobby.challenge(a1, a2, true, timePerMove, 0, address(0));
+  }
+
+  // ...and can't be the target of a new challenge (block all sides).
+  function testCannotChallengeSuspendedOpponent() public {
+    changePrank(p2);
+    lobby.registerAgent(a2, 'bot', '', '', '', '');
+    lobby.suspendAgent(a2);            // p2 owns a2
+    changePrank(p1);
+    vm.expectRevert(Forbidden.selector);
+    lobby.challenge(a1, a2, true, timePerMove, 0, address(0));
+  }
+
+  // A suspended agent can't open a new table.
+  function testSuspendedAgentCannotCreateTable() public {
+    changePrank(p1);
+    lobby.suspendAgent(a1);
+    vm.expectRevert(Forbidden.selector);
+    lobby.createTable(a1, true, timePerMove, 0, address(0));
+  }
+
+  // A suspended agent can't accept a challenge into a new game.
+  function testSuspendedAgentCannotAccept() public {
+    changePrank(p2);
+    lobby.registerAgent(a2, 'bot', '', '', '', '');
+    changePrank(p1);
+    uint gid = lobby.challenge(a1, a2, true, timePerMove, 0, address(0));  // a2's turn to accept
+    changePrank(p2);
+    lobby.suspendAgent(a2);
+    vm.expectRevert(Forbidden.selector);
+    lobby.acceptChallenge(gid);
+  }
+
+  // Exiting a pending challenge is allowed while suspended (don't trap the owner's escrow).
+  function testSuspendedAgentCanDecline() public {
+    changePrank(p2);
+    lobby.registerAgent(a2, 'bot', '', '', '', '');
+    changePrank(p1);
+    uint gid = lobby.challenge(a1, a2, true, timePerMove, 0, address(0));
+    changePrank(p2);
+    lobby.suspendAgent(a2);
+    lobby.declineChallenge(gid);       // must not revert
+    assertEq(lobby.challenges(a2).length, 0);
+  }
+
+  // Resuming restores the ability to take new engagements.
+  function testResumeRestoresChallengeability() public {
+    changePrank(p2);
+    lobby.registerAgent(a2, 'bot', '', '', '', '');
+    changePrank(p1);
+    lobby.suspendAgent(a1);
+    lobby.resumeAgent(a1);
+    uint gid = lobby.challenge(a1, a2, true, timePerMove, 0, address(0));
+    assertEq(engine.game(gid).whitePlayer, a1);
+  }
 }
