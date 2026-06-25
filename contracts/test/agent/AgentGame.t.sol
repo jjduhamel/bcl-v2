@@ -203,4 +203,30 @@ contract AgentGameTest is ChallengeTest {
     engine.claimVictory(gid);          // opponent still completes the game
     assertEq(engine.winner(gid), a1);
   }
+
+  // The owner can enumerate the tokens their account has wager stats for; reads are owner-gated.
+  function testOwnerWagerStatTokens() public {
+    _accept();
+    changePrank(a1);
+    engine.move(gid, 'e2e4');
+    changePrank(a2);
+    engine.resign(gid);               // game settles; p1 (a1's owner) accrues ETH stats
+
+    changePrank(p1);
+    address[] memory toks = lobby.wagerStatTokens(p1);
+    assertEq(toks.length, 1);
+    assertEq(toks[0], address(0));
+
+    // The array overload returns each token's stats, parallel to wagerStatTokens.
+    EscrowStats[] memory all = lobby.wagerStats(p1);
+    assertEq(all.length, toks.length);
+    assertEq(all[0].earnings, lobby.wagerStats(p1, address(0)).earnings);
+    assertEq(all[0].wagers, lobby.wagerStats(p1, address(0)).wagers);
+
+    changePrank(p2);                  // a non-owner can't read p1's tokens
+    vm.expectRevert(Unauthorized.selector);
+    lobby.wagerStatTokens(p1);
+    vm.expectRevert(Unauthorized.selector);
+    lobby.wagerStats(p1);
+  }
 }

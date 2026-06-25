@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 import '@forge/Test.sol';
 import '../Lobby.t.sol';
+import '@src/Paymaster.sol';
 import '@aa/core/EntryPoint.sol';
 import '@aa/core/BaseAccount.sol';
 import '@aa/accounts/Simple7702Account.sol';
@@ -16,6 +17,7 @@ contract AgentGaslessTest is LobbyTest {
 
   IEntryPoint ep;
   Simple7702Account impl;
+  Paymaster paymaster;
   address a1;
   uint256 a1Pk;
   address a2;  // opponent agent (owned by p2) — agents may only challenge agents
@@ -29,8 +31,9 @@ contract AgentGaslessTest is LobbyTest {
     impl = new Simple7702Account();
 
     vm.deal(arbiter, 10 ether);
-    lobby.setEntryPoint(ep);
-    lobby.depositToEntryPoint{ value: 1 ether }();
+    paymaster = new Paymaster(lobby, ep);
+    lobby.setPaymaster(address(paymaster));
+    paymaster.depositToEntryPoint{ value: 1 ether }();
     lobby.allowChallenges(true);
 
     (a1, a1Pk) = makeAddrAndKey('agent'); // holds 0 ETH
@@ -74,7 +77,7 @@ contract AgentGaslessTest is LobbyTest {
     op.accountGasLimits = _pack(2_000_000, 2_000_000);
     op.preVerificationGas = 200_000;
     op.gasFees = _pack(1 gwei, 2 gwei);
-    op.paymasterAndData = abi.encodePacked(address(lobby), uint128(1_000_000), uint128(200_000));
+    op.paymasterAndData = abi.encodePacked(address(paymaster), uint128(1_000_000), uint128(200_000));
     (uint8 v, bytes32 r, bytes32 s) = vm.sign(a1Pk, ep.getUserOpHash(op));
     op.signature = abi.encodePacked(r, s, v);
     ops = new PackedUserOperation[](1);
@@ -83,7 +86,7 @@ contract AgentGaslessTest is LobbyTest {
 
   function testGaslessMove() public {
     changePrank(arbiter);
-    uint depositBefore = ep.balanceOf(address(lobby));
+    uint depositBefore = ep.balanceOf(address(paymaster));
     uint availBefore = uint(checkPlayerEarnings(p1, address(0)));
     uint potBefore = uint(lobby.platformBalance(address(0)));
 
@@ -94,19 +97,19 @@ contract AgentGaslessTest is LobbyTest {
     assertEq(moves.length, 1);
     assertEq(moves[0], 'e2e4');
     assertEq(a1.balance, 0);
-    assertLt(ep.balanceOf(address(lobby)), depositBefore);
+    assertLt(ep.balanceOf(address(paymaster)), depositBefore);
 
     // S1: owner pays exactly `actualGasCost + gasFee(actualGasCost)`; platform pot grows by the same.
     // We recover the cost from escrowStats(...).gas (chargeGas writes this) — the UserOperationEvent's
     // actualGasCost includes postOp's own gas and so over-counts what chargeGas actually billed.
     changePrank(arbiter);
     uint actualGasCost = lobby.escrowStats(p1, address(0)).gas;
-    uint expectedCharge = actualGasCost + lobby.gasFee(actualGasCost);
+    uint expectedCharge = actualGasCost + paymaster.gasFee(actualGasCost);
     assertEq(availBefore - uint(checkPlayerEarnings(p1, address(0))), expectedCharge);
     assertEq(uint(lobby.platformBalance(address(0))) - potBefore, expectedCharge);
   }
 
-  // The agent accepts a pending challenge for its own seat, gaslessly, via the Lobby paymaster.
+  // The agent accepts a pending challenge for its own seat, gaslessly, via the standalone paymaster.
   function testGaslessAcceptChallenge() public {
     changePrank(p2);
     uint g2 = lobby.challenge(p2, a1, true, timePerMove, 0, address(0)); // a1 is the current move
@@ -130,7 +133,7 @@ contract AgentGaslessTest is LobbyTest {
     assertEq(a1.balance, 0);
   }
 
-  // The agent updates its own profile, gaslessly, via the Lobby paymaster.
+  // The agent updates its own profile, gaslessly, via the standalone paymaster.
   function testGaslessUpdateAgent() public {
     changePrank(relayer);
     ep.handleOps(
@@ -168,17 +171,17 @@ contract AgentGaslessTest is LobbyTest {
 
   // Validation passes but the inner move reverts (bad UCI): the op is still sponsored.
   function testSponsorsButDoesNotApplyARevertingMove() public {
-    uint256 depositBefore = ep.balanceOf(address(lobby));
+    uint256 depositBefore = ep.balanceOf(address(paymaster));
     PackedUserOperation[] memory ops = _signedOp(address(engine), abi.encodeCall(ChessEngine.move, (gid, 'zz')));
     changePrank(relayer);
     ep.handleOps(ops, payable(relayer)); // does not revert
     assertEq(engine.moves(gid).length, 0);
-    assertLt(ep.balanceOf(address(lobby)), depositBefore);
+    assertLt(ep.balanceOf(address(paymaster)), depositBefore);
   }
 
   function testRejectsWhenPaymasterDepositTooLow() public {
     changePrank(arbiter);
-    lobby.withdrawEntryPointDeposit(ep.balanceOf(address(lobby)), payable(arbiter));
+    paymaster.withdrawEntryPointDeposit(ep.balanceOf(address(paymaster)), payable(arbiter));
     PackedUserOperation[] memory ops = _signedOp(address(engine), abi.encodeCall(ChessEngine.move, (gid, 'e2e4')));
     changePrank(relayer);
     vm.expectRevert();

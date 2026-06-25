@@ -68,7 +68,7 @@ contract EscrowETHDisburseTest is EscrowETHTest {
   // A loser carrying gas debt must not block disbursal: their stake settles the debt to the
   // platform first, and only the remainder is awarded to the winner. (Exercises unsafeCredit.)
   function testDisburseLoserInGasDebtSettlesFromStake() public {
-    _chargeGas(p2, 30 ether);     // loser p2 had 0 unlocked, so this is pure debt
+    _chargeGas(p2, 30 ether, 0);  // loser p2 had 0 unlocked, so this is pure debt
     assertEq(unlockedBalance(p2, address(0)), -int(30 ether));
     _disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);   // must not revert
     assertEq(uint(unlockedBalance(p1, address(0))), 2 * wager - 30 ether);  // own + loser's net stake
@@ -78,7 +78,7 @@ contract EscrowETHDisburseTest is EscrowETHTest {
 
   // A winner carrying gas debt settles it from their own returned stake.
   function testDisburseWinnerInGasDebtSettlesFromOwnStake() public {
-    _chargeGas(p1, 30 ether);
+    _chargeGas(p1, 30 ether, 0);
     _disburse(p1, p2, gameId, IChessEngine.GameOutcome.WhiteWon);
     assertEq(uint(unlockedBalance(p1, address(0))), 2 * wager - 30 ether);
     assertEq(unlockedBalance(p2, address(0)), 0);

@@ -2,8 +2,6 @@
 pragma solidity >=0.4.22 <0.9.0;
 import '@oz-upgradeable/proxy/utils/Initializable.sol';
 import '@oz-upgradeable/proxy/utils/UUPSUpgradeable.sol';
-import '@aa/interfaces/IPaymaster.sol';
-import '@aa/interfaces/IEntryPoint.sol';
 import '@oz/utils/math/Math.sol';
 import '@lib/EscrowLib.sol';
 import '@lib/SharedStructs.sol';
@@ -17,7 +15,6 @@ contract Lobby is
   UUPSUpgradeable,
   EscrowWrapper,
   ProfileWrapper,
-  IPaymaster,
   ILobby
 {
   using PlayerLobby for PlayerLobby.PlayerLobby;
@@ -41,10 +38,9 @@ contract Lobby is
   // Map gameId -> ChessEngine
   mapping(uint => address) private __gameEngine;
 
-  // ERC-4337 paymaster: the trusted EntryPoint singleton whose gas this Lobby sponsors.
-  // Appended here (Lobby's own storage region, not the Escrow __gap) so the UUPS proxy
-  // layout only grows — a safe append across upgrades.
-  IEntryPoint private __entryPoint;
+  // Gas sponsorship is delegated to a standalone Paymaster; it calls back through the
+  // onlyPaymaster hooks below.
+  address private __paymaster;
 
   constructor() {
     _disableInitializers();
@@ -54,7 +50,6 @@ contract Lobby is
     _grantRole(admin, ADMIN_ROLE);
     _grantRole(admin, ARBITER_ROLE);
     _setPlatformFee(2);
-    _setGasFee(10);
   }
 
   function _authorizeUpgrade(address newImplementation) internal override {
@@ -69,6 +64,14 @@ contract Lobby is
 
   function chessEngine(uint gameId) public view returns (ChessEngine) {
     return ChessEngine(__gameEngine[gameId]);
+  }
+
+  function isChessEngine(address engine) external view returns (bool) {
+    return __chessEngines[engine];
+  }
+
+  function paymaster() external view returns (address) {
+    return __paymaster;
   }
 
   function _assertIsGameEngine(uint gameId) internal view {
@@ -104,10 +107,25 @@ contract Lobby is
     return _stats(account);
   }
 
+  function wagerStatTokens(address account) external view
+  returns (address[] memory) {
+    if (!_hasRole(msg.sender, ADMIN_ROLE)) _assertIsOwner(account);
+    return escrowStatTokens(account);
+  }
+
   function wagerStats(address account, address token) external view
   returns (EscrowStats memory) {
-    _assertIsOwner(account);
+    if (!_hasRole(msg.sender, ADMIN_ROLE)) _assertIsOwner(account);
     return escrowStats(account, token);
+  }
+
+  function wagerStats(address account) external view
+  returns (EscrowStats[] memory) {
+    if (!_hasRole(msg.sender, ADMIN_ROLE)) _assertIsOwner(account);
+    address[] memory tokens = escrowStatTokens(account);
+    EscrowStats[] memory stats = new EscrowStats[](tokens.length);
+    for (uint i = 0; i < tokens.length; i++) stats[i] = escrowStats(account, tokens[i]);
+    return stats;
   }
 
   /*
@@ -733,11 +751,6 @@ contract Lobby is
     _setPlatformFee(perc);
   }
 
-  function setGasFee(uint perc) external {
-    _assertIsAdmin();
-    _setGasFee(perc);
-  }
-
   function platformBalance(address token) external view returns (int) {
     _assertIsAdmin();
     return unlockedBalance(address(0), token);
@@ -748,138 +761,27 @@ contract Lobby is
     _releasePlatformFunds(token, receiver);
   }
 
-  /*
-   * Paymaster (ERC-4337)
-   *
-   * The Lobby is an ERC-4337 paymaster: it sponsors gas for delegated agents so an agent key
-   * never needs to hold ETH. The canonical EntryPoint singleton runs each UserOp, pays the
-   * bundler out of this Lobby's prepaid deposit, and calls back into the two hooks below.
-   * validatePaymasterUserOp decides whether to sponsor (verification phase); postOp settles
-   * afterwards (a no-op in phase 1, where the platform simply absorbs the gas).
-   */
+  function setPaymaster(address paymaster_) external {
+    _assertIsAdmin();
+    __paymaster = paymaster_;
+  }
 
-  // Selector of Simple7702Account.execute(address,uint256,bytes) — the only account entry
-  // point an agent UserOp invokes. Its calldata wraps the inner engine call we whitelist.
-  bytes4 private constant EXECUTE_SELECTOR = bytes4(keccak256('execute(address,uint256,bytes)'));
-
-  modifier onlyEntryPoint() {
-    if (msg.sender != address(__entryPoint)) revert Forbidden();
+  modifier onlyPaymaster() {
+    if (msg.sender != __paymaster) revert Forbidden();
     _;
   }
 
-  function setEntryPoint(IEntryPoint ep) external {
-    _assertIsAdmin();
-    __entryPoint = ep;
-  }
-
-  function entryPoint() external view returns (IEntryPoint) {
-    return __entryPoint;
-  }
-
-  // EntryPoint verification-phase callback: approve gas sponsorship for a whitelisted engine call.
-  // Reverts to reject the UserOp. Reads only this Lobby's own storage (isAgent, __chessEngines),
-  // satisfying ERC-7562 validation storage rules.
-  function validatePaymasterUserOp(
-    PackedUserOperation calldata op,
-    bytes32 /* userOpHash */,
-    uint256 maxCost
-  ) external override onlyEntryPoint 
-  returns (bytes memory context, uint256 validationData) {
-    _assertIsAgent(op.sender);
-    _assertNotBanned(op.sender);
-    (address target, uint256 value, bytes4 innerSelector) = _decodeExecute(op.callData);
-    // Agents custody no ETH; a sponsored op must move no value.
-    if (value != 0) revert InvalidRequest();
-    if (__chessEngines[target] || target == address(this)) {
-      if (!_isSponsoredSelector(innerSelector)) revert Forbidden();
-    } else {
-      revert InvalidRequest();
-    }
-
-    address owner = _owner(op.sender);
-    if (availableBalance(owner, address(0)) < maxCost + gasFee(maxCost)) {
+  function validateSponsoredAgent(address agent, uint requiredEth) external view onlyPaymaster
+  returns (address owner) {
+    _assertIsAgent(agent);
+    _assertNotBanned(agent);
+    owner = _owner(agent);
+    if (availableBalance(owner, address(0)) < requiredEth) {
       revert EscrowLib.InsufficientBalance();
     }
-    // Carry the billable owner forward to postOp. validationData 0 == valid, no time bounds.
-    return (abi.encode(owner), 0);
   }
 
-  function postOp(
-    IPaymaster.PostOpMode /* mode */,
-    bytes calldata context,
-    uint256 actualGasCost,
-    uint256 /* actualUserOpFeePerGas */
-  ) external override onlyEntryPoint {
-    address owner = abi.decode(context, (address));
-    _chargeGas(owner, actualGasCost);
-  }
-
-  // Decode Simple7702Account.execute(target, value, data) out of a UserOp's callData, returning
-  // the wrapped engine target, the ETH value, and the inner call's selector. Uses the same
-  // abi.decode the account itself uses, so the paymaster and the account agree by construction.
-  function _decodeExecute(bytes calldata callData)
-    private pure
-    returns (address target, uint256 value, bytes4 innerSelector)
-  {
-    if (callData.length < 4 || bytes4(callData[0:4]) != EXECUTE_SELECTOR) revert InvalidRequest();
-    bytes memory inner;
-    (target, value, inner) = abi.decode(callData[4:], (address, uint256, bytes));
-    if (inner.length < 4) revert InvalidRequest();
-    // First 4 bytes of `inner` (left-aligned in its first memory word) are the engine selector.
-    assembly { innerSelector := mload(add(inner, 0x20)) }
-  }
-
-  // The engine calls an agent may make. This whitelist — not a spend cap — is the phase-1
-  // security rail; move(uint256,string)'s selector is fixed (see CLAUDE.md).
-  function _isSponsoredSelector(bytes4 sel) private pure returns (bool) {
-    return sel == ChessEngine.move.selector
-        || sel == ChessEngine.resign.selector
-        || sel == ChessEngine.offerDraw.selector
-        || sel == ChessEngine.respondDraw.selector
-        || sel == ChessEngine.claimVictory.selector
-        || sel == ChessEngine.disputeGame.selector
-        || sel == Lobby.createTable.selector
-        || sel == Lobby.joinTable.selector
-        || sel == Lobby.acceptChallenge.selector
-        || sel == Lobby.modifyChallenge.selector
-        || sel == Lobby.declineChallenge.selector
-        || sel == Lobby.closeTable.selector
-        || sel == Lobby.updateAgent.selector
-        || sel == Lobby.challenge.selector;
-  }
-
-  /*
-   * Paymaster funding / admin (keep the Lobby solvent on the EntryPoint)
-   */
-
-  // Top up the deposit the EntryPoint debits to reimburse bundlers for sponsored ops.
-  function depositToEntryPoint() external payable {
-    _assertIsAdmin();
-    __entryPoint.depositTo{ value: msg.value }(address(this));
-  }
-
-  // Post the paymaster stake bundlers require to accept ops from the public mempool.
-  function addStake(uint32 unstakeDelaySec) external payable {
-    _assertIsAdmin();
-    __entryPoint.addStake{ value: msg.value }(unstakeDelaySec);
-  }
-
-  function unlockStake() external {
-    _assertIsAdmin();
-    __entryPoint.unlockStake();
-  }
-
-  function withdrawStake(address payable to) external {
-    _assertIsAdmin();
-    __entryPoint.withdrawStake(to);
-  }
-
-  function withdrawEntryPointDeposit(uint256 amount, address payable to) external {
-    _assertIsAdmin();
-    __entryPoint.withdrawTo(to, amount);
-  }
-
-  function entryPointDeposit() external view returns (uint256) {
-    return __entryPoint.balanceOf(address(this));
+  function chargeSponsoredGas(address owner, uint actualGasCost, uint gasFeeAmount) external onlyPaymaster {
+    _chargeGas(owner, actualGasCost, gasFeeAmount);
   }
 }

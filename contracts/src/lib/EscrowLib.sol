@@ -133,10 +133,9 @@ abstract contract EscrowWrapper {
 
   mapping(address => EscrowLib.EscrowAccount) internal __escrow;
   uint internal __platformFeePerc;
-  uint internal __gasSponsorFeePerc;
 
   // Reserved slots — decrement when adding state above to preserve layout across upgrades.
-  uint256[47] private __gap;
+  uint256[48] private __gap;
 
   function currentDeposit(address account, uint gameId) internal view returns (TokenDeposit memory) {
     return __escrow[account].account(gameId);
@@ -294,23 +293,10 @@ abstract contract EscrowWrapper {
    * Gas Fee
    */
 
-  function _setGasFee(uint perc) internal {
-    __gasSponsorFeePerc = perc;
-  }
-
-  function gasFeePerc() public view returns (uint) {
-    return __gasSponsorFeePerc;
-  }
-
-  function gasFee(uint wager) public view returns (uint96) {
-    return uint96(wager * __gasSponsorFeePerc / 100);
-  }
-
   // Never reverts (postOp must not revert under ERC-4337). Charges the full cost+fee; the owner's
   // balance may go negative (gas debt), recovered from their next ETH inflow. The platform pot is
   // credited only the realized portion — it must hold real ETH. Gross stats book the full sponsored gas.
-  function _chargeGas(address owner, uint cost) internal returns (uint charged) {
-    uint fee = gasFee(cost);
+  function _chargeGas(address owner, uint cost, uint fee) internal returns (uint charged) {
     uint total = cost + fee;
     charged = Math.min(total, __escrow[owner].available(address(0)));   // realized → platform pot
     __escrow[owner].unsafeCredit(total, address(0));                    // full charge; may go negative

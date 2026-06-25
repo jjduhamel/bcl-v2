@@ -6,6 +6,8 @@ import '@forge/console2.sol';
 import '@oz/proxy/ERC1967/ERC1967Proxy.sol';
 import '@src/Lobby.sol';
 import '@src/ChessEngine.sol';
+import '@src/Paymaster.sol';
+import '@aa/core/EntryPoint.sol';
 
 contract WhoAmI {
   function who() public returns (address) {
@@ -230,19 +232,25 @@ contract PlatformFeeTest is LobbyTest {
 }
 
 contract GasFeeTest is LobbyTest {
+  Paymaster paymaster;
+
+  function setUp() public {
+    paymaster = new Paymaster(lobby, new EntryPoint());
+  }
+
   function testInitialGasFeeIsTenPercent() public {
-    assertEq(lobby.gasFeePerc(), 10);
+    assertEq(paymaster.gasFeePerc(), 10);
   }
 
   function testAdminCanSetGasFee() public {
-    lobby.setGasFee(15);
-    assertEq(lobby.gasFeePerc(), 15);
+    paymaster.setGasFee(15);
+    assertEq(paymaster.gasFeePerc(), 15);
   }
 
   function testNonAdminCannotSetGasFee() public {
     changePrank(p1);
     vm.expectRevert(Unauthorized.selector);
-    lobby.setGasFee(15);
+    paymaster.setGasFee(15);
   }
 }
 

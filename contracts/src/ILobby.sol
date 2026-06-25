@@ -47,8 +47,4 @@ interface ILobby {
   error Unauthorized();
   error Unregistered();
   error AlreadyRegistered();
-
-  // ERC-4337 paymaster
-  error UnsupportedExecuteCall();
-  error SelectorNotSponsored();
 }

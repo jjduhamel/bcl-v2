@@ -3,22 +3,25 @@ pragma solidity ^0.8.28;
 
 import '@forge/Test.sol';
 import '../Lobby.t.sol';
+import '@src/Paymaster.sol';
 import '@aa/core/EntryPoint.sol';
 import '@aa/core/BaseAccount.sol';
 import '@aa/interfaces/IPaymaster.sol';
 import '@aa/interfaces/PackedUserOperation.sol';
 
-// Unit tests for the Lobby's ERC-4337 paymaster surface (Subproject 2). These exercise the
+// Unit tests for the ERC-4337 paymaster surface (Subproject 2). These exercise the
 // paymaster's own logic only, so a plain (non-canonical) EntryPoint instance is enough — the
 // 7702 account + canonical address live in AgentGasless.t.sol.
 contract PaymasterTest is LobbyTest {
   EntryPoint ep;
+  Paymaster paymaster;
   address a1; // registered agent, owned by p1
 
   function setUp() public {
     vm.deal(arbiter, 100 ether);     // arbiter == admin; LobbyTest only funds p1/p2/p3
     ep = new EntryPoint();
-    lobby.setEntryPoint(ep);
+    paymaster = new Paymaster(lobby, ep);
+    lobby.setPaymaster(address(paymaster));
     a1 = makeAddr('agent1');
     changePrank(p1);
     lobby.registerAgent(a1, 'bot', '', '', '', '');
@@ -37,7 +40,7 @@ contract PaymasterTest is LobbyTest {
   function _expectRejected(PackedUserOperation memory op, bytes4 err) internal {
     changePrank(address(ep));
     vm.expectRevert(err);
-    lobby.validatePaymasterUserOp(op, bytes32(0), 0);
+    paymaster.validatePaymasterUserOp(op, bytes32(0), 0);
   }
 
   // Sponsoring `execute(target, 0, <selector>)` from the agent must revert with `err`.
@@ -54,7 +57,7 @@ contract PaymasterTest is LobbyTest {
   function _expectSponsoredCall(address target, bytes memory inner) internal {
     changePrank(address(ep));
     (bytes memory context, uint256 validationData) =
-      lobby.validatePaymasterUserOp(_op(a1, target, 0, inner), bytes32(0), 0);
+      paymaster.validatePaymasterUserOp(_op(a1, target, 0, inner), bytes32(0), 0);
     assertEq(validationData, 0);
     assertEq(context, abi.encode(p1)); // billable owner carried to postOp
   }
@@ -66,13 +69,13 @@ contract PaymasterTest is LobbyTest {
       _op(a1, address(engine), 0, abi.encodeWithSelector(ChessEngine.move.selector, uint(0), 'e2e4'));
     changePrank(p1);
     vm.expectRevert(Forbidden.selector);
-    lobby.validatePaymasterUserOp(op, bytes32(0), 0);
+    paymaster.validatePaymasterUserOp(op, bytes32(0), 0);
   }
 
   function testPostOpRevertsWhenCallerIsNotEntryPoint() public {
     changePrank(p1);
     vm.expectRevert(Forbidden.selector);
-    lobby.postOp(IPaymaster.PostOpMode.opSucceeded, '', 0, 0);
+    paymaster.postOp(IPaymaster.PostOpMode.opSucceeded, '', 0, 0);
   }
 
   /* ---- validate: sponsors a delegated agent's whitelisted engine calls ---- */
@@ -125,7 +128,7 @@ contract PaymasterTest is LobbyTest {
     _expectCallRejected(address(lobby), Lobby.withdraw.selector, Forbidden.selector);
     _expectCallRejected(address(lobby), Lobby.registerAgent.selector, Forbidden.selector);
     // an agent must never be sponsored to drain the platform's own EntryPoint deposit
-    _expectCallRejected(address(lobby), Lobby.withdrawEntryPointDeposit.selector, Forbidden.selector);
+    _expectCallRejected(address(lobby), Paymaster.withdrawEntryPointDeposit.selector, Forbidden.selector);
   }
 
   function testValidateRejectsForeignTarget() public {
@@ -138,9 +141,7 @@ contract PaymasterTest is LobbyTest {
     _expectCallRejected(address(engine), ChessEngine.startGame.selector, Forbidden.selector);
     _expectCallRejected(address(engine), ChessEngine.createChallenge.selector, Forbidden.selector);
     _expectCallRejected(address(engine), ChessEngine.resolveDispute.selector, Forbidden.selector);
-    // ChessEngine.modifyChallenge/declineChallenge share a selector with the whitelisted Lobby
-    // versions, so the single sponsored-selector set admits them. Harmless: both are isLobby-guarded
-    // and revert in execution when an agent calls the engine directly.
+    _expectCallRejected(address(engine), ChessEngine.modifyChallenge.selector, Forbidden.selector);
   }
 
   /* ---- validate: rejects malformed / non-agent / value-bearing ops ---- */
@@ -177,75 +178,79 @@ contract PaymasterTest is LobbyTest {
 
   /* ---- funding surface is admin-only ---- */
 
-  function testSetEntryPointRequiresAdmin() public {
+  function testSetPaymasterRequiresAdmin() public {
     changePrank(p1);
     vm.expectRevert(Unauthorized.selector);
-    lobby.setEntryPoint(ep);
+    lobby.setPaymaster(address(paymaster));
+  }
+
+  function testLobbyPaymasterGetterReturnsConfiguredPaymaster() public view {
+    assertEq(lobby.paymaster(), address(paymaster));
   }
 
   function testDepositToEntryPointRequiresAdmin() public {
     changePrank(p1);
     vm.expectRevert(Unauthorized.selector);
-    lobby.depositToEntryPoint{ value: 1 ether }();
+    paymaster.depositToEntryPoint{ value: 1 ether }();
   }
 
   function testAddStakeRequiresAdmin() public {
     changePrank(p1);
     vm.expectRevert(Unauthorized.selector);
-    lobby.addStake{ value: 1 ether }(1 days);
+    paymaster.addStake{ value: 1 ether }(1 days);
   }
 
   function testWithdrawEntryPointDepositRequiresAdmin() public {
     changePrank(p1);
     vm.expectRevert(Unauthorized.selector);
-    lobby.withdrawEntryPointDeposit(1, payable(p1));
+    paymaster.withdrawEntryPointDeposit(1, payable(p1));
   }
 
   function testUnlockStakeRequiresAdmin() public {
     changePrank(p1);
     vm.expectRevert(Unauthorized.selector);
-    lobby.unlockStake();
+    paymaster.unlockStake();
   }
 
   function testWithdrawStakeRequiresAdmin() public {
     changePrank(p1);
     vm.expectRevert(Unauthorized.selector);
-    lobby.withdrawStake(payable(p1));
+    paymaster.withdrawStake(payable(p1));
   }
 
   /* ---- funding moves ETH to/from the EntryPoint (admin == arbiter, the default prank) ---- */
 
   function testDepositThenWithdrawTracksLobbyEntryPointBalance() public {
-    lobby.depositToEntryPoint{ value: 1 ether }();
-    assertEq(lobby.entryPointDeposit(), 1 ether);
-    assertEq(ep.balanceOf(address(lobby)), 1 ether);
+    paymaster.depositToEntryPoint{ value: 1 ether }();
+    assertEq(paymaster.entryPointDeposit(), 1 ether);
+    assertEq(ep.balanceOf(address(paymaster)), 1 ether);
 
-    lobby.withdrawEntryPointDeposit(0.4 ether, payable(arbiter));
-    assertEq(lobby.entryPointDeposit(), 0.6 ether);
+    paymaster.withdrawEntryPointDeposit(0.4 ether, payable(arbiter));
+    assertEq(paymaster.entryPointDeposit(), 0.6 ether);
   }
 
   function testAddStakeLocksStakeForTheLobby() public {
-    lobby.addStake{ value: 1 ether }(1 days);
-    IStakeManager.DepositInfo memory info = ep.getDepositInfo(address(lobby));
+    paymaster.addStake{ value: 1 ether }(1 days);
+    IStakeManager.DepositInfo memory info = ep.getDepositInfo(address(paymaster));
     assertEq(info.stake, 1 ether);
     assertTrue(info.staked);
   }
 
   function testStakeUnlockAndWithdrawReturnsEth() public {
-    lobby.addStake{ value: 1 ether }(1 days);
-    lobby.unlockStake();
+    paymaster.addStake{ value: 1 ether }(1 days);
+    paymaster.unlockStake();
     vm.expectRevert(); // not due until the unstake delay elapses
-    lobby.withdrawStake(payable(arbiter));
+    paymaster.withdrawStake(payable(arbiter));
 
     skip(1 days + 1);
     uint256 balanceBefore = arbiter.balance;
-    lobby.withdrawStake(payable(arbiter));
+    paymaster.withdrawStake(payable(arbiter));
     assertEq(arbiter.balance, balanceBefore + 1 ether);
-    assertEq(ep.getDepositInfo(address(lobby)).stake, 0);
+    assertEq(ep.getDepositInfo(address(paymaster)).stake, 0);
   }
 
   function testEntryPointGetterReturnsConfiguredEntryPoint() public {
-    assertEq(address(lobby.entryPoint()), address(ep));
+    assertEq(address(paymaster.entryPoint()), address(ep));
   }
 
   /* ---- S1: owner funds the gas pot via registerAgent / deposit ---- */
@@ -277,7 +282,7 @@ contract PaymasterTest is LobbyTest {
       _op(a1, address(engine), 0, abi.encodeWithSelector(ChessEngine.move.selector, uint(0), 'e2e4'));
     changePrank(address(ep));
     vm.expectRevert(EscrowLib.InsufficientBalance.selector);
-    lobby.validatePaymasterUserOp(op, bytes32(0), 1 wei);  // any non-zero maxCost
+    paymaster.validatePaymasterUserOp(op, bytes32(0), 1 wei);  // any non-zero maxCost
   }
 
   function testValidateRejectsOwnerBelowMaxCost() public {
@@ -287,7 +292,7 @@ contract PaymasterTest is LobbyTest {
       _op(a1, address(engine), 0, abi.encodeWithSelector(ChessEngine.move.selector, uint(0), 'e2e4'));
     changePrank(address(ep));
     vm.expectRevert(EscrowLib.InsufficientBalance.selector);
-    lobby.validatePaymasterUserOp(op, bytes32(0), 1 ether);
+    paymaster.validatePaymasterUserOp(op, bytes32(0), 1 ether);
   }
 
   function testValidateAllowsOwnerAtExactMaxCost() public {
@@ -298,7 +303,7 @@ contract PaymasterTest is LobbyTest {
       _op(a1, address(engine), 0, abi.encodeWithSelector(ChessEngine.move.selector, uint(0), 'e2e4'));
     changePrank(address(ep));
     (bytes memory context, uint256 validationData) =
-      lobby.validatePaymasterUserOp(op, bytes32(0), 1 ether);
+      paymaster.validatePaymasterUserOp(op, bytes32(0), 1 ether);
     assertEq(validationData, 0);
     assertEq(context, abi.encode(p1));
   }
@@ -310,7 +315,7 @@ contract PaymasterTest is LobbyTest {
     changePrank(p1);
     lobby.deposit{value: 1 ether}(1 ether, address(0));
     changePrank(address(ep));
-    lobby.postOp(IPaymaster.PostOpMode.opSucceeded, abi.encode(p1), 0.1 ether, 1 gwei);
+    paymaster.postOp(IPaymaster.PostOpMode.opSucceeded, abi.encode(p1), 0.1 ether, 1 gwei);
     changePrank(arbiter);
     assertEq(uint(checkPlayerEarnings(p1, address(0))), 0.89 ether);
     assertEq(uint(lobby.platformBalance(address(0))), 0.11 ether);
@@ -320,7 +325,7 @@ contract PaymasterTest is LobbyTest {
     changePrank(p1);
     lobby.deposit{value: 1 ether}(1 ether, address(0));
     changePrank(address(ep));
-    lobby.postOp(IPaymaster.PostOpMode.opReverted, abi.encode(p1), 0.1 ether, 1 gwei);
+    paymaster.postOp(IPaymaster.PostOpMode.opReverted, abi.encode(p1), 0.1 ether, 1 gwei);
     changePrank(arbiter);
     assertEq(uint(checkPlayerEarnings(p1, address(0))), 0.89 ether);
     assertEq(uint(lobby.platformBalance(address(0))), 0.11 ether);
@@ -330,7 +335,7 @@ contract PaymasterTest is LobbyTest {
     changePrank(p1);
     lobby.deposit{value: 0.05 ether}(0.05 ether, address(0));
     changePrank(address(ep));
-    lobby.postOp(IPaymaster.PostOpMode.opSucceeded, abi.encode(p1), 1 ether, 1 gwei); // no revert
+    paymaster.postOp(IPaymaster.PostOpMode.opSucceeded, abi.encode(p1), 1 ether, 1 gwei); // no revert
     changePrank(arbiter);
     // charge = 1 + gasFee(1) = 1.1; owner had 0.05, so 0.05 is realized to the pot and the rest
     // becomes gas debt (negative balance).
@@ -340,7 +345,7 @@ contract PaymasterTest is LobbyTest {
 
   function testPostOpZeroAvailableGoesFullyIntoDebt() public {
     changePrank(address(ep));
-    lobby.postOp(IPaymaster.PostOpMode.opSucceeded, abi.encode(p1), 1 ether, 1 gwei); // no revert
+    paymaster.postOp(IPaymaster.PostOpMode.opSucceeded, abi.encode(p1), 1 ether, 1 gwei); // no revert
     changePrank(arbiter);
     assertEq(checkPlayerEarnings(p1, address(0)), -int(1.1 ether));
     assertEq(uint(lobby.platformBalance(address(0))), 0);
@@ -348,7 +353,7 @@ contract PaymasterTest is LobbyTest {
 
   function testGasDebtRecoveredOnNextDeposit() public {
     changePrank(address(ep));
-    lobby.postOp(IPaymaster.PostOpMode.opSucceeded, abi.encode(p1), 1 ether, 1 gwei); // p1 owes 1.1
+    paymaster.postOp(IPaymaster.PostOpMode.opSucceeded, abi.encode(p1), 1 ether, 1 gwei); // p1 owes 1.1
     changePrank(p1);
     lobby.deposit{value: 2 ether}(2 ether, address(0));
     changePrank(arbiter);
@@ -362,7 +367,7 @@ contract PaymasterTest is LobbyTest {
     changePrank(p1);
     lobby.deposit{value: 1 ether}(1 ether, address(0));
     changePrank(address(ep));
-    lobby.postOp(IPaymaster.PostOpMode.opSucceeded, abi.encode(p1), 0.3 ether, 1 gwei);
+    paymaster.postOp(IPaymaster.PostOpMode.opSucceeded, abi.encode(p1), 0.3 ether, 1 gwei);
     changePrank(arbiter);
     uint balanceBefore = arbiter.balance;
     lobby.withdrawPlatformFunds(address(0), payable(arbiter));

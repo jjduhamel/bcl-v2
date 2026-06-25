@@ -71,6 +71,17 @@ contract EscrowERC20DepositTest is EscrowTest {
     assertEq(tokenDeposits(p1).length, 0);
   }
 
+  // The stats map is append-only: a token stays discoverable via escrowStatTokens even after its
+  // balance prunes to zero and tokenDeposits() drops it.
+  function testStatTokensPersistAfterPrune() public {
+    _refund(p1, gameId);
+    _withdraw(p1, address(token));
+    assertEq(tokenDeposits(p1).length, 0);            // balance enumeration emptied
+    address[] memory st = escrowStatTokens(p1);       // stats enumeration retained
+    assertEq(st.length, 1);
+    assertEq(st[0], address(token));
+  }
+
   function testRefundOnZeroIsNoop() public {
     _refund(p2, gameId);
     assertEq(uint(unlockedBalance(p2, address(token))), 0);
